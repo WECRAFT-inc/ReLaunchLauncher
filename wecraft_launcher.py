@@ -361,6 +361,7 @@ def apply_meta(instances):
             i["loader_version"] = None
         i["display"] = (m.get("name") or "").strip() or i["name"]
         i["hidden"] = bool(m.get("hidden"))
+        i["fav"] = bool(m.get("fav"))
         i["_hay"] = f"{i['display']} {i['name']} {i['version'] or ''} {i['loader'] or 'vanilla'} {i['source']}".lower()
     return instances
 
@@ -523,7 +524,7 @@ def _http(url, timeout=10):
 
 def fetch_latest_release():
     """Dernière release publiée sur GitHub : version, notes, .exe et son empreinte SHA-256."""
-    with _http(f"https://api.github.com/repos/Rexidelamort/WeCraft-Launcher/releases/latest") as r:
+    with _http(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest") as r:
         d = json.load(r)
     assets = d.get("assets", [])
     exe = next((a for a in assets if a["name"].lower().endswith(".exe")), None)
@@ -545,7 +546,7 @@ def fetch_latest_release():
 def explain_update_error(e):
     if isinstance(e, urllib.error.HTTPError):
         if e.code == 404:
-            return (f"Aucune release trouvée sur « Rexidelamort/WeCraft-Launcher ».\nVérifiez que le dépôt est public, "
+            return (f"Aucune release trouvée sur « {GITHUB_REPO} ».\nVérifiez que le dépôt est public, "
                     "que ce nom est exact et qu'une release est publiée (pas en brouillon).")
         if e.code in (403, 429):
             return "Limite de requêtes GitHub atteinte, réessayez dans une heure."
@@ -1605,6 +1606,7 @@ class Launcher(tk.Tk):
         self.lift()
         self.fade_in_main(0.0)
         self.after(400, self.check_updates)
+        self.after(900, self.try_show_favorites)  # propose les modpacks favoris
         self.discord.idle()  # statut « Dans le launcher » (ignoré sans ID Discord)
 
     def fade_in_main(self, a):
@@ -3117,9 +3119,10 @@ class Launcher(tk.Tk):
         q = self.wp_search.get().strip().lower()
         if q:
             packs = [i for i in packs if q in i["_hay"]]
+        packs.sort(key=lambda i: not i["fav"])  # favoris en tête
         shown = packs[:self.WEPACK_MAX]
         mode = self.mp_view.get()
-        sig = [(i["display"], i["hidden"], str(i["path"]), i["version"], i["loader"], i["loader_version"])
+        sig = [(i["display"], i["hidden"], i["fav"], str(i["path"]), i["version"], i["loader"], i["loader_version"])
                for i in shown] + [len(packs), q, mode]
         if sig == self._wp_sig and not force:
             return
@@ -3188,7 +3191,8 @@ class Launcher(tk.Tk):
         row = tk.Frame(left, bg=PANEL)  # LANCER · Paramétrage · Liste des mods
         row.pack(fill="x", pady=(10, 0))
         self.wp_launch(row, inst, 96, 32, 9).pack(side="left")
-        self.wp_setup(row, inst).pack(side="left", padx=8)
+        self.wp_setup(row, inst).pack(side="left", padx=(8, 4))
+        self.fav_button(row, inst).pack(side="left", padx=(0, 8))
         ttk.Button(row, text="Liste des mods", command=lambda i=inst: self.show_pack_mods(i)).pack(side="left")
 
     # -- Mode « Tuiles »
@@ -3208,13 +3212,14 @@ class Launcher(tk.Tk):
         row = tk.Frame(t, bg=PANEL)
         row.pack(fill="x", padx=12, pady=(0, 12))
         self.wp_setup(row, inst).pack(side="left", fill="x", expand=True)
+        self.fav_button(row, inst).pack(side="left", padx=(6, 0))
         ttk.Button(row, text="Liste des mods", command=lambda i=inst: self.show_pack_mods(i)).pack(
             side="left", fill="x", expand=True, padx=(6, 0))
         self.wrap_labels(t, [(name, 24), (info, 24)])
 
     # -- Mode « Tableau »
     def wp_cols(self, row):
-        for col, (weight, minsize) in enumerate(((1, 0), (0, 110), (0, 56), (0, 92), (0, 46), (0, 60))):
+        for col, (weight, minsize) in enumerate(((1, 0), (0, 110), (0, 56), (0, 92), (0, 46), (0, 46), (0, 60))):
             row.columnconfigure(col, weight=weight, minsize=minsize)
 
     def build_wp_header(self):
@@ -3241,8 +3246,9 @@ class Launcher(tk.Tk):
         gear = self.wp_setup(row, inst, "⚙")
         gear.config(width=3)
         gear.grid(row=0, column=4, sticky="e", padx=2)
+        self.fav_button(row, inst).grid(row=0, column=5, sticky="e", padx=2)
         ttk.Button(row, text="Liste", width=6, command=lambda i=inst: self.show_pack_mods(i)).grid(
-            row=0, column=5, sticky="e", padx=(2, 8))
+            row=0, column=6, sticky="e", padx=(2, 8))
 
     def show_pack_mods(self, inst):
         """Fenêtre avec la liste des mods d'un modpack (recherche + copie dans le presse-papiers)."""
@@ -3451,6 +3457,7 @@ class Launcher(tk.Tk):
         elif sort.startswith("Version"):
             res.sort(key=lambda i: (version_tuple(i["version"]) if i["version"] else (), i["display"].lower()),
                      reverse=sort == "Version (récente)")
+        res.sort(key=lambda i: not i["fav"])  # favoris en tête (tri stable : l'ordre choisi est conservé)
         total, pages = len(res), max(1, -(-len(res) // PAGE_SIZE))
         self.page = min(self.page, pages - 1)
         shown = res[self.page * PAGE_SIZE:(self.page + 1) * PAGE_SIZE]
@@ -3463,7 +3470,7 @@ class Launcher(tk.Tk):
         self.next_btn.state(["!disabled"] if self.page < pages - 1 else ["disabled"])
         self.update_filter_button()
 
-        sig = (self.mp_view.get(), self.page, [(i["display"], i["hidden"], i["source"], str(i["path"]), i["version"], i["loader"],
+        sig = (self.mp_view.get(), self.page, [(i["display"], i["hidden"], i["fav"], i["source"], str(i["path"]), i["version"], i["loader"],
                             i["loader_version"], i["ram"]) for i in shown])
         if force or sig != self._inst_sig:
             self._inst_sig = sig
@@ -3501,7 +3508,7 @@ class Launcher(tk.Tk):
 
     def inst_info(self, inst):
         """Textes d'une instance : (titre, ligne de détail, couleur du détail)."""
-        title = inst["display"] + ("  (masquée)" if inst["hidden"] else "")
+        title = ("★ " if inst.get("fav") else "") + inst["display"] + ("  (masquée)" if inst["hidden"] else "")
         detail = " · ".join(x for x in (inst["version"], inst["loader"], inst["loader_version"],
                                         f"{inst['ram']} Go" if inst["ram"] else None) if x)
         tag = SOURCE_LABEL.get(inst["source"], inst["source"].upper())
@@ -3526,6 +3533,7 @@ class Launcher(tk.Tk):
         card.pack(fill="x", padx=(0, 6), pady=4)
         gear, btn = self.inst_buttons(card, inst, 112, 38, 9)
         gear.pack(side="right", padx=(0, 10))
+        self.fav_button(card, inst).pack(side="right", padx=(0, 4))
         btn.pack(side="right", padx=8, pady=10)
         left = tk.Frame(card, bg=PANEL)
         left.pack(side="left", fill="x", expand=True, padx=12, pady=10)
@@ -3548,12 +3556,13 @@ class Launcher(tk.Tk):
         bottom.pack(fill="x", padx=12, pady=12)
         gear, btn = self.inst_buttons(bottom, inst, 80, 34, 9)
         gear.pack(side="left")
+        self.fav_button(bottom, inst).pack(side="left", padx=(4, 0))
         btn.pack(side="left", fill="x", expand=True, padx=(8, 0))
         self.wrap_labels(t, [(name, 24), (info, 24)])
 
     # -- Mode « Tableau »
     def inst_cols(self, row):
-        for col, (weight, minsize) in enumerate(((1, 0), (0, 92), (0, 130), (0, 96), (0, 46))):
+        for col, (weight, minsize) in enumerate(((1, 0), (0, 92), (0, 130), (0, 96), (0, 46), (0, 46))):
             row.columnconfigure(col, weight=weight, minsize=minsize)
 
     def build_inst_header(self):
@@ -3578,7 +3587,8 @@ class Launcher(tk.Tk):
             row=0, column=2, sticky="w", padx=4)
         gear, btn = self.inst_buttons(row, inst, 88, 28, 8)
         btn.grid(row=0, column=3, sticky="e", padx=4, pady=6)
-        gear.grid(row=0, column=4, sticky="e", padx=(0, 8))
+        gear.grid(row=0, column=4, sticky="e", padx=(0, 2))
+        self.fav_button(row, inst).grid(row=0, column=5, sticky="e", padx=(0, 8))
 
     def show_menu(self, inst, widget):
         m = tk.Menu(self, tearoff=0, bg=PANEL, fg=FG, activebackground=EMBER1, activeforeground="#1A0A04",
@@ -3612,6 +3622,79 @@ class Launcher(tk.Tk):
         else:
             update_meta(inst["folder"], set={"hidden": True})
         self.refresh_instances(force=True)
+
+    def fav_button(self, parent, inst):
+        """Bouton ★ (favori) / ☆ (pas favori), à placer à côté du ⚙."""
+        b = ttk.Button(parent, text="★" if inst.get("fav") else "☆", width=3)
+        b.config(command=lambda i=inst: self.toggle_fav(i))
+        return b
+
+    def toggle_fav(self, inst):
+        if inst.get("fav"):
+            update_meta(inst["folder"], remove=["fav"])
+        else:
+            update_meta(inst["folder"], set={"fav": True})
+        self.refresh_instances(force=True)
+
+    def try_show_favorites(self, tries=0):
+        """Au démarrage : propose les modpacks favoris (attend la fin du premier scan des instances)."""
+        if not self.config_data.get("fav_popup", True):
+            return
+        if (self._scanning or not self._instances) and tries < 12:
+            self.after(300, lambda: self.try_show_favorites(tries + 1))
+            return
+        favs = [i for i in self._instances if i.get("fav") and not i["hidden"]]
+        if favs:
+            self.show_favorites(favs)
+
+    def show_favorites(self, favs):
+        shown = favs[:5]
+        win = self.small_dialog("Vos favoris", 460, min(210 + 74 * len(shown), 620))
+        win.resizable(False, False)
+        tk.Label(win, text="★ VOS FAVORIS", bg=BG, fg=FG, font=(self.f_display, 13, "bold")).pack(pady=(16, 2))
+        tk.Label(win, text="Que voulez-vous lancer ?", bg=BG, fg=MUTED, font=(self.f_mono, 9)).pack()
+        GradientBar(win).pack(fill="x", padx=20, pady=8)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        def launch(inst):
+            win.destroy()
+            self.play_instance(inst)
+
+        for inst in shown:
+            title, line, color = self.inst_info(inst)
+            card = tk.Frame(win, bg=PANEL, highlightthickness=1, highlightbackground=BORDER)
+            card.pack(fill="x", padx=20, pady=4)
+            btn = GradientButton(card, text="LANCER" if inst["version"] else "RÉGLER", bg=PANEL, width=96,
+                                 height=34, font=(self.f_display, 9, "bold"),
+                                 command=lambda i=inst: launch(i))
+            btn.config(state="disabled" if self.busy else "normal")
+            btn.pack(side="right", padx=10, pady=10)
+            left = tk.Frame(card, bg=PANEL)
+            left.pack(side="left", fill="x", expand=True, padx=12, pady=8)
+            tk.Label(left, text=title, bg=PANEL, fg=FG, anchor="w",
+                     font=(self.f_display, 10, "bold")).pack(fill="x")
+            tk.Label(left, text=line, bg=PANEL, fg=color, anchor="w", font=(self.f_mono, 8)).pack(fill="x")
+        if len(favs) > len(shown):
+            tk.Label(win, text=f"+ {len(favs) - len(shown)} autre(s) favori(s) en tête des listes", bg=BG,
+                     fg=MUTED, font=(self.f_mono, 8)).pack(pady=(2, 0))
+
+        bottom = tk.Frame(win, bg=BG)
+        bottom.pack(side="bottom", fill="x", padx=20, pady=14)
+        never = tk.BooleanVar(value=False)
+
+        def close():
+            if never.get():
+                self.config_data["fav_popup"] = False
+                try:
+                    self.save_config()
+                except Exception:
+                    pass
+            win.destroy()
+
+        ttk.Checkbutton(bottom, text="Ne plus proposer au démarrage", variable=never,
+                        style="Card.TCheckbutton").pack(side="left")
+        ttk.Button(bottom, text="Fermer", command=close).pack(side="right")
+        win.protocol("WM_DELETE_WINDOW", close)
 
     def rename_instance(self, inst):
         win = self.small_dialog("Renommer l'instance", 420, 220)
