@@ -18,17 +18,61 @@ jobs:
         with:
           python-version: "3.12"
 
+      # PyInstaller n'est PAS dans cette ligne : il est installé juste après (bootloader recompilé)
       - name: Dépendances
-        run: pip install pyinstaller minecraft-launcher-lib pillow pypresence
+        run: pip install minecraft-launcher-lib pillow pypresence
+
+      # Le bootloader standard de PyInstaller est connu des antivirus (des malwares l'utilisent aussi).
+      # On le recompile pour obtenir un exécutable de démarrage unique.
+      # Si la compilation échoue, on retombe sur le PyInstaller standard pour ne pas bloquer la release.
+      - name: PyInstaller (bootloader recompilé)
+        shell: pwsh
+        run: |
+          $env:PYINSTALLER_COMPILE_BOOTLOADER = "1"
+          python -m pip install --verbose --no-binary=PyInstaller PyInstaller
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Compilation du bootloader impossible : PyInstaller standard utilisé."
+            Remove-Item Env:PYINSTALLER_COMPILE_BOOTLOADER
+            python -m pip install --no-cache-dir PyInstaller
+          }
 
       - name: Version = nom du tag, dépôt = ce dépôt
         run: python set_version.py "${{ github.ref_name }}" "${{ github.repository }}"
+
+      # Informations de version intégrées à l'exe (clic droit > Propriétés > Détails) :
+      # un exe qui s'identifie est moins suspect pour les antivirus.
+      - name: Informations de version de l'exe
+        shell: python
+        run: |
+          import os, re
+          tag = os.environ["GITHUB_REF_NAME"]
+          nums = [int(n) for n in (re.findall(r"\d+", tag) + ["0"] * 4)[:4]]
+          dotted = ".".join(str(n) for n in nums[:3])
+          owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "WeCraft")
+          content = f"""VSVersionInfo(
+            ffi=FixedFileInfo(
+              filevers={tuple(nums)}, prodvers={tuple(nums)},
+              mask=0x3f, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+            kids=[
+              StringFileInfo([StringTable('040C04B0', [
+                StringStruct('CompanyName', '{owner}'),
+                StringStruct('FileDescription', 'WeCraft - lanceur d instances Minecraft'),
+                StringStruct('FileVersion', '{dotted}'),
+                StringStruct('InternalName', 'WeCraft'),
+                StringStruct('LegalCopyright', 'Open source - github.com/{os.environ.get("GITHUB_REPOSITORY", "")}'),
+                StringStruct('OriginalFilename', 'WeCraft.exe'),
+                StringStruct('ProductName', 'WeCraft'),
+                StringStruct('ProductVersion', '{dotted}')])]),
+              VarFileInfo([VarStruct('Translation', [1036, 1200])])
+            ])
+          """
+          open("version_info.txt", "w", encoding="utf-8").write(content)
 
       - name: Compilation de l'exe
         shell: pwsh
         run: |
           New-Item -ItemType File -Force fonts/.keep | Out-Null
-          pyinstaller --onefile --windowed --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py
+          pyinstaller --onefile --windowed --noupx --version-file version_info.txt --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py
 
       - name: Empreinte SHA-256
         shell: pwsh
