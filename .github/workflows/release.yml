@@ -36,6 +36,8 @@ jobs:
             python -m pip install --no-cache-dir PyInstaller
           }
 
+      # ATTENTION : le dépôt passé ici sert à la mise à jour automatique de WeCraft (recherche des releases).
+      # Si les releases publiques sont dans WeCraft-Releases, remplacez "${{ github.repository }}" par "Rexidelamort/WeCraft-Releases".
       - name: Version = nom du tag, dépôt = ce dépôt
         run: python set_version.py "${{ github.ref_name }}" "${{ github.repository }}"
 
@@ -87,3 +89,21 @@ jobs:
             dist/WeCraft.exe
             dist/WeCraft.exe.sha256
           generate_release_notes: true
+
+      # Numéro de version sans le « v » du tag (tag v1.2.1 -> VERSION=1.2.1)
+      - name: Numéro de version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      # Publie aussi la release dans le dépôt public WeCraft-Releases.
+      # Le jeton par défaut ne peut écrire que dans CE dépôt : il faut un jeton à vous (secret RELEASES_TOKEN).
+      - name: Publier la release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          HASH=$(cut -d' ' -f1 dist/WeCraft.exe.sha256)
+          gh release create "v${{ env.VERSION }}" dist/WeCraft.exe dist/WeCraft.exe.sha256 \
+            --repo Rexidelamort/WeCraft-Releases \
+            --title "v${{ env.VERSION }}" \
+            --notes "WeCraft v${{ env.VERSION }} - SHA-256 : $HASH"
