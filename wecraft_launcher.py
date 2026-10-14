@@ -578,24 +578,47 @@ def download_update(info, dest, progress=lambda done, total: None):
 
 
 def apply_update(new_exe):
-    """Windows : un petit script attend la fermeture du launcher, remplace l'.exe puis le relance."""
-    cur = Path(sys.executable)
-    bat = cur.with_name("wecraft_update.bat")
-    bat.write_text(
-        "@echo off\r\n"
-        f'set "CUR={cur}"\r\nset "NEW={new_exe}"\r\n'
-        "for /l %%i in (1,1,60) do (\r\n"
-        "  timeout /t 1 /nobreak >nul\r\n"
-        '  move /Y "%NEW%" "%CUR%" >nul 2>&1\r\n'
-        "  if not errorlevel 1 goto done\r\n"
-        ")\r\n"
-        "exit /b 1\r\n"
-        ":done\r\n"
-        'start "" "%CUR%"\r\n'
-        '(goto) 2>nul & del "%~f0"\r\n', encoding="utf-8")
+    """Windows : l'.exe en cours d'exécution est renommé (Windows l'autorise), le nouveau prend sa place,
+    puis il est relancé. Aucun script .bat ni processus caché : les antivirus apprécient beaucoup mieux."""
+    cur, new = Path(sys.executable), Path(new_exe)
+    old = cur.with_name(cur.name + ".old")
+    try:
+        old.unlink(missing_ok=True)  # reste d'une mise à jour précédente
+    except OSError:
+        old = cur.with_name(f"{cur.name}.{int(time.time())}.old")
+    cur.rename(old)
+    try:
+        new.rename(cur)
+    except Exception:
+        old.rename(cur)  # retour arrière : l'ancienne version reste en place
+        raise
     env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI") and k != "_MEIPASS2"}
-    subprocess.Popen(["cmd", "/c", str(bat)], env=env, close_fds=True,
-                     creationflags=0x00000008 | 0x08000000)  # DETACHED_PROCESS | CREATE_NO_WINDOW
+    subprocess.Popen([str(cur)], env=env, close_fds=True, cwd=str(cur.parent))
+
+
+def cleanup_update_leftovers():
+    """Supprime l'ancien .exe (WeCraft.exe.old) et l'ancien script wecraft_update.bat laissés par une mise à jour."""
+    if not FROZEN:
+        return
+
+    def work():
+        time.sleep(5)  # laisse l'ancien processus se fermer
+        cur = Path(sys.executable)
+        # Uniquement « <nom de l'exe>.old » (ex. WeCraft.exe.old), son éventuelle variante horodatée
+        # « <nom de l'exe>.<chiffres>.old » et l'ancien script : jamais un autre fichier .old.
+        spare = re.compile(re.escape(cur.name) + r"\.\d+\.old")
+        targets = [cur.with_name(cur.name + ".old"), cur.with_name("wecraft_update.bat")]
+        try:
+            targets += [f for f in cur.parent.iterdir() if spare.fullmatch(f.name)]
+        except OSError:
+            pass
+        for f in targets:
+            try:
+                f.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    threading.Thread(target=work, daemon=True).start()
 
 
 # ---------------------------------------------------------------- bibliothèque de mods (Modrinth)
@@ -4176,4 +4199,5 @@ if __name__ == "__main__":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("WeCraft.Launcher")
     except Exception:
         pass
+    cleanup_update_leftovers()
     Launcher().mainloop()
