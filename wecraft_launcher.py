@@ -62,9 +62,10 @@ APP_DIR = Path(sys.executable).parent if FROZEN else Path(__file__).resolve().pa
 INSTANCES_DIR = Path(MC_DIR) / "instances"  # %APPDATA%/.wecraft/instances : un sous-dossier = une instance
 RES_DIR = Path(getattr(sys, "_MEIPASS", APP_DIR))  # assets/ et fonts/ intégrés au .exe
 
-# Mises à jour automatiques via les « Releases » GitHub (dépôt PUBLIC)
+# Mises à jour automatiques via les « Releases » GitHub.
+# Le code source est dans un dépôt PRIVÉ ; seules les Releases (.exe) sont publiées dans ce dépôt PUBLIC.
 APP_VERSION = "1.2.0"  # mis à jour automatiquement par le workflow GitHub à chaque release
-GITHUB_REPO = "Rexidelamort/WeCraft-Launcher"  # rempli automatiquement par le workflow GitHub
+GITHUB_REPO = "Rexidelamort/WeCraft-Releases"  # rempli automatiquement par le workflow GitHub
 
 # Charte WeCraft : noir spatial, blanc chaud, dégradé braise, bleu étoilé
 BG, PANEL, FG = "#05060C", "#0F1424", "#EEECE4"
