@@ -27,12 +27,21 @@ toujours remplacé par un substitut (aucun vrai `.minecraft` n'est touché).
 Contrôle : les mêmes tests lancés sur le code d'origine échouent sur les comportements corrigés et
 passent sur les comportements à préserver.
 
-**Non testé à ce stade :** interface Tkinter (fenêtres, dialogues), exe PyInstaller, Windows réel,
-installation réelle de versions/loaders, relance après mise à jour.
+**Windows (PC du développeur, Windows 11 build 26200, Python 3.14.8, 19/10/2026) :**
+- `tools/test_windows.bat` : 40/40 tests réussis (dont signature, `cryptography` 50.0.2), code retour 0.
+- `tools/essai_interface_windows.bat` (bac à sable, APPDATA/USERPROFILE redirigés) : l'interface démarre
+  et se ferme sans erreur (code retour 0) ; `instances_meta.json` volontairement cassé mis de côté en
+  `.invalide-<date>` sans être écrasé ; question Discord posée, réponse Non enregistrée
+  (`discord: false`, `discord_asked_version: 1.2.0`) ; aucun fichier de profils modifié (LANCER non cliqué).
+- Incident de test : au premier essai, la redirection de LOCALAPPDATA a fait installer par le gestionnaire
+  Python de Windows un Python 3.15 dans `bac_a_sable` (aucun effet hors du dossier de test). Script corrigé.
+
+**Non testé à ce stade :** bouton LANCER (fermeture du launcher officiel, écriture du profil en conditions réelles), exe PyInstaller,
+fenêtres de retour arrière et de mise à jour, installation réelle de versions/loaders, relance après mise à jour.
 
 ## Restant à faire / à décider
 
-1. **Tests sous Windows** (interface + exe) dans un dossier isolé.
+1. **Tests sous Windows** : tests automatiques et démarrage de l'interface faits ; restent LANCER (bac à sable) et l'exe compilé.
 2. **Revue indépendante** des changements sensibles (profils, mise à jour, exécution) par une autre IA (§13).
 3. **Clé de signature** : la générer (`tools/sign_release.py generate`), mettre la clé publique dans
    `UPDATE_PUBLIC_KEY`, la clé privée en secret `UPDATE_SIGNING_KEY`. Passer `UPDATE_SIGNATURE_REQUIRED`

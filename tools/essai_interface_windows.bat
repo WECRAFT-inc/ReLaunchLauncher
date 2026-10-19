@@ -10,14 +10,15 @@ cd /d "%~dp0.."
 set "LOG=%CD%\resultats_interface.txt"
 echo WeCraft - essai de l'interface> "%LOG%"
 
-rem 1) AVANT toute redirection : quel Python, et ou sont ses bibliotheques ?
+rem 1) AVANT toute redirection (sinon le gestionnaire Python de Windows, qui range ses installations dans
+rem LOCALAPPDATA, ne trouve plus votre Python et en installe un nouveau dans le bac a sable) : quel Python, et ou sont ses bibliotheques ?
 set "PY=python"
 where py >nul 2>&1 && set "PY=py -3"
 set "PYEXE="
 for /f "usebackq delims=" %%i in (`%PY% -c "import sys; print(sys.executable)"`) do set "PYEXE=%%i"
 if not defined PYEXE (echo PYTHON INTROUVABLE>> "%LOG%" & goto fin)
 set "PYPATHS="
-for /f "usebackq delims=" %%i in (`"%PYEXE%" -c "import site, os; print(os.pathsep.join([site.getusersitepackages()] + site.getsitepackages()))"`) do set "PYPATHS=%%i"
+for /f "usebackq delims=" %%i in (`call "%PYEXE%" -c "import site, os; print(os.pathsep.join([site.getusersitepackages()] + site.getsitepackages()))"`) do set "PYPATHS=%%i"
 >> "%LOG%" echo Python : %PYEXE%
 >> "%LOG%" echo Bibliotheques : %PYPATHS%
 
