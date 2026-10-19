@@ -1,0 +1,64 @@
+{
+  "name": "wecraft",
+  "productName": "WeCraft",
+  "version": "0.1.0",
+  "description": "WeCraft - lanceur d'instances Minecraft (version Electron, en cours de migration)",
+  "private": true,
+  "main": "dist/src/main/main.js",
+  "author": "WeCraft",
+  "license": "UNLICENSED",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
+    "test": "npm run build && node --test \"dist/tests/*.test.js\"",
+    "start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-builder --win portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "44.7.2",
+    "electron-builder": "^26.0.0",
+    "typescript": "6.0.3"
+  },
+  "build": {
+    "appId": "fr.wecraft.launcher",
+    "productName": "WeCraft",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/src/main/**",
+      "dist/src/preload/**",
+      "dist/src/shared/**",
+      "dist/src/renderer/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "WeCraft.exe"
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "loadBrowserProcessSpecificV8Snapshot": false,
+      "grantFileProtocolExtraPrivileges": false
+    }
+  }
+}

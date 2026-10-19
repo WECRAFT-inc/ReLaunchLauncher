@@ -7,3 +7,9 @@ version_info.txt
 resultats_*.txt
 bac_a_sable/
 resultats_exe.txt
+
+# Version Electron
+electron/node_modules/
+electron/dist/
+electron/release/
+!electron/build/

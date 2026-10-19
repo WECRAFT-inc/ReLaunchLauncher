@@ -116,3 +116,35 @@ retour arrière en conditions réelles.
 3. Épingler les actions GitHub (SHA) et les dépendances (`--require-hashes`).
 4. Cas limites restants : M3 (nom de profil identique à ceux de WeCraft), exe qui ne démarre pas du tout,
    `minecraft-launcher-lib` non audité (S11), découpage progressif du monofichier.
+
+## Migration Electron + TypeScript
+
+Référence : `docs/AUDIT_MIGRATION_ELECTRON.md` (audit du 19/10/2026, lots E0 à E9).
+
+**Décisions du développeur (19/10/2026)** : D1 transition des mises à jour par **exe portable** signé
+(stratégie A) ; D7 `C:\Users\lesci\OneDrive\Documents\Wecraft-test-new` = **bac à sable de test** ;
+D8 référence visuelle = maquette ReLaunch × WeCraft + capture de l'écran d'accueil (barre latérale, grand
+titre, bouton Jouer, deux cartes).
+
+### Lot E0 : squelette Electron sécurisé (branche `electron/e0-squelette`)
+
+- Projet `electron/` : TypeScript strict, processus principal / preload / interface séparés, aucune
+  dépendance d'exécution (dépendances de développement : electron 44.7.2, electron-builder, typescript,
+  @types/node).
+- Sécurité : contextIsolation, sandbox global, nodeIntegration désactivé, protocole privé `app://wecraft`
+  avec contrôle des chemins, CSP stricte, navigation/fenêtres/webview/permissions refusées, IPC limité à la
+  fenêtre principale, liens externes par identifiant, instance unique, fuses Electron.
+- Interface : accueil d'après la maquette, pages Instances / Modpacks / Paramètres (thèmes Phénix, ReLink,
+  Aurore, Glace), aucune information fictive (« Jouer » désactivé avec explication).
+- Données : **lecture seule** ; chemin `%APPDATA%\.wecraft` calculé comme en Python (testé) ; thème repris
+  de `launcher_config.json` ; aucun fichier écrit.
+- CI `.github/workflows/electron.yml` (Windows) : typecheck, tests, exe portable, démarrage de 15 s avec
+  APPDATA isolé, exe joint au run. **Aucune publication, aucun secret.**
+
+Vérifié (Linux, 19/10/2026) : 20/20 tests (`node:test`) ; parité des chemins avec la règle Python ;
+interface rendue dans Chromium (1180x760, 900x600, thèmes) sans erreur de console.
+Non vérifié localement (registre npm inaccessible depuis l'environnement de développement) : typecheck des
+fichiers qui importent `electron`, compilation de l'exe, démarrage réel d'Electron -> confiés à la CI.
+
+Reste pour E0 : résultat de la CI Windows ; versionner `package-lock.json` produit par la CI puis passer
+à `npm ci` ; essai de l'exe dans le bac à sable (démarrage sous Smart App Control / Defender, durée).

@@ -1,0 +1,72 @@
+name: Electron (compilation de contrôle)
+
+# Lot E0 de la migration Electron : vérifie, compile et teste la version Electron sous Windows.
+# RIEN n'est publié : pas de release, pas de secret, pas de signature. L'exe produit est seulement
+# joint au run (« artefact », 14 jours) pour être essayé en bac à sable.
+on:
+  push:
+    branches: ["electron/**"]
+  pull_request:
+    paths: ["electron/**", ".github/workflows/electron.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # Pas encore de package-lock.json : il est produit ici et joint au run, pour être relu puis
+      # versionné. Ensuite, cette étape passera à « npm ci » (versions exactes et empreintes).
+      - name: Dépendances
+        run: npm install --no-audit --no-fund
+
+      - name: Vérification des types (TypeScript strict)
+        run: npm run typecheck
+
+      - name: Tests (bloquants)
+        run: npm test
+
+      - name: Compilation de l'exe portable (sans publication)
+        run: npm run dist:win
+
+      - name: Empreinte SHA-256
+        shell: pwsh
+        run: |
+          $h = (Get-FileHash release/WeCraft.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  WeCraft.exe" | Out-File release/WeCraft.exe.sha256 -Encoding ascii
+          Get-Item release/WeCraft.exe | Select-Object Name, Length | Format-Table
+
+      - name: Démarrage de l'application (essai de 15 s, données isolées)
+        shell: pwsh
+        run: |
+          # APPDATA redirigé vers un dossier vide : l'essai ne lit aucun réglage existant.
+          $sandbox = Join-Path $env:RUNNER_TEMP "wecraft-essai"
+          New-Item -ItemType Directory -Force $sandbox | Out-Null
+          $env:APPDATA = $sandbox
+          $p = Start-Process release/win-unpacked/WeCraft.exe -PassThru
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) { Write-Error "WeCraft s'est arrêté au démarrage (code $($p.ExitCode))"; exit 1 }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "WeCraft tournait toujours après 15 s."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wecraft-electron-e0
+          retention-days: 14
+          path: |
+            electron/release/WeCraft.exe
+            electron/release/WeCraft.exe.sha256
+            electron/package-lock.json
