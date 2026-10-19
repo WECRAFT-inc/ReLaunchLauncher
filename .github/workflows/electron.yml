@@ -67,7 +67,9 @@ jobs:
       - name: Variantes de comparaison (sans compression, dossier non compressé)
         shell: pwsh
         run: |
-          npx electron-builder --win portable --x64 --publish never -c.compression=store -c.portable.artifactName=WeCraft-sans-compression.exe -c.directories.output=release-store
+          # Arguments entre guillemets : sinon PowerShell coupe « -c.compression=store » au niveau du point.
+          npx electron-builder --win portable --x64 --publish never "-c.compression=store" "-c.portable.artifactName=WeCraft-sans-compression.exe" "-c.directories.output=release-store"
+          if ($LASTEXITCODE -ne 0) { Write-Error "Variante sans compression : échec (code $LASTEXITCODE)"; exit 1 }
           Compress-Archive -Path release/win-unpacked/* -DestinationPath release/WeCraft-dossier.zip
           foreach ($f in "release/WeCraft.exe", "release-store/WeCraft-sans-compression.exe", "release/WeCraft-dossier.zip") {
             $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
