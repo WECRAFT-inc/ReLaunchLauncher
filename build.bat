@@ -1,6 +1,14 @@
 @echo off
 rem Compilation locale (test) : donne dist\WeCraft.exe
-pip install pyinstaller minecraft-launcher-lib pillow
+rem Proche de la CI (memes dependances, --noupx) ; la CI recompile en plus le bootloader de PyInstaller
+rem et ajoute les informations de version : l'exe local n'est donc pas identique a celui des releases.
+python -m pip install -r requirements-build.txt pyinstaller || goto :erreur
+python -m unittest discover -s tests || goto :erreur
 if not exist fonts mkdir fonts
-pyinstaller --onefile --windowed --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py
+pyinstaller --onefile --windowed --noupx --hidden-import cryptography.hazmat.primitives.asymmetric.ed25519 --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py || goto :erreur
 pause
+exit /b 0
+:erreur
+echo Echec : voir les messages ci-dessus.
+pause
+exit /b 1

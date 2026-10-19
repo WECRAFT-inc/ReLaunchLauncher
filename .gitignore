@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+version_info.txt
+resultats_*.txt
+bac_a_sable/

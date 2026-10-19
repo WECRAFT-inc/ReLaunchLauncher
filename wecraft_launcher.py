@@ -12,6 +12,7 @@ Microsoft et le lancement du jeu restent gérés par le launcher officiel.
 """
 import base64
 import ctypes
+import glob
 import hashlib
 import importlib
 import importlib.util
@@ -47,16 +48,147 @@ import minecraft_launcher_lib as mll
 LOADERS = {"Vanilla": None, "Fabric": "fabric", "Forge": "forge",
            "NeoForge": "neoforge", "Quilt": "quilt"}
 
-SYSTEM_MC_DIR = mll.utils.get_minecraft_directory()   # .minecraft officiel : jamais modifié
-MC_DIR = SYSTEM_MC_DIR.replace("minecraft", "wecraft")  # réglages + instance par défaut
-_OLD_DIR = Path(SYSTEM_MC_DIR.replace("minecraft", "mon_launcher"))  # ancien nom : réglages repris
-CONFIG_FILE = Path(MC_DIR) / "launcher_config.json"
-if not CONFIG_FILE.exists() and (_OLD_DIR / "launcher_config.json").exists():
+# .minecraft officiel. WeCraft n'y touche qu'à deux choses : il y INSTALLE versions, loaders et Java
+# (via minecraft_launcher_lib) et il y écrit SON profil dans launcher_profiles.json (voir set_profile).
+SYSTEM_MC_DIR = mll.utils.get_minecraft_directory()
+
+
+def sibling_dir(mc_dir, name):
+    """« ...\\.minecraft » -> « ...\\.<name> » : seul le DERNIER dossier du chemin est renommé
+    (un nom d'utilisateur contenant « minecraft » n'est plus modifié)."""
+    p = Path(mc_dir)
+    return str(p.with_name(("." if p.name.startswith(".") else "") + name))
+
+
+def _replace_with_retry(src, dst, tries=10, delay=0.1):
+    """os.replace, avec quelques nouveaux essais : sous Windows un antivirus ou un indexeur peut
+    garder le fichier ouvert une fraction de seconde (PermissionError / WinError 5 ou 32)."""
+    for attempt in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(delay)
+
+
+def atomic_write_text(path, text):
+    """Écrit un fichier sans jamais laisser de version à moitié écrite : fichier temporaire dans le
+    même dossier, vidé sur le disque, puis remplacement atomique (os.replace, avec nouveaux essais)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
-        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(_OLD_DIR / "launcher_config.json", CONFIG_FILE)
-    except Exception:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        _replace_with_retry(tmp, path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def quarantine(path):
+    """Met de côté un fichier illisible (copie « <nom>.invalide-<date> ») au lieu de l'écraser.
+    Renvoie le chemin de la copie, ou None."""
+    path = Path(path)
+    try:
+        raw = path.read_bytes()
+        for old in path.parent.glob(glob.escape(path.name) + ".invalide-*"):  # déjà mis de côté (démarrage précédent)
+            try:
+                if old.read_bytes() == raw:
+                    return old
+            except OSError:
+                pass
+        dest = path.with_name(f"{path.name}.invalide-{time.strftime('%Y%m%d-%H%M%S')}")
+        n = 1
+        while dest.exists():
+            dest = dest.with_name(f"{dest.name}-{n}")
+            n += 1
+        shutil.copy2(path, dest)
+        return dest
+    except OSError:
+        return None
+
+
+INVALID_FILES = []  # fichiers de réglages illisibles mis de côté (affichés à l'utilisateur au démarrage)
+
+
+class SettingsUnreadable(OSError):
+    """Un fichier de réglages existe mais ne peut pas être lu pour l'instant (droits, verrou...) :
+    il ne faut surtout pas le réécrire à partir de réglages vides."""
+
+
+_UNREADABLE = set()  # fichiers existants mais illisibles (OSError) : jamais réécrits tant que c'est le cas
+
+
+def read_json_file(path, kind=dict, strict=False):
+    """Lit un fichier JSON de WeCraft. Absent -> None. Contenu invalide (JSON, encodage, type) -> le
+    fichier est conservé à part (quarantine), signalé, et None est renvoyé : il n'est jamais écrasé
+    sans copie. Impossible à lire (droits, verrou) -> None, ou SettingsUnreadable si strict=True."""
+    path = Path(path)
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        _UNREADABLE.discard(str(path))
+        return None
+    except OSError as e:
+        _UNREADABLE.add(str(path))
+        if strict:
+            raise SettingsUnreadable(f"{path.name} ne peut pas être lu ({e})") from None
+        return None
+    _UNREADABLE.discard(str(path))
+    try:
+        data = json.loads(raw.decode("utf-8-sig"))  # UnicodeDecodeError est une ValueError
+        if isinstance(data, kind):
+            return data
+    except ValueError:
         pass
+    try:
+        st = path.stat()
+        sig = (st.st_size, st.st_mtime_ns)
+    except OSError:
+        sig = None
+    if _QUARANTINED.get(str(path)) != sig:  # une seule copie par version du fichier (le scan relit souvent)
+        _QUARANTINED[str(path)] = sig
+        INVALID_FILES.append((path, quarantine(path)))
+    return None
+
+
+_QUARANTINED = {}
+
+
+MC_DIR = sibling_dir(SYSTEM_MC_DIR, "wecraft")  # réglages + instance par défaut
+_OLD_DIR = Path(sibling_dir(SYSTEM_MC_DIR, "mon_launcher"))  # ancien nom : réglages repris
+# Avant la 1.2.1, ces chemins étaient calculés par un remplacement de TOUTES les occurrences de
+# « minecraft » (bug si le nom d'utilisateur en contient). On reprend les réglages éventuels de là.
+_BUGGY_DIRS = [Path(p) for p in {SYSTEM_MC_DIR.replace("minecraft", "wecraft"),
+                                 SYSTEM_MC_DIR.replace("minecraft", "mon_launcher")}
+               if Path(p) not in (Path(MC_DIR), _OLD_DIR)]
+CONFIG_FILE = Path(MC_DIR) / "launcher_config.json"
+
+
+def migrate_old_settings():
+    """Reprend (par COPIE, sans rien supprimer) les réglages d'anciens dossiers si WeCraft n'en a pas."""
+    for name in ("launcher_config.json", "instances_meta.json"):
+        target = Path(MC_DIR) / name
+        if target.exists():
+            continue
+        for src in [d / name for d in _BUGGY_DIRS + [_OLD_DIR]]:
+            try:
+                if src.is_file():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, target)
+                    break
+            except OSError:
+                pass
+
+
+migrate_old_settings()
 FROZEN = getattr(sys, "frozen", False)  # True quand le launcher est un .exe (PyInstaller)
 APP_DIR = Path(sys.executable).parent if FROZEN else Path(__file__).resolve().parent
 INSTANCES_DIR = Path(MC_DIR) / "instances"  # %APPDATA%/.wecraft/instances : un sous-dossier = une instance
@@ -136,9 +268,8 @@ def read_modrinth_db(db_file, profiles_dir):
     return out
 
 
-def detect_instances():
-    """Cherche les instances CurseForge, Modrinth et Prism (+ le .minecraft officiel) et lit leur
-    version de Minecraft et leur mod loader. Seuls les emplacements habituels sont scannés."""
+def launcher_dirs():
+    """Dossiers habituels des autres launchers : (dossiers d'instances CurseForge, Prism, Modrinth)."""
     home = Path.home()
     if sys.platform.startswith("win"):
         appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
@@ -149,6 +280,21 @@ def detect_instances():
     else:
         share = home / ".local" / "share"
         prism, modrinth = share / "PrismLauncher", share / "ModrinthApp"
+    cf_roots = [home / "curseforge" / "minecraft" / "Instances",
+                home / "Documents" / "curseforge" / "minecraft" / "Instances"]
+    return cf_roots, prism, modrinth
+
+
+def instance_roots():
+    """Dossiers qui CONTIENNENT des instances : seuls leurs sous-dossiers peuvent être supprimés."""
+    cf_roots, prism, modrinth = launcher_dirs()
+    return [INSTANCES_DIR, *cf_roots, prism / "instances", modrinth / "profiles"]
+
+
+def detect_instances():
+    """Cherche les instances CurseForge, Modrinth et Prism (+ le .minecraft officiel) et lit leur
+    version de Minecraft et leur mod loader. Seuls les emplacements habituels sont scannés."""
+    cf_roots, prism, modrinth = launcher_dirs()
 
     found = []
 
@@ -161,8 +307,6 @@ def detect_instances():
         add("Minecraft officiel", ".minecraft", official)
 
     # CurseForge : <dossier>/curseforge/minecraft/Instances/<nom>/minecraftinstance.json
-    cf_roots = [home / "curseforge" / "minecraft" / "Instances",
-                home / "Documents" / "curseforge" / "minecraft" / "Instances"]
     for cf in (c for c in cf_roots if c.is_dir()):
         for inst in sorted(cf.iterdir()):
             if not inst.is_dir():
@@ -178,7 +322,7 @@ def detect_instances():
     profiles_dir = modrinth / "profiles"
     try:
         for folder, name, mc, loader, lv in read_modrinth_db(modrinth / "app.db", profiles_dir):
-            if folder.is_dir():
+            if folder.is_dir() and is_inside(folder, profiles_dir):  # chemin de la base hors de « profiles » : ignoré
                 add("Modrinth", name, folder, mc, loader, lv)
     except Exception:
         if profiles_dir.is_dir():
@@ -243,8 +387,8 @@ def read_local_instance(folder):
             inst["loader"] = cfg["loader"]
         if "loader_version" in cfg:
             inst["loader_version"] = cfg["loader_version"] or None
-        if cfg.get("ram"):
-            inst["ram"] = int(cfg["ram"])
+        if parse_ram(cfg.get("ram")):
+            inst["ram"] = parse_ram(cfg["ram"])
     except Exception:
         pass
     if inst["loader"] not in LOADERS or inst["loader"] == "Vanilla":
@@ -299,31 +443,51 @@ def meta_key(folder):
     return os.path.normcase(str(folder))
 
 
-def load_meta():
+_META_LOCK = threading.RLock()  # update_meta / forget_meta peuvent être appelés depuis plusieurs threads
+
+
+def parse_ram(value):
+    """RAM en Go (entier de 1 à 64) ; toute autre valeur est ignorée (None) au lieu de tout faire échouer."""
     try:
-        data = json.loads(META_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+        ram = int(value)
+    except (TypeError, ValueError):
+        return None
+    return ram if 1 <= ram <= 64 else None
+
+
+def load_meta(strict=False):
+    """Réglages par instance. Un fichier invalide est mis de côté (jamais écrasé sans copie).
+    strict=True (avant une écriture) : lève SettingsUnreadable si le fichier existe mais ne peut pas être lu."""
+    with _META_LOCK:
+        data = read_json_file(META_FILE, strict=strict)
+        return data if data is not None else {}
+
+
+def _save_meta(meta):
+    atomic_write_text(META_FILE, json.dumps(meta, indent=2, ensure_ascii=False))
 
 
 def update_meta(folder, set=None, remove=()):
     """Enregistre des réglages pour une instance sans jamais modifier son dossier."""
-    meta = load_meta()
-    entry = meta.setdefault(meta_key(folder), {})
-    entry.update(set or {})
-    for k in remove:
-        entry.pop(k, None)
-    if not entry:
-        meta.pop(meta_key(folder), None)
-    META_FILE.parent.mkdir(parents=True, exist_ok=True)
-    META_FILE.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    with _META_LOCK:
+        meta = load_meta(strict=True)
+        entry = meta.get(meta_key(folder))
+        entry = dict(entry) if isinstance(entry, dict) else {}
+        entry.update(set or {})
+        for k in remove:
+            entry.pop(k, None)
+        if entry:
+            meta[meta_key(folder)] = entry
+        else:
+            meta.pop(meta_key(folder), None)
+        _save_meta(meta)
 
 
 def forget_meta(folder):
-    meta = load_meta()
-    if meta.pop(meta_key(folder), None) is not None:
-        META_FILE.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    with _META_LOCK:
+        meta = load_meta(strict=True)
+        if meta.pop(meta_key(folder), None) is not None:
+            _save_meta(meta)
 
 
 def detect_external():
@@ -347,34 +511,47 @@ def apply_meta(instances):
     """Applique nom affiché, masquage et réglages forcés (fichier instances_meta.json)."""
     meta = load_meta()
     for i in instances:
-        m = meta.get(meta_key(i["folder"]), {})
+        m = meta.get(meta_key(i["folder"]))
+        m = m if isinstance(m, dict) else {}  # une entrée abîmée n'empêche plus d'afficher les autres
         if m.get("version"):
             i["version"] = str(m["version"])
         if "loader" in m:
             i["loader"] = m["loader"]
         if "loader_version" in m:
             i["loader_version"] = m["loader_version"] or None
-        if m.get("ram"):
-            i["ram"] = int(m["ram"])
+        if parse_ram(m.get("ram")):
+            i["ram"] = parse_ram(m["ram"])
         if i["loader"] not in LOADERS or i["loader"] == "Vanilla":
             i["loader"] = None
         if not i["loader"]:
             i["loader_version"] = None
-        i["display"] = (m.get("name") or "").strip() or i["name"]
+        i["display"] = str(m.get("name") or "").strip() or i["name"]
         i["hidden"] = bool(m.get("hidden"))
         i["fav"] = bool(m.get("fav"))
         i["_hay"] = f"{i['display']} {i['name']} {i['version'] or ''} {i['loader'] or 'vanilla'} {i['source']}".lower()
     return instances
 
 
+def is_inside(path, root):
+    """True si path est un sous-dossier (strict) de root, après résolution des liens et des « .. »."""
+    try:
+        p, r = Path(path).resolve(), Path(root).resolve()
+        return p != r and r in p.parents
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def safe_to_delete(folder):
-    """Garde-fou : on ne supprime qu'un vrai dossier d'instance, jamais un dossier système."""
+    """Garde-fou : on ne supprime qu'un vrai dossier d'instance, jamais un dossier système.
+    Le dossier doit se trouver À L'INTÉRIEUR d'un dossier d'instances connu (WeCraft, CurseForge,
+    Prism, Modrinth) et ne contenir aucun dossier protégé (home, .minecraft, dossier WeCraft)."""
     try:
         p = Path(folder).resolve()
         home = Path.home().resolve()
         protected = {home, Path(MC_DIR).resolve(), INSTANCES_DIR.resolve(), Path(SYSTEM_MC_DIR).resolve()}
         return (p.is_dir() and len(p.parts) >= 4
-                and not any(q == p or p in q.parents for q in protected | {home}))
+                and any(is_inside(p, root) for root in instance_roots())
+                and not any(q == p or p in q.parents for q in protected))
     except Exception:
         return False
 
@@ -407,9 +584,52 @@ def profile_name_for(instance_name):
     return f"{PROFILE_NAME} - {instance_name}"
 
 
+PROFILE_IDS_FILE = Path(MC_DIR) / "managed_profiles.json"  # identifiant du profil créé par WeCraft, par fichier
+PROFILE_BACKUP_DIR = Path(MC_DIR) / "backups" / "launcher_profiles"
+PROFILE_BACKUPS_KEPT = 15
+# Noms que WeCraft lui-même a pu donner à son profil (versions actuelle et anciennes). Un profil de
+# l'utilisateur comme « WeCraft Survie » ne correspond PAS : il n'est jamais repris ni modifié.
+_OUR_PROFILE_NAME = re.compile(r"(WECRAFT|(?i:mon lanceur))( - .*)?", re.S)
+
+
+_PROFILE_SECRET_KEYS = ("authenticationDatabase", "clientToken", "selectedUser", "authenticationDatabaseV2")
+
+
+def backup_profiles_file(f):
+    """Copie horodatée de launcher_profiles*.json AVANT chaque écriture (les 15 dernières sont gardées)
+    dans %APPDATA%/.wecraft/backups/launcher_profiles. La toute première sauvegarde historique
+    « .bak_wecraft » à côté du fichier est conservée telle quelle."""
+    f = Path(f)
+    legacy = f.with_name(f.name + ".bak_wecraft")
+    if not legacy.exists():
+        shutil.copy2(f, legacy)
+    PROFILE_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    dest = PROFILE_BACKUP_DIR / f"{f.stem}.{stamp}.json"
+    try:  # sans les éventuels jetons de connexion des anciens launchers : inutile de les multiplier
+        data = json.loads(f.read_text(encoding="utf-8-sig"))
+        if isinstance(data, dict):
+            for k in _PROFILE_SECRET_KEYS:
+                data.pop(k, None)
+        atomic_write_text(dest, json.dumps(data, indent=2, ensure_ascii=False))
+    except (OSError, ValueError):
+        shutil.copy2(f, dest)
+    old = sorted(PROFILE_BACKUP_DIR.glob(f"{f.stem}.*.json"))
+    for extra in old[:-PROFILE_BACKUPS_KEPT]:
+        try:
+            extra.unlink()
+        except OSError:
+            pass
+    return dest
+
+
 def set_profile(base_dir, name, version_id, game_dir, ram):
-    """Crée le profil « WECRAFT - <instance> » dans le launcher officiel, ou met à jour
-    l'existant (nom, version, dossier de jeu) : dossier de jeu (gameDir) + version à lancer, pour démarrer sur le bon modpack."""
+    """Crée le profil « WECRAFT - <instance> » dans le launcher officiel, ou met à jour celui que
+    WeCraft a déjà créé (nom, version, dossier de jeu, RAM). Sécurités :
+    - sauvegarde horodatée avant toute écriture, écriture atomique, relecture de contrôle ;
+    - le profil de WeCraft est retrouvé par son identifiant mémorisé, jamais en devinant d'après un nom
+      que l'utilisateur aurait pu choisir ; les autres profils ne sont jamais modifiés ;
+    - un fichier illisible n'est jamais réécrit (erreur claire à la place)."""
     base = Path(base_dir)
     files = [base / n for n in PROFILE_FILES if (base / n).exists()]
     if not files:
@@ -418,27 +638,58 @@ def set_profile(base_dir, name, version_id, game_dir, ram):
             "Ouvrez une fois le launcher officiel de Minecraft, fermez-le, puis réessayez."
         )
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    ids = read_json_file(PROFILE_IDS_FILE) or {}
     for f in files:
-        backup = f.with_name(f.name + ".bak_wecraft")
-        if not backup.exists():
-            shutil.copy(f, backup)  # sauvegarde de sécurité (une seule fois)
-        data = json.loads(f.read_text(encoding="utf-8"))
-        profiles = data.setdefault("profiles", {})
-        # Un seul profil WeCraft : on retrouve celui déjà créé (quel que soit le nom de l'instance
-        # qu'il porte) et on le met à jour : nom, version et dossier de jeu.
-        ours = [p for p in profiles.values()
-                if str(p.get("name", "")).lower().startswith((PROFILE_NAME.lower(), "mon lanceur"))]
-        prof = next((p for p in ours if p.get("name") == name), None)
-        if prof is None and ours:
-            prof = max(ours, key=lambda p: p.get("lastUsed", ""))
-        if prof is None:
-            prof = profiles[uuid.uuid4().hex] = {"name": name, "created": now}
+        try:
+            data = json.loads(f.read_text(encoding="utf-8-sig"))
+            profiles = data.setdefault("profiles", {}) if isinstance(data, dict) else None
+            if not isinstance(profiles, dict):
+                raise ValueError("format inattendu")
+        except (OSError, ValueError) as e:
+            raise RuntimeError(f"Le fichier {f.name} du launcher officiel est illisible ({e}).\n"
+                               "WeCraft ne l'a pas modifié. Ouvrez le launcher officiel une fois pour "
+                               "qu'il le répare, puis réessayez.") from None
+        key = ids.get(meta_key(f))
+        if key not in profiles or not isinstance(profiles.get(key), dict):
+            key = next((k for k, p in profiles.items() if isinstance(p, dict) and p.get("name") == name), None)
+        if key is None:  # profil créé par une ancienne version de WeCraft (avant l'identifiant mémorisé)
+            legacy = [(k, p) for k, p in profiles.items() if isinstance(p, dict)
+                      and _OUR_PROFILE_NAME.fullmatch(str(p.get("name", "")))]
+            if legacy:
+                key = max(legacy, key=lambda kp: str(kp[1].get("lastUsed", "")))[0]
+        if key is None:
+            key = uuid.uuid4().hex
+            profiles[key] = {"name": name, "created": now}
+        prof = profiles[key]
         prof["name"] = name
         prof.update(type="custom", lastVersionId=version_id, gameDir=str(game_dir), lastUsed=now)
         # La RAM n'est modifiée que si les arguments Java sont absents ou sont ceux de ce launcher
-        if not prof.get("javaArgs") or re.fullmatch(r"-Xmx\d+G", prof["javaArgs"]):
+        if not prof.get("javaArgs") or re.fullmatch(r"-Xmx\d+G", str(prof["javaArgs"])):
             prof["javaArgs"] = f"-Xmx{ram}G"
-        f.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        backup_profiles_file(f)
+        atomic_write_text(f, json.dumps(data, indent=2, ensure_ascii=False))
+        check = json.loads(f.read_text(encoding="utf-8")).get("profiles", {}).get(key, {})
+        if check.get("lastVersionId") != version_id or check.get("gameDir") != str(game_dir):
+            raise RuntimeError(f"Le profil n'a pas pu être vérifié après écriture dans {f.name}.\n"
+                               f"Une sauvegarde se trouve dans {PROFILE_BACKUP_DIR}.")
+        ids[meta_key(f)] = key
+    atomic_write_text(PROFILE_IDS_FILE, json.dumps(ids, indent=2))
+
+
+def installed_loader_ids(installed, loader_key, version):
+    """Loaders déjà installés pour EXACTEMENT cette version de Minecraft (1.20.1 ne correspond pas à
+    1.20.10). « forge » ne correspond pas non plus à « neoforge »."""
+    ver = re.compile(r"(?<![\w.])" + re.escape(version) + r"(?![\w.])")
+    out = []
+    for i in installed:
+        low = i.lower()
+        if not ver.search(i):
+            continue
+        if loader_key == "forge" and "neoforge" in low:
+            continue
+        if re.search(r"(?<![a-z])" + re.escape(loader_key), low):
+            out.append(i)
+    return sorted(out)
 
 
 # Processus du launcher officiel (version classique / version Microsoft Store)
@@ -456,23 +707,24 @@ def _win_running(name):
     return name.lower() in _run_quiet(["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH"]).stdout.lower()
 
 
-def close_official_launcher(timeout=8):
+def close_official_launcher(timeout=8, force=False):
     """Ferme le launcher officiel (sans toucher à une partie en cours : seul le processus du
-    launcher est arrêté). Renvoie (réussi, message)."""
+    launcher est visé). Par défaut, fermeture NORMALE (le launcher enregistre ses fichiers) ;
+    force=True (arrêt forcé) n'est utilisé qu'après accord de l'utilisateur. Renvoie (réussi, message)."""
     try:
         if sys.platform.startswith("win"):
             running = [n for n in OFFICIAL_LAUNCHER_PROCESSES if _win_running(n)]
             if not running:
                 return True, "Launcher officiel déjà fermé."
             for n in running:
-                _run_quiet(["taskkill", "/F", "/IM", n])
+                _run_quiet(["taskkill"] + (["/F"] if force else []) + ["/IM", n])
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 if not any(_win_running(n) for n in running):
                     time.sleep(1.5)  # laisse Windows libérer les fichiers
                     return True, "Launcher officiel fermé."
                 time.sleep(0.5)
-            return False, "Le launcher officiel ne se ferme pas : fermez-le à la main."
+            return False, "Le launcher officiel ne s'est pas fermé."
         if sys.platform == "darwin":
             _run_quiet(["osascript", "-e", 'tell application "Minecraft" to quit'])
         else:
@@ -523,13 +775,108 @@ def _http(url, timeout=10):
         timeout=timeout)
 
 
+# ---- Signature des mises à jour (Ed25519)
+# Clé PUBLIQUE de signature (32 octets en base64). Vide = vérification désactivée (comportement d'avant).
+# La clé PRIVÉE correspondante ne doit JAMAIS être dans ce dépôt : voir tools/sign_release.py.
+UPDATE_PUBLIC_KEY = "pELCCH6Cv98mKYOqqA/gTQsb2+EoV/MIAuG0gT2hx5Q="
+# True : toute mise à jour doit être signée (sinon un pirate n'aurait qu'à ne pas publier de .sig).
+# Toutes les releases produites par le workflow sont signées (il échoue sans la clé). Les versions
+# antérieures à celle-ci ne vérifient rien : seules les suivantes sont protégées.
+UPDATE_SIGNATURE_REQUIRED = True
+SIGNATURE_CONTEXT = "WeCraft-update-v1"
+
+
+def update_signed_message(version, sha256):
+    """Texte signé : lie le fichier (empreinte) à SA version, pour qu'on ne puisse pas faire passer
+    l'exe d'une version pour une autre."""
+    return f"{SIGNATURE_CONTEXT}\n{str(version).strip()}\n{str(sha256).strip().lower()}\n".encode("utf-8")
+
+
+def verify_update_signature(version, sha256, signature_b64, public_key_b64=None):
+    """Vérifie la signature Ed25519 d'une mise à jour. Renvoie True si elle est valide."""
+    key = (public_key_b64 if public_key_b64 is not None else UPDATE_PUBLIC_KEY).strip()
+    if not key or not signature_b64:
+        return False
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from cryptography.exceptions import InvalidSignature
+    except ImportError:
+        return False
+    try:
+        Ed25519PublicKey.from_public_bytes(base64.b64decode(key, validate=True)).verify(
+            base64.b64decode(str(signature_b64).strip(), validate=True), update_signed_message(version, sha256))
+        return True
+    except (InvalidSignature, ValueError, TypeError):
+        return False
+
+
+def signature_support_available():
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def check_update_signature(info, sha256):
+    """Décision pour une mise à jour téléchargée dont l'empreinte est sha256 :
+    lève une erreur si elle doit être refusée, sinon renvoie un texte (vide si rien à signaler)."""
+    if not UPDATE_PUBLIC_KEY.strip():
+        return ""
+    sig = info.get("signature")
+    if sig and not signature_support_available():
+        raise RuntimeError("Le module de vérification des signatures est absent de cette version de WeCraft : "
+                           "la mise à jour ne peut pas être vérifiée. Téléchargez-la depuis la page des releases.")
+    if sig:
+        if verify_update_signature(info["version"], sha256, sig):
+            return "signature vérifiée"
+        raise RuntimeError("La signature de cette mise à jour est invalide : elle n'a pas été publiée par "
+                           "l'auteur de WeCraft, ou a été modifiée. Mise à jour annulée.")
+    if UPDATE_SIGNATURE_REQUIRED:
+        raise RuntimeError("Cette mise à jour n'est pas signée par l'auteur de WeCraft : mise à jour annulée "
+                           "par sécurité.")
+    return "release non signée acceptée (période de transition)"
+
+
+def update_log(text):
+    """Trace dans %APPDATA%/.wecraft/update.log (limité à ~256 Ko : l'ancien contenu passe en .1)."""
+    try:
+        log = Path(MC_DIR) / "update.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if log.exists() and log.stat().st_size > 256_000:
+            os.replace(log, log.with_name("update.log.1"))
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {text}\n")
+    except OSError:
+        pass
+
+
+def version_key(text):
+    """Clé de comparaison : « 1.2.1-rc1 » < « 1.2.1 » < « 1.2.2 » (une pré-version passe avant la version finale)."""
+    text = str(text).strip().lstrip("vV")
+    main, _, pre = text.partition("-")
+    nums = [int(x) for x in re.findall(r"\d+", main)[:4]]
+    nums += [0] * (4 - len(nums))
+    pre_n = [int(x) for x in re.findall(r"\d+", pre)]
+    return (tuple(nums), 0 if pre else 1, tuple(pre_n))
+
+
+def is_newer(remote, local):
+    return version_key(remote) > version_key(local)
+
+
+def _read_small(url, limit=4096):
+    with _http(url) as r:
+        return r.read(limit).decode("utf-8", "replace")
+
+
 def fetch_latest_release():
-    """Dernière release publiée sur GitHub : version, notes, .exe et son empreinte SHA-256."""
+    """Dernière release publiée sur GitHub : version, notes, .exe, son empreinte SHA-256 et sa signature."""
     with _http(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest") as r:
         d = json.load(r)
     assets = d.get("assets", [])
     exe = next((a for a in assets if a["name"].lower().endswith(".exe")), None)
-    sha = None
+    sha = sig = None
     if exe:
         digest = exe.get("digest") or ""
         if digest.startswith("sha256:"):
@@ -537,11 +884,13 @@ def fetch_latest_release():
         else:
             side = next((a for a in assets if a["name"].lower() == exe["name"].lower() + ".sha256"), None)
             if side:
-                with _http(side["browser_download_url"]) as r:
-                    sha = r.read().decode().split()[0]
+                sha = (_read_small(side["browser_download_url"]).split() or [None])[0]
+        sig_asset = next((a for a in assets if a["name"].lower() == exe["name"].lower() + ".sig"), None)
+        if sig_asset:
+            sig = _read_small(sig_asset["browser_download_url"]).strip() or None
     return {"version": d["tag_name"].lstrip("vV"), "notes": (d.get("body") or "").strip(),
             "page": d["html_url"], "url": exe["browser_download_url"] if exe else None,
-            "size": exe["size"] if exe else 0, "sha256": sha}
+            "size": exe["size"] if exe else 0, "sha256": sha, "signature": sig}
 
 
 def explain_update_error(e):
@@ -556,7 +905,7 @@ def explain_update_error(e):
 
 
 def download_update(info, dest, progress=lambda done, total: None):
-    """Télécharge le nouvel .exe et vérifie son SHA-256 avant de le garder."""
+    """Télécharge le nouvel .exe, vérifie son SHA-256 puis sa signature avant de le garder."""
     h, done = hashlib.sha256(), 0
     try:
         with _http(info["url"], timeout=30) as r, open(dest, "wb") as f:
@@ -569,15 +918,27 @@ def download_update(info, dest, progress=lambda done, total: None):
                 h.update(chunk)
                 done += len(chunk)
                 progress(done, total)
-        if h.hexdigest().lower() != info["sha256"].lower():
+        digest = h.hexdigest().lower()
+        if digest != str(info["sha256"]).lower():
             raise RuntimeError("Le fichier téléchargé est corrompu ou a été modifié : mise à jour annulée.")
-    except Exception:
+        note = check_update_signature(info, digest)
+        if note:
+            update_log(f"v{info['version']} : {note}")
+    except Exception as e:
         Path(dest).unlink(missing_ok=True)
+        update_log(f"v{info.get('version')} : mise à jour refusée ({e})")
         raise
     return dest
 
 
-def apply_update(new_exe):
+# ---- Retour arrière après une mise à jour
+# Après le remplacement de l'exe, « update_pending.json » note l'ancienne version (WeCraft.exe.old).
+# Elle n'est supprimée qu'une fois la nouvelle version démarrée correctement (fenêtre affichée).
+# Si la nouvelle version n'y arrive pas, le démarrage suivant propose de revenir à l'ancienne.
+UPDATE_PENDING_FILE = Path(MC_DIR) / "update_pending.json"
+
+
+def apply_update(new_exe, version=None):
     """Windows : l'.exe en cours d'exécution est renommé (Windows l'autorise), le nouveau prend sa place,
     puis il est relancé. Aucun script .bat ni processus caché : les antivirus apprécient beaucoup mieux."""
     cur, new = Path(sys.executable), Path(new_exe)
@@ -592,21 +953,106 @@ def apply_update(new_exe):
     except Exception:
         old.rename(cur)  # retour arrière : l'ancienne version reste en place
         raise
+    try:
+        atomic_write_text(UPDATE_PENDING_FILE, json.dumps(
+            {"exe": str(cur), "old": str(old), "from": APP_VERSION, "to": version, "starts": 0}))
+    except OSError:
+        pass  # sans ce fichier, seul le retour arrière automatique est perdu
+    global _UPDATE_HANDED_OFF
+    _UPDATE_HANDED_OFF = True  # ce processus (l'ancienne version) ne doit plus rien valider ni supprimer
+    update_log(f"mise à jour installée : v{APP_VERSION} -> v{version} (ancienne version gardée : {old.name})")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI") and k != "_MEIPASS2"}
+    subprocess.Popen([str(cur)], env=env, close_fds=True, cwd=str(cur.parent))
+
+
+_UPDATE_HANDED_OFF = False  # True dans l'ANCIEN processus après apply_update : il ne valide rien
+UPDATE_SKIP_FILE = Path(MC_DIR) / "update_skip.json"  # version abandonnée après un retour arrière
+
+
+def read_update_pending():
+    """Mise à jour en attente de validation, si elle concerne CET exe et CETTE version (la nouvelle).
+    Un fichier mal formé est ignoré (jamais d'erreur au démarrage)."""
+    data = read_json_file(UPDATE_PENDING_FILE)
+    try:
+        if (not data or Path(str(data.get("exe") or "")) != Path(sys.executable)
+                or str(data.get("to")) != APP_VERSION or not isinstance(data.get("old"), str)):
+            return None
+        data["starts"] = int(data.get("starts") or 0)
+    except (TypeError, ValueError):
+        return None
+    return data
+
+
+def update_startup_check():
+    """Au démarrage : compte les démarrages de la nouvelle version tant qu'elle n'a pas été validée.
+    Renvoie les infos de mise à jour si un retour arrière doit être proposé, sinon None.
+    Deux démarrages à moins de 30 s d'intervalle (double-clic) ne comptent que pour un."""
+    if not FROZEN:
+        return None
+    try:
+        data = read_update_pending()
+        if data is None:
+            return None
+        now = time.time()
+        if now - float(data.get("last_start") or 0) > 30:
+            data["starts"] += 1
+        data["last_start"] = now
+        atomic_write_text(UPDATE_PENDING_FILE, json.dumps(data))
+        return data if data["starts"] >= 2 and Path(data["old"]).is_file() else None
+    except Exception as e:  # le contrôle ne doit jamais empêcher WeCraft de démarrer
+        update_log(f"contrôle de mise à jour au démarrage impossible ({e!r})")
+        return None
+
+
+def mark_update_healthy():
+    """La nouvelle version fonctionne : on oublie la mise à jour en attente et on supprime l'ancienne."""
+    if not FROZEN or _UPDATE_HANDED_OFF or read_update_pending() is None:
+        return
+    try:
+        UPDATE_PENDING_FILE.unlink(missing_ok=True)
+        UPDATE_SKIP_FILE.unlink(missing_ok=True)
+    except OSError:
+        return
+    update_log(f"v{APP_VERSION} a démarré correctement : ancienne version supprimée")
+    cleanup_update_leftovers()
+
+
+def skipped_update_version():
+    data = read_json_file(UPDATE_SKIP_FILE)
+    return str(data.get("version")) if data and data.get("version") else None
+
+
+def restore_previous_version(data):
+    """Remet l'ancienne version en place (la version défaillante est gardée en « .echec ») et la relance."""
+    cur, old = Path(sys.executable), Path(data["old"])
+    failed = cur.with_name(f"{cur.name}.{time.strftime('%Y%m%d-%H%M%S')}.echec")
+    cur.rename(failed)
+    try:
+        old.rename(cur)
+    except Exception:
+        failed.rename(cur)
+        raise
+    UPDATE_PENDING_FILE.unlink(missing_ok=True)
+    try:  # la version défaillante n'est plus proposée automatiquement (la vérification manuelle reste possible)
+        atomic_write_text(UPDATE_SKIP_FILE, json.dumps({"version": data.get("to")}))
+    except OSError:
+        pass
+    update_log(f"retour à v{data.get('from')} (v{data.get('to')} ne démarrait pas, gardée : {failed.name})")
     env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI") and k != "_MEIPASS2"}
     subprocess.Popen([str(cur)], env=env, close_fds=True, cwd=str(cur.parent))
 
 
 def cleanup_update_leftovers():
     """Supprime l'ancien .exe (WeCraft.exe.old) et l'ancien script wecraft_update.bat laissés par une mise à jour."""
-    if not FROZEN:
-        return
+    if not FROZEN or read_update_pending() is not None:
+        return  # mise à jour pas encore validée : l'ancienne version est gardée pour un retour arrière
 
     def work():
         time.sleep(5)  # laisse l'ancien processus se fermer
         cur = Path(sys.executable)
         # Uniquement « <nom de l'exe>.old » (ex. WeCraft.exe.old), son éventuelle variante horodatée
         # « <nom de l'exe>.<chiffres>.old » et l'ancien script : jamais un autre fichier .old.
-        spare = re.compile(re.escape(cur.name) + r"\.\d+\.old")
+        spare = re.compile(re.escape(cur.name) + r"\.(\d+\.old|\d{8}-\d{6}\.echec)")
         targets = [cur.with_name(cur.name + ".old"), cur.with_name("wecraft_update.bat")]
         try:
             targets += [f for f in cur.parent.iterdir() if spare.fullmatch(f.name)]
@@ -683,6 +1129,18 @@ def safe_folder_name(name):
     return clean
 
 
+_WIN_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
+def safe_mod_filename(name):
+    """Nom de fichier de mod acceptable : simple nom (aucun dossier), se terminant par .jar, sans
+    caractère interdit sous Windows (« : » créerait un flux NTFS caché), sans nom réservé (CON, NUL...)."""
+    name = str(name or "")
+    return bool(re.fullmatch(r"[^<>:\"/\\|?*\x00-\x1f]{1,200}\.jar", name, re.I)
+                and not name.endswith((" ", "."))
+                and name.split(".")[0].strip().upper() not in _WIN_RESERVED)
+
+
 def download_mod_file(url, dest, sha512=None, sha1=None):
     """Télécharge un mod puis vérifie son empreinte (SHA-512, sinon SHA-1) : sinon il est supprimé."""
     if not url.startswith(MODRINTH_CDN):
@@ -737,7 +1195,8 @@ def resolve_modpack(mc, loader, roots, fetch=modrinth_get):
             warnings.append(f"« {titles.get(pid, pid)} » : version introuvable ({e}).")
         files = (v or {}).get("files") or []
         f = next((x for x in files if x.get("primary")), files[0] if files else None)
-        if not v or not f or not str(f.get("url", "")).startswith(MODRINTH_CDN):
+        if (not v or not f or not str(f.get("url", "")).startswith(MODRINTH_CDN)
+                or not safe_mod_filename(f.get("filename")) or not (f.get("hashes") or {}).get("sha512")):
             chosen[pid] = None
             if v is None:
                 if not any(f"« {titles.get(pid, pid)} » :" in w for w in warnings):  # pas de doublon d'erreur
@@ -1392,24 +1851,31 @@ def is_minecraft_cmdline(line):
     return "--gamedir" in low or "net.minecraft" in low
 
 
+# Filtre appliqué PAR POWERSHELL lui-même : seul un nombre revient à WeCraft. Les lignes de commande
+# Java (celle de Minecraft contient le jeton de session --accessToken) ne sont jamais lues par WeCraft.
+_PS_COUNT_MINECRAFT = (
+    "@(Get-CimInstance Win32_Process -Filter \"Name='javaw.exe' OR Name='java.exe'\" "
+    "| Where-Object { $_.CommandLine -match '(?i)--gameDir|net\\.minecraft' }).Count")
+
+
 def minecraft_running():
-    """True si Minecraft tourne (Windows : PowerShell, repli sur tasklist ; ailleurs : ps)."""
+    """True si Minecraft tourne (Windows : PowerShell, repli sur tasklist ; ailleurs : pgrep)."""
     try:
         if os.name == "nt":
-            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                   "Get-CimInstance Win32_Process -Filter \"Name='javaw.exe' OR Name='java.exe'\" "
-                   "| ForEach-Object { $_.CommandLine }"]
-        else:
-            cmd = ["ps", "-eo", "args"]
-        out = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=15,
-                             creationflags=0x08000000 if os.name == "nt" else 0).stdout
-        return any(is_minecraft_cmdline(line) for line in out.splitlines())
+            out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS_COUNT_MINECRAFT],
+                                 stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace",
+                                 timeout=15, creationflags=0x08000000).stdout.strip()
+            return int(out or 0) > 0
+        r = subprocess.run(["pgrep", "-f", r"gameDir|net\.minecraft"], stdin=subprocess.DEVNULL,
+                           capture_output=True, timeout=15)
+        return r.returncode == 0
     except Exception:
         pass
     if os.name == "nt":  # PowerShell indisponible : on regarde seulement si un javaw.exe tourne
         try:
-            out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq javaw.exe", "/NH"], capture_output=True,
-                                 text=True, errors="replace", timeout=15, creationflags=0x08000000).stdout
+            out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq javaw.exe", "/NH"], stdin=subprocess.DEVNULL,
+                                 capture_output=True, text=True, errors="replace", timeout=15,
+                                 creationflags=0x08000000).stdout
             return "javaw.exe" in out.lower()
         except Exception:
             pass
@@ -1607,7 +2073,7 @@ class Launcher(tk.Tk):
         self.mp_edit, self._mp_notice, self._ram_dialog = None, None, None
         self._launch_info = None  # instance en cours de lancement (pour le statut Discord)
         self.discord = DiscordPresence(discord_client_id(self.config_data),
-                                       enabled=bool(self.config_data.get("discord", True)))
+                                       enabled=bool(self.config_data.get("discord", False)))  # désactivé par défaut
         view = self.config_data.get("mp_view")
         self.mp_view = tk.StringVar(value=view if view in MP_VIEWS else "list")
         self.set_app_icon()
@@ -1631,7 +2097,46 @@ class Launcher(tk.Tk):
         self.fade_in_main(0.0)
         self.after(400, self.check_updates)
         self.after(900, self.try_show_favorites)  # propose les modpacks favoris
-        self.discord.idle()  # statut « Dans le launcher » (ignoré sans ID Discord)
+        self.after(300, self.notify_invalid_files)
+        self.after(3000, mark_update_healthy)  # la fenêtre s'affiche : la nouvelle version est validée
+        self.after(1500, self.ask_discord_consent)
+        self.discord.idle()  # statut « Dans le launcher » (rien n'est envoyé si Discord est désactivé)
+
+    def notify_invalid_files(self):
+        """Signale les fichiers de réglages illisibles : ils ont été conservés à part, pas effacés."""
+        if not INVALID_FILES:
+            return
+        lines = [f"- {p.name} -> copie : {kept.name if kept else 'impossible à copier'}" for p, kept in INVALID_FILES]
+        INVALID_FILES.clear()
+        messagebox.showwarning(
+            "Réglages illisibles",
+            "Certains fichiers de réglages de WeCraft étaient illisibles. Ils ont été mis de côté "
+            f"(dans {MC_DIR}) et des réglages par défaut sont utilisés :\n\n" + "\n".join(lines), parent=self)
+
+    def ask_discord_consent(self):
+        """Statut Discord : désactivé par défaut. Au premier démarrage de chaque nouvelle version,
+        WeCraft demande s'il faut l'activer (la réponse « Non » est le choix par défaut)."""
+        if not (self.discord.usable and pypresence_available()):
+            return
+        if self.config_data.get("discord_asked_version") == APP_VERSION:
+            return
+        on = messagebox.askyesno(
+            "Statut Discord",
+            "Afficher sur votre profil Discord ce que vous faites dans WeCraft ?\n\n"
+            "Vos amis Discord verraient le nom de l'instance lancée, sa version de Minecraft, son loader "
+            "et la durée de jeu.\n\nCe réglage se change à tout moment avec « DISCORD » en haut à gauche. "
+            "La question sera reposée après chaque mise à jour de WeCraft.",
+            default="no", parent=self)
+        self.config_data["discord"] = bool(on)
+        self.config_data["discord_asked_version"] = APP_VERSION
+        try:
+            self.save_config()
+        except Exception:
+            pass
+        self.discord.set_enabled(on)
+        if on:
+            self.discord.idle()
+        self.update_discord_label()
 
     def fade_in_main(self, a):
         a = min(1.0, a + 0.12)
@@ -1678,16 +2183,14 @@ class Launcher(tk.Tk):
             try:
                 info = fetch_latest_release()
             except Exception as e:
-                try:  # trace dans %APPDATA%/.wecraft/update.log
-                    with open(Path(MC_DIR) / "update.log", "a", encoding="utf-8") as f:
-                        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {GITHUB_REPO}  {e!r}\n")
-                except Exception:
-                    pass
+                update_log(f"{GITHUB_REPO}  {e!r}")  # trace dans %APPDATA%/.wecraft/update.log
                 if manual:
                     msg = explain_update_error(e)
                     self.after(0, lambda: messagebox.showwarning("Mises à jour", msg))
                 return
-            if version_tuple(info["version"]) > version_tuple(APP_VERSION):
+            if not manual and info["version"] == skipped_update_version():
+                return  # version abandonnée après un retour arrière : plus proposée automatiquement
+            if is_newer(info["version"], APP_VERSION):
                 self.after(0, lambda: self.show_update(info))
             elif manual:
                 self.after(0, lambda: messagebox.showinfo(
@@ -1737,7 +2240,7 @@ class Launcher(tk.Tk):
                 try:
                     download_update(info, dest, progress)
                     self.after(0, lambda: state.config(text="Redémarrage..."))
-                    apply_update(dest)
+                    apply_update(dest, info["version"])
                     self.after(500, self.destroy)
                 except Exception as exc:
                     err = str(exc)  # « exc » disparaît à la fin du bloc except : on garde le texte
@@ -1758,10 +2261,8 @@ class Launcher(tk.Tk):
 
     # ---------- Configuration ----------
     def load_config(self):
-        try:
-            return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
+        data = read_json_file(CONFIG_FILE)  # illisible : mis de côté, jamais écrasé sans copie
+        return data if data is not None else {}
 
     def save_config(self):
         self.config_data.update(
@@ -1778,7 +2279,13 @@ class Launcher(tk.Tk):
                 "splash": self.config_data.get("splash", True),
             }
         )
-        CONFIG_FILE.write_text(json.dumps(self.config_data), encoding="utf-8")
+        if str(CONFIG_FILE) in _UNREADABLE and read_json_file(CONFIG_FILE) is None and str(CONFIG_FILE) in _UNREADABLE:
+            update_log(f"{CONFIG_FILE.name} illisible (droits ou verrou) : réglages non enregistrés pour ne pas l'écraser")
+            return
+        try:
+            atomic_write_text(CONFIG_FILE, json.dumps(self.config_data, ensure_ascii=False))
+        except OSError as e:  # un réglage non enregistré ne doit jamais empêcher de lancer le jeu
+            update_log(f"{CONFIG_FILE.name} : enregistrement impossible ({e})")
 
     def game_dir(self):
         """Dossier de l'instance : mods, saves, resourcepacks, options.txt..."""
@@ -1940,7 +2447,7 @@ class Launcher(tk.Tk):
         ver.bind("<Button-1>", lambda e: self.check_updates(manual=True))
         ver.bind("<Enter>", lambda e: ver.config(fg=EMBER2))
         ver.bind("<Leave>", lambda e: ver.config(fg=MUTED))
-        tk.Label(self, text="Fermez le launcher officiel avant de cliquer.", bg=BG, fg=MUTED,
+        tk.Label(self, text="Conseil : fermez le launcher officiel avant de cliquer.", bg=BG, fg=MUTED,
                  font=(self.f_mono, 8)).pack(side="bottom")
         self.progress = ttk.Progressbar(self, mode="determinate", style="Ember.Horizontal.TProgressbar")
         self.progress.pack(side="bottom", fill="x", padx=14, pady=6)
@@ -3373,6 +3880,8 @@ class Launcher(tk.Tk):
         webbrowser.open(INSTANCES_DIR.as_uri())
 
     def poll_instances(self):
+        if INVALID_FILES:  # un fichier mis de côté pendant l'utilisation est signalé aussi
+            self.notify_invalid_files()
         self.refresh_instances()
         self.after(3000, self.poll_instances)
 
@@ -4143,9 +4652,9 @@ class Launcher(tk.Tk):
             raise
         except Exception:
             # Hors ligne : on réutilise un loader déjà installé pour cette version
-            local = [i for i in installed if loader_key in i.lower() and version in i]
+            local = installed_loader_ids(installed, loader_key, version)
             if local:
-                return sorted(local)[-1]
+                return local[-1]
             raise
 
         installed_id = loader.get_installed_version(version, chosen)
@@ -4156,6 +4665,20 @@ class Launcher(tk.Tk):
         return loader.install(version, SYSTEM_MC_DIR, loader_version=chosen,
                               callback=callback, java=java_exe)
 
+    def ask_from_worker(self, title, text):
+        """Question oui/non posée depuis un thread de travail : affichée par le thread de l'interface,
+        le thread de travail attend la réponse (Non par défaut)."""
+        done, answer = threading.Event(), [False]
+
+        def ask():
+            try:
+                answer[0] = messagebox.askyesno(title, text, icon="warning", default="no", parent=self)
+            finally:
+                done.set()
+        self.after(0, ask)
+        done.wait()
+        return answer[0]
+
     def play_worker(self, version, custom, game_dir, loader_name, ram, then_launch,
                     loader_version=None, force=False, profile=PROFILE_NAME):
         try:
@@ -4163,9 +4686,17 @@ class Launcher(tk.Tk):
             # 1) Priorité : fermer le launcher officiel (il réécrirait sinon ses profils)
             self.set_status("Fermeture du launcher officiel...")
             closed, msg = close_official_launcher()
+            if not closed and sys.platform.startswith("win") and self.ask_from_worker(
+                    "Launcher officiel",
+                    "Le launcher officiel ne s'est pas fermé normalement.\n\n"
+                    "Le forcer à se fermer ? (une partie en cours n'est pas concernée ; s'il était en train "
+                    "d'enregistrer, cet enregistrement pourrait être perdu)\n\n"
+                    "Non = annuler le lancement : fermez-le vous-même puis recommencez."):
+                closed, msg = close_official_launcher(force=True)
             self.set_status(msg)
-            if not closed:
-                self.after(0, lambda: messagebox.showwarning("Launcher officiel", msg))
+            if not closed:  # le launcher réécrirait ses profils par-dessus les nôtres : on n'écrit rien
+                raise RuntimeError(msg + "\nFermez le launcher officiel puis cliquez à nouveau sur LANCER.\n"
+                                         "Aucun fichier n'a été modifié.")
             callback = {
                 "setStatus": self.set_status,
                 "setProgress": lambda v: self.set_progress(v),
@@ -4194,10 +4725,33 @@ class Launcher(tk.Tk):
             self.after(0, lambda: self.set_buttons("normal"))
 
 
+if __name__ == "__main__" and "--self-test-signature" in sys.argv:
+    # Utilisé par la CI sur l'exe compilé : le module de vérification est-il bien embarqué ?
+    sys.exit(0 if signature_support_available() and UPDATE_PUBLIC_KEY.strip() else 3)
+
 if __name__ == "__main__":
     try:  # Windows : icône du launcher dans la barre des tâches (au lieu de celle de Python)
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("WeCraft.Launcher")
     except Exception:
         pass
+    failed_update = update_startup_check()
+    if failed_update:  # la version installée par la dernière mise à jour n'a pas réussi à démarrer
+        _root = tk.Tk()
+        _root.withdraw()
+        if messagebox.askyesno(
+                "WeCraft", f"La version v{failed_update.get('to') or '?'} installée par la dernière mise à jour "
+                           "ne semble pas avoir démarré correctement.\n\n"
+                           f"Revenir à la version précédente (v{failed_update.get('from') or '?'}) ?",
+                icon="warning", parent=_root):
+            _root.destroy()
+            try:
+                restore_previous_version(failed_update)
+                sys.exit(0)
+            except Exception as e:
+                messagebox.showerror("WeCraft", f"Retour à la version précédente impossible :\n{e}")
+        else:
+            _root.destroy()
     cleanup_update_leftovers()
-    Launcher().mainloop()
+    app = Launcher()
+    app.mainloop()
+    mark_update_healthy()  # fermeture normale : la version fonctionne
