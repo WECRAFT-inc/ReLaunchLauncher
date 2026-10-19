@@ -172,7 +172,7 @@ class RetourArriere(unittest.TestCase):
         wl.APP_VERSION = "1.2.1"
 
     def pending(self):
-        return json.loads((self.d / "update_pending.json").read_text())
+        return json.loads((self.d / "update_pending.json").read_text(encoding="utf-8"))
 
     def test_installation(self):
         self.assertEqual(self.exe.read_bytes(), b"v1.2.1")

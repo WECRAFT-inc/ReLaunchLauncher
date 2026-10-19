@@ -25,7 +25,7 @@ class Chemins(unittest.TestCase):
         with mock.patch.object(wl, "MC_DIR", str(new)), mock.patch.object(wl, "_BUGGY_DIRS", [buggy]), \
                 mock.patch.object(wl, "_OLD_DIR", d / "absent"):
             wl.migrate_old_settings()
-        self.assertEqual(json.loads((new / "launcher_config.json").read_text()), {"ram": 6})
+        self.assertEqual(json.loads((new / "launcher_config.json").read_text(encoding="utf-8")), {"ram": 6})
         self.assertTrue((buggy / "launcher_config.json").exists(), "l'original ne doit pas être supprimé")
 
 
@@ -39,7 +39,7 @@ class EcrituresEtLectures(unittest.TestCase):
         f = self.d / "a.json"
         wl.atomic_write_text(f, '{"x": 1}')
         wl.atomic_write_text(f, '{"x": 2}')
-        self.assertEqual(json.loads(f.read_text()), {"x": 2})
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8")), {"x": 2})
         self.assertEqual([p.name for p in self.d.iterdir()], ["a.json"])
 
     def test_bom_accepte(self):
@@ -67,7 +67,7 @@ class EcrituresEtLectures(unittest.TestCase):
         with mock.patch.object(wl.os, "replace", flaky), mock.patch.object(wl.time, "sleep"):
             wl.atomic_write_text(f, "{}")
         self.assertEqual(len(calls), 3)
-        self.assertEqual(f.read_text(), "{}")
+        self.assertEqual(f.read_text(encoding="utf-8"), "{}")
 
     def test_fichier_illisible_conserve_une_seule_fois(self):
         f = self.d / "cassé.json"
@@ -95,7 +95,7 @@ class MetaInstances(unittest.TestCase):
         original = '{"C:/a": {"name": "Ma super instance", "fav": true},'
         self.meta.write_text(original, encoding="utf-8")
         wl.update_meta("C:/c", set={"hidden": True})
-        self.assertEqual(json.loads(self.meta.read_text()), {os.path.normcase("C:/c"): {"hidden": True}})
+        self.assertEqual(json.loads(self.meta.read_text(encoding="utf-8")), {os.path.normcase("C:/c"): {"hidden": True}})
         copies = list(self.d.glob("instances_meta.json.invalide-*"))
         self.assertEqual(len(copies), 1)
         self.assertEqual(copies[0].read_text(encoding="utf-8"), original)
@@ -123,7 +123,7 @@ class MetaInstances(unittest.TestCase):
             return real_read(path)
         with mock.patch.object(Path, "read_bytes", locked), self.assertRaises(wl.SettingsUnreadable):
             wl.update_meta("C:/c", set={"hidden": True})
-        self.assertEqual(json.loads(self.meta.read_text()), {"C:/a": {"name": "Gardé"}})
+        self.assertEqual(json.loads(self.meta.read_text(encoding="utf-8")), {"C:/a": {"name": "Gardé"}})
 
     def test_parse_ram(self):
         self.assertEqual([wl.parse_ram(v) for v in (6, "8", "huit", None, 0, 999, 4.0)],

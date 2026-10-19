@@ -39,7 +39,7 @@ class Profils(unittest.TestCase):
         self.assertEqual(p["perso"], {"name": "Mon profil", "lastVersionId": "1.21"})
         self.assertTrue((self.mc / "launcher_profiles.json.bak_wecraft").exists())
         self.assertEqual(len(list((self.wc / "backups").glob("*.json"))), 1)
-        self.assertEqual(json.loads(self.lp.read_text())["version"], 3, "les autres clés sont conservées")
+        self.assertEqual(json.loads(self.lp.read_text(encoding="utf-8"))["version"], 3, "les autres clés sont conservées")
 
     def test_profil_utilisateur_au_nom_proche_jamais_touche(self):
         user = {"name": "WeCraft Survie (perso)", "gameDir": "D:/MesMondes", "lastVersionId": "1.21.1"}
@@ -91,9 +91,9 @@ class Profils(unittest.TestCase):
         self.lp.write_text(json.dumps({"profiles": {}, "authenticationDatabase": {"x": {"accessToken": "SECRET"}},
                                        "clientToken": "SECRET"}))
         wl.set_profile(self.mc, "WECRAFT - A", "1.20.1", "C:/a", 4)
-        backup = next((self.wc / "backups").glob("*.json")).read_text()
+        backup = next((self.wc / "backups").glob("*.json")).read_text(encoding="utf-8")
         self.assertNotIn("SECRET", backup)
-        self.assertIn("SECRET", self.lp.read_text(), "le vrai fichier n'est pas modifié sur ce point")
+        self.assertIn("SECRET", self.lp.read_text(encoding="utf-8"), "le vrai fichier n'est pas modifié sur ce point")
 
     def test_fichier_absent(self):
         with self.assertRaises(RuntimeError):

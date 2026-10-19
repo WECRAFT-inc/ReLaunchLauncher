@@ -106,7 +106,7 @@ class ModificationDeModpack(unittest.TestCase):
             wl.apply_modpack_edit(folder, meta, [{"project_id": "nouveau", "title": "Nouveau"}],
                                   fetch=fetch, download=download)
         self.assertEqual(sorted(p.name for p in (folder / "mods").iterdir()), ["ancien.jar"])
-        self.assertEqual(json.loads((folder / "wecraft_modpack.json").read_text()), meta)
+        self.assertEqual(json.loads((folder / "wecraft_modpack.json").read_text(encoding="utf-8")), meta)
 
 
 if __name__ == "__main__":
