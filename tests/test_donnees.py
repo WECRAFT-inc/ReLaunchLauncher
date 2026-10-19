@@ -69,6 +69,14 @@ class EcrituresEtLectures(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertEqual(f.read_text(encoding="utf-8"), "{}")
 
+    def test_pas_de_nouvelle_copie_a_chaque_demarrage(self):
+        f = self.d / "reste_casse.json"
+        f.write_text('{"x": ', encoding="utf-8")
+        for _ in range(3):  # trois démarrages : la mémoire du processus est perdue à chaque fois
+            wl._QUARANTINED.clear()
+            wl.read_json_file(f)
+        self.assertEqual(len(list(self.d.glob("reste_casse.json.invalide-*"))), 1)
+
     def test_fichier_illisible_conserve_une_seule_fois(self):
         f = self.d / "cassé.json"
         f.write_text('{"a": ', encoding="utf-8")

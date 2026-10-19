@@ -12,6 +12,7 @@ Microsoft et le lancement du jeu restent gérés par le launcher officiel.
 """
 import base64
 import ctypes
+import glob
 import hashlib
 import importlib
 import importlib.util
@@ -96,6 +97,13 @@ def quarantine(path):
     Renvoie le chemin de la copie, ou None."""
     path = Path(path)
     try:
+        raw = path.read_bytes()
+        for old in path.parent.glob(glob.escape(path.name) + ".invalide-*"):  # déjà mis de côté (démarrage précédent)
+            try:
+                if old.read_bytes() == raw:
+                    return old
+            except OSError:
+                pass
         dest = path.with_name(f"{path.name}.invalide-{time.strftime('%Y%m%d-%H%M%S')}")
         n = 1
         while dest.exists():

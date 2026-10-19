@@ -22,7 +22,7 @@ Branche : `audit/securite-donnees` (non fusionnée, rien publié).
 
 ## Tests
 
-`python -m unittest discover -s tests -v` : 50 tests, bac à sable temporaire, `minecraft_launcher_lib`
+`python -m unittest discover -s tests -v` : 51 tests, bac à sable temporaire, `minecraft_launcher_lib`
 toujours remplacé par un substitut (aucun vrai `.minecraft` n'est touché).
 Contrôle : les mêmes tests lancés sur le code d'origine échouent sur les comportements corrigés et
 passent sur les comportements à préserver.
@@ -77,3 +77,20 @@ après corrections ». Constats et suite donnée :
 
 Seconde validation (§13) : le contrôle des corrections par la coordinatrice reste à faire par le développeur
 ou par une nouvelle revue.
+
+## Essais Windows après corrections (19/10/2026, 06:02 - 06:17)
+
+- `tools/test_windows.bat` : 50/50 tests réussis (après correction d'un test qui lisait un fichier sans
+  préciser l'encodage : défaut du test, pas de WeCraft).
+- Bouton LANCER en bac à sable (« Pack de test », Fabric, 1.20.1), launcher officiel ouvert au départ :
+  - launcher officiel fermé sans demander de fermeture forcée (rapporté par le développeur) ;
+  - Minecraft 1.20.1, `fabric-loader-0.19.5-1.20.1` et Java installés dans le bac à sable ;
+  - `launcher_profiles.json` : profil « WECRAFT - Pack de test » créé (bon `gameDir`, bonne version,
+    `-Xmx4G`) puis réutilisé (même identifiant) sur 3 lancements ; « WeCraft Survie (perso) » intact ;
+  - `managed_profiles.json` mémorise l'identifiant ; 3 sauvegardes horodatées présentes, `.bak_wecraft` conservé ;
+  - vérification faite par lecture des fichiers du bac à sable.
+- Défaut trouvé : un fichier resté invalide était recopié à chaque démarrage (3 copies). Corrigé :
+  pas de nouvelle copie si une copie identique existe (test ajouté, 51 tests).
+
+Reste non vérifié : exe compilé par la CI, première release signée, fenêtres de mise à jour et de
+retour arrière en conditions réelles.
