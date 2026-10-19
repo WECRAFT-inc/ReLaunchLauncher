@@ -1,3 +1,5 @@
+# OBSOLETE : ce fichier n'est PAS utilisé par GitHub. Le workflow actif est .github/workflows/release.yml.
+
 name: Release WeCraft
 
 # Publie une release (avec WeCraft.exe) à chaque tag « vX.Y.Z »

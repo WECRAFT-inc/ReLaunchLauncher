@@ -1,0 +1,9 @@
+# Dépendances de compilation et de test de WeCraft (installées par la CI).
+# À FAIRE : épingler les versions exactes avec leurs empreintes, depuis un poste connecté à PyPI :
+#   python -m pip install pip-tools
+#   pip-compile --generate-hashes requirements-build.txt -o requirements-build.lock
+# puis faire installer requirements-build.lock par la CI (pip install --require-hashes -r ...).
+minecraft-launcher-lib>=8
+pillow
+pypresence
+cryptography

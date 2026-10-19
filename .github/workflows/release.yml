@@ -1,16 +1,45 @@
 name: Release WeCraft
 
-# Publie une release (avec WeCraft.exe) à chaque tag « vX.Y.Z »
+# Construit WeCraft.exe à chaque tag « vX.Y.Z » (ou « vX.Y.Z-rc1 »).
+# Rien n'est distribué aux utilisateurs automatiquement : la release du dépôt public est créée en
+# BROUILLON. Le launcher ne voit que les releases publiées : il faut la publier à la main sur GitHub
+# après avoir testé l'exe.
+#
+# Sécurité de la chaîne de publication :
+# - le nom du tag n'est jamais inséré directement dans un script (variables d'environnement) ;
+# - les tests doivent réussir avant la compilation ;
+# - si le secret UPDATE_SIGNING_KEY existe, l'exe est signé (WeCraft.exe.sig, voir tools/sign_release.py).
+# À FAIRE (impossible depuis l'environnement qui a préparé ce fichier) : épingler chaque action sur son
+# SHA de commit complet (ex. actions/checkout@<sha40> # v4) ; Dependabot (.github/dependabot.yml) les
+# tiendra ensuite à jour.
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  tests:
     runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dépendances de test
+        run: python -m pip install -r requirements-build.txt
+      - name: Tests (bloquants)
+        run: python -m unittest discover -s tests -v
+
+  build:
+    needs: tests
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -18,9 +47,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      # PyInstaller n'est PAS dans cette ligne : il est installé juste après (bootloader recompilé)
+      - name: Vérification du nom du tag
+        shell: bash
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "Nom de tag refusé : $TAG (attendu : v1.2.3 ou v1.2.3-rc1)"; exit 1
+          fi
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      # PyInstaller n'est PAS dans ce fichier : il est installé juste après (bootloader recompilé)
       - name: Dépendances
-        run: pip install minecraft-launcher-lib pillow pypresence
+        run: python -m pip install -r requirements-build.txt
 
       # Le bootloader standard de PyInstaller est connu des antivirus (des malwares l'utilisent aussi).
       # On le recompile pour obtenir un exécutable de démarrage unique.
@@ -36,10 +73,10 @@ jobs:
             python -m pip install --no-cache-dir PyInstaller
           }
 
-      # ATTENTION : le dépôt passé ici sert à la mise à jour automatique de WeCraft (recherche des releases).
-      # Si les releases publiques sont dans WeCraft-Releases, remplacez "${{ github.repository }}" par "Rexidelamort/WeCraft-Releases".
-      - name: Version = nom du tag, dépôt = ce dépôt
-        run: python set_version.py "${{ github.ref_name }}" "${{ github.repository }}"
+      # Écrit APP_VERSION dans wecraft_launcher.py. Le dépôt des mises à jour (GITHUB_REPO) n'est PAS
+      # modifié ici : il est fixé dans le code (Rexidelamort/WeCraft-Releases).
+      - name: Numéro de version = nom du tag
+        run: python set_version.py "$env:TAG"
 
       # Informations de version intégrées à l'exe (clic droit > Propriétés > Détails) :
       # un exe qui s'identifie est moins suspect pour les antivirus.
@@ -47,7 +84,7 @@ jobs:
         shell: python
         run: |
           import os, re
-          tag = os.environ["GITHUB_REF_NAME"]
+          tag = os.environ["TAG"]
           nums = [int(n) for n in (re.findall(r"\d+", tag) + ["0"] * 4)[:4]]
           dotted = ".".join(str(n) for n in nums[:3])
           owner = os.environ.get("GITHUB_REPOSITORY_OWNER", "WeCraft")
@@ -82,28 +119,37 @@ jobs:
           $h = (Get-FileHash dist/WeCraft.exe -Algorithm SHA256).Hash.ToLower()
           "$h  WeCraft.exe" | Out-File dist/WeCraft.exe.sha256 -Encoding ascii
 
-      - name: Publication de la release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/WeCraft.exe
-            dist/WeCraft.exe.sha256
-          generate_release_notes: true
+      - name: Signature (si le secret UPDATE_SIGNING_KEY est configuré)
+        if: env.UPDATE_SIGNING_KEY != ''
+        shell: pwsh
+        run: |
+          python tools/sign_release.py sign dist/WeCraft.exe "$env:VERSION" | Out-File dist/WeCraft.exe.sig -Encoding ascii
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      # Numéro de version sans le « v » du tag (tag v1.2.1 -> VERSION=1.2.1)
-      - name: Numéro de version
+      - name: Liste des fichiers de la release
         shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: |
+          FILES="dist/WeCraft.exe dist/WeCraft.exe.sha256"
+          [ -f dist/WeCraft.exe.sig ] && FILES="$FILES dist/WeCraft.exe.sig"
+          echo "FILES=$FILES" >> "$GITHUB_ENV"
 
-      # Publie aussi la release dans le dépôt public WeCraft-Releases.
-      # Le jeton par défaut ne peut écrire que dans CE dépôt : il faut un jeton à vous (secret RELEASES_TOKEN).
-      - name: Publier la release
+      # Archive dans le dépôt privé (invisible des utilisateurs).
+      - name: Release dans le dépôt privé
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" $FILES --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes \
+            $([[ "$VERSION" == *-* ]] && echo --prerelease)
+
+      # Dépôt public : BROUILLON. Publiez-le à la main sur GitHub après avoir testé l'exe.
+      # RELEASES_TOKEN : jeton « fine-grained » limité au dépôt WeCraft-Releases, permission Contents: write.
+      - name: Brouillon dans le dépôt public
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           HASH=$(cut -d' ' -f1 dist/WeCraft.exe.sha256)
-          gh release create "v${{ env.VERSION }}" dist/WeCraft.exe dist/WeCraft.exe.sha256 \
-            --repo Rexidelamort/WeCraft-Releases \
-            --title "v${{ env.VERSION }}" \
-            --notes "WeCraft v${{ env.VERSION }} - SHA-256 : $HASH"
+          gh release create "$TAG" $FILES --repo Rexidelamort/WeCraft-Releases --draft \
+            --title "$TAG" --notes "WeCraft $TAG - SHA-256 : $HASH" \
+            $([[ "$VERSION" == *-* ]] && echo --prerelease)
