@@ -15,7 +15,8 @@ where py >nul 2>&1 && set "PY=py -3"
 %PY% -c "import minecraft_launcher_lib as m; print('minecraft_launcher_lib', getattr(m, '__version__', '?'))" >> "%OUT%" 2>&1
 echo.>> "%OUT%"
 %PY% -m unittest discover -s tests -v >> "%OUT%" 2>&1
-echo CODE_RETOUR_TESTS=%ERRORLEVEL%>> "%OUT%"
+set "RC=%ERRORLEVEL%"
+>> "%OUT%" echo CODE_RETOUR_TESTS=%RC%
 :fin
 type "%OUT%"
 echo.

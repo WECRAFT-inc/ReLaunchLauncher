@@ -15,12 +15,16 @@ if not exist "%MC%\launcher_profiles.json" (echo {"profiles": {"perso": {"name":
 if not exist "%WC%\instances\Pack de test\wecraft.json" (echo {"version": "1.20.1", "loader": "Fabric", "ram": "beaucoup"}> "%WC%\instances\Pack de test\wecraft.json")
 rem Fichier de reglages volontairement casse : WeCraft doit le mettre de cote et prevenir.
 if not exist "%WC%\instances_meta.json" (echo {"casse": > "%WC%\instances_meta.json")
+rem Les bibliotheques Python installees avec « pip install --user » sont dans %APPDATA%\Python :
+rem on garde ce chemin AVANT de rediriger APPDATA, sinon Python ne les trouve plus.
+if not defined PYTHONUSERBASE set "PYTHONUSERBASE=%APPDATA%\Python"
 set "APPDATA=%BAC%\AppData\Roaming"
 set "LOCALAPPDATA=%BAC%\AppData\Local"
 set "USERPROFILE=%BAC%"
 set "PY=python"
 where py >nul 2>&1 && set "PY=py -3"
 %PY% wecraft_launcher.py --no-splash > "%CD%\resultats_interface.txt" 2>&1
-echo CODE_RETOUR=%ERRORLEVEL%>> "%CD%\resultats_interface.txt"
+set "RC=%ERRORLEVEL%"
+>> "%CD%\resultats_interface.txt" echo CODE_RETOUR=%RC%
 type "%CD%\resultats_interface.txt"
 pause
