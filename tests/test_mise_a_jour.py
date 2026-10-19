@@ -103,9 +103,26 @@ class Telechargement(unittest.TestCase):
         with mock.patch.object(wl, "_http", lambda url, timeout=10: _Resp(data)):
             return dest, wl.download_update(info, dest)
 
-    def test_empreinte_correcte(self):
-        dest, _ = self.run_dl({"url": "u", "version": "1.2.1", "sha256": hashlib.sha256(b"nouvel exe").hexdigest()})
+    @unittest.skipUnless(HAS_CRYPTO, "cryptography absent")
+    def test_empreinte_et_signature_correctes(self):
+        key, pub = _keypair()
+        sha = hashlib.sha256(b"nouvel exe").hexdigest()
+        sig = base64.b64encode(key.sign(wl.update_signed_message("1.2.1", sha))).decode()
+        with mock.patch.object(wl, "UPDATE_PUBLIC_KEY", pub):
+            dest, _ = self.run_dl({"url": "u", "version": "1.2.1", "sha256": sha, "signature": sig})
         self.assertEqual(dest.read_bytes(), b"nouvel exe")
+
+    def test_release_non_signee_refusee_par_defaut(self):
+        self.assertTrue(wl.UPDATE_SIGNATURE_REQUIRED)
+        with self.assertRaises(RuntimeError):
+            self.run_dl({"url": "u", "version": "1.2.1", "sha256": hashlib.sha256(b"nouvel exe").hexdigest()})
+        self.assertFalse((self.d / "WeCraft_update.exe").exists())
+
+    def test_module_de_verification_absent_message_clair(self):
+        with mock.patch.object(wl, "signature_support_available", lambda: False), \
+                self.assertRaises(RuntimeError) as ctx:
+            wl.check_update_signature({"version": "1.2.1", "signature": "abc"}, "0" * 64)
+        self.assertIn("module de vérification", str(ctx.exception))
 
     def test_empreinte_fausse_fichier_supprime(self):
         with self.assertRaises(RuntimeError):
@@ -125,6 +142,9 @@ class Telechargement(unittest.TestCase):
 
 
 class RetourArriere(unittest.TestCase):
+    """Deux processus : l'ANCIENNE version (1.2.0) installe la mise à jour puis se ferme ; la NOUVELLE
+    (1.2.1) démarre ensuite depuis le même chemin d'exe."""
+
     def setUp(self):
         self.d = fresh_dir("rollback")
         self.exe = self.d / "WeCraft.exe"
@@ -135,27 +155,48 @@ class RetourArriere(unittest.TestCase):
                         mock.patch.object(sys, "executable", str(self.exe)),
                         mock.patch.object(wl, "MC_DIR", str(self.d)),
                         mock.patch.object(wl, "UPDATE_PENDING_FILE", self.d / "update_pending.json"),
+                        mock.patch.object(wl, "UPDATE_SKIP_FILE", self.d / "update_skip.json"),
+                        mock.patch.object(wl, "APP_VERSION", "1.2.0"),
+                        mock.patch.object(wl, "_UPDATE_HANDED_OFF", False),
                         mock.patch.object(wl.subprocess, "Popen")]
         for p in self.patches:
             p.start()
-        wl.apply_update(new, "1.2.1")
+        wl.apply_update(new, "1.2.1")  # dans l'ancien processus
 
     def tearDown(self):
         for p in self.patches:
             p.stop()
 
+    def nouveau_processus(self):
+        wl._UPDATE_HANDED_OFF = False
+        wl.APP_VERSION = "1.2.1"
+
+    def pending(self):
+        return json.loads((self.d / "update_pending.json").read_text())
+
     def test_installation(self):
         self.assertEqual(self.exe.read_bytes(), b"v1.2.1")
         self.assertEqual((self.d / "WeCraft.exe.old").read_bytes(), b"v1.2.0")
-        self.assertEqual(json.loads((self.d / "update_pending.json").read_text())["to"], "1.2.1")
+        self.assertEqual(self.pending()["to"], "1.2.1")
         wl.subprocess.Popen.assert_called_once()
 
+    def test_l_ancien_processus_ne_valide_rien_en_se_fermant(self):
+        """Constat B2 de la revue : la fin de mainloop de l'ancienne version ne doit pas valider."""
+        with mock.patch.object(wl, "cleanup_update_leftovers") as c:
+            wl.mark_update_healthy()
+            c.assert_not_called()
+        self.assertTrue((self.d / "update_pending.json").exists())
+        self.assertTrue((self.d / "WeCraft.exe.old").exists())
+
     def test_ancienne_version_gardee_tant_que_non_validee(self):
+        self.nouveau_processus()
+        wl.update_startup_check()
         with mock.patch.object(wl.threading, "Thread") as th:
             wl.cleanup_update_leftovers()
             th.assert_not_called()
 
     def test_premier_demarrage_puis_validation(self):
+        self.nouveau_processus()
         self.assertIsNone(wl.update_startup_check())  # 1er démarrage : rien à proposer
         with mock.patch.object(wl, "cleanup_update_leftovers") as c:
             wl.mark_update_healthy()
@@ -163,14 +204,34 @@ class RetourArriere(unittest.TestCase):
         self.assertFalse((self.d / "update_pending.json").exists())
 
     def test_echec_puis_retour_a_l_ancienne_version(self):
-        self.assertIsNone(wl.update_startup_check())  # 1er démarrage : plante avant validation
-        data = wl.update_startup_check()                # 2e démarrage : retour arrière proposé
-        self.assertIsNotNone(data)
-        wl.restore_previous_version(data)
+        self.nouveau_processus()
+        self.assertIsNone(wl.update_startup_check())       # 1er démarrage : plante avant validation
+        data = self.pending()
+        data["last_start"] -= 60                            # 2e démarrage, une minute plus tard
+        (self.d / "update_pending.json").write_text(json.dumps(data))
+        failed = wl.update_startup_check()
+        self.assertIsNotNone(failed)
+        wl.restore_previous_version(failed)
         self.assertEqual(self.exe.read_bytes(), b"v1.2.0")
         self.assertFalse((self.d / "WeCraft.exe.old").exists())
         self.assertEqual(len(list(self.d.glob("WeCraft.exe.*.echec"))), 1)
         self.assertFalse((self.d / "update_pending.json").exists())
+        self.assertEqual(wl.skipped_update_version(), "1.2.1")  # plus reproposée automatiquement
+
+    def test_double_clic_ne_declenche_pas_de_retour_arriere(self):
+        self.nouveau_processus()
+        self.assertIsNone(wl.update_startup_check())
+        self.assertIsNone(wl.update_startup_check())  # 2e démarrage immédiat
+        self.assertEqual(self.pending()["starts"], 1)
+
+    def test_fichier_de_suivi_mal_forme_ignore(self):
+        self.nouveau_processus()
+        for bad in ({"exe": str(self.exe), "to": "1.2.1", "old": None, "starts": 1},
+                    {"exe": str(self.exe), "to": "1.2.1", "old": "x", "starts": "1x"},
+                    ["liste"]):
+            (self.d / "update_pending.json").write_text(json.dumps(bad))
+            self.assertIsNone(wl.update_startup_check())
+            wl.mark_update_healthy()  # ne doit pas lever d'erreur
 
     def test_rien_hors_exe(self):
         with mock.patch.object(wl, "FROZEN", False):

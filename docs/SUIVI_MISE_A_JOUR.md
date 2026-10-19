@@ -22,13 +22,13 @@ Branche : `audit/securite-donnees` (non fusionnée, rien publié).
 
 ## Tests
 
-`python -m unittest discover -s tests -v` : 40 tests, bac à sable temporaire, `minecraft_launcher_lib`
+`python -m unittest discover -s tests -v` : 50 tests, bac à sable temporaire, `minecraft_launcher_lib`
 toujours remplacé par un substitut (aucun vrai `.minecraft` n'est touché).
 Contrôle : les mêmes tests lancés sur le code d'origine échouent sur les comportements corrigés et
 passent sur les comportements à préserver.
 
 **Windows (PC du développeur, Windows 11 build 26200, Python 3.14.8, 19/10/2026) :**
-- `tools/test_windows.bat` : 40/40 tests réussis (dont signature, `cryptography` 50.0.2), code retour 0.
+- `tools/test_windows.bat` : 40/40 tests réussis (avant la revue ; à refaire avec les 50 tests) (dont signature, `cryptography` 50.0.2), code retour 0.
 - `tools/essai_interface_windows.bat` (bac à sable, APPDATA/USERPROFILE redirigés) : l'interface démarre
   et se ferme sans erreur (code retour 0) ; `instances_meta.json` volontairement cassé mis de côté en
   `.invalide-<date>` sans être écrasé ; question Discord posée, réponse Non enregistrée
@@ -50,3 +50,30 @@ fenêtres de retour arrière et de mise à jour, installation réelle de version
    poste connecté.
 5. **`RELEASES_TOKEN`** : vérifier qu'il s'agit d'un jeton fine-grained limité à `WeCraft-Releases`.
 6. Audit de `minecraft-launcher-lib` (S11) ; découpage progressif du monofichier.
+
+## Revue indépendante (19/10/2026) et corrections (lot 1b)
+
+Revue faite par une autre IA, en lecture seule, sans contexte de l'écriture. Verdict : « fusionnable
+après corrections ». Constats et suite donnée :
+
+| Constat | Gravité | Suite |
+|---|---|---|
+| B1 fichier de réglages non UTF-8 -> plantage au démarrage (régression) | bloquant | Corrigé : lecture en octets, décodage dans le bloc qui met de côté. Test qui plantait sur l'ancien code. |
+| B2 l'ancien processus validait la mise à jour en se fermant : retour arrière jamais proposé | bloquant | Corrigé : drapeau `_UPDATE_HANDED_OFF` + suivi limité à la version cible (`to == APP_VERSION`). Vérifié sur l'ancien et le nouveau code. |
+| I1 transition sans signature = protection contournable | important | Corrigé : `UPDATE_SIGNATURE_REQUIRED = True` dès cette version ; la CI échoue sans clé. |
+| I2 clé privée visible de toutes les étapes de la CI | important | Corrigé : secret donné à la seule étape « Signature » ; `persist-credentials: false`. |
+| I3 aucune vérification clé privée / clé publique | important | Corrigé : étape « Vérification de la signature » avec la clé lue dans le code. |
+| I4 `cryptography` absent de l'exe = faux message de falsification | important | Corrigé : message distinct, `--hidden-import`, auto-test `WeCraft.exe --self-test-signature` en CI. |
+| I5 `os.replace` bloqué par un antivirus | important | Corrigé : 10 essais espacés de 100 ms ; `save_config` n'empêche plus de lancer en cas d'échec. |
+| I6 fichier verrouillé réécrit avec des réglages vides | important | Corrigé : `SettingsUnreadable`, aucune écriture tant que le fichier ne peut pas être lu. |
+| M1 `update_pending.json` mal formé -> plantage | mineur | Corrigé (types validés, contrôle dans un try). |
+| M2 retour arrière limité ; double-clic ; `.echec` jamais nettoyés ; version défaillante reproposée | mineur | Corrigé en partie : double-clic < 30 s compté une fois, `.echec` nettoyés après validation, version abandonnée plus reproposée automatiquement. Reste : un exe qui ne démarre pas du tout n'est pas détecté. |
+| M3 reprise d'un ancien profil nommé « WECRAFT - … » / « Mon lanceur » par l'utilisateur | mineur | Non corrigé (comportement d'origine, cas limite à la première utilisation). |
+| M4 fichiers mis de côté après le démarrage non signalés | mineur | Corrigé (vérifié toutes les 3 s). |
+| M5 sauvegardes contenant d'anciens jetons de connexion | mineur | Corrigé : jetons retirés des copies horodatées. |
+| M7 instance hors des dossiers connus non supprimable | mineur | Voulu ; à documenter pour les utilisateurs. |
+| M9 fermeture normale du launcher officiel peut-être inefficace | mineur | À vérifier sous Windows (bouton LANCER en bac à sable). |
+| M11 tests faibles / manquants | mineur | Ajoutés : B1, B2, I4, I5, I6, M1, M5, double-clic. Reste : le script PowerShell n'est testé que sur son texte. |
+
+Seconde validation (§13) : le contrôle des corrections par la coordinatrice reste à faire par le développeur
+ou par une nouvelle revue.

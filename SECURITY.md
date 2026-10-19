@@ -28,8 +28,8 @@ Si elle n'est pas retenue, je vous expliquerai pourquoi.
    Cela détecte un fichier abîmé, mais **ne prouve pas à lui seul** qui l'a publié (l'empreinte vient
    de la même release).
 2. **Signature Ed25519** (`WeCraft.exe.sig`), à partir des versions qui contiennent la clé publique
-   de WeCraft : elle prouve que l'exe a été signé par l'auteur de WeCraft. Une signature invalide
-   bloque toujours la mise à jour.
+   de WeCraft : elle prouve que l'exe a été signé par l'auteur de WeCraft. Une mise à jour non signée
+   ou mal signée est refusée.
 3. **Retour arrière** : l'ancienne version est conservée jusqu'à ce que la nouvelle ait démarré
    correctement ; sinon, WeCraft propose de revenir à l'ancienne au démarrage suivant.
 

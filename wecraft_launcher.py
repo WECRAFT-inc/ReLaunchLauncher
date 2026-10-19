@@ -59,9 +59,22 @@ def sibling_dir(mc_dir, name):
     return str(p.with_name(("." if p.name.startswith(".") else "") + name))
 
 
+def _replace_with_retry(src, dst, tries=10, delay=0.1):
+    """os.replace, avec quelques nouveaux essais : sous Windows un antivirus ou un indexeur peut
+    garder le fichier ouvert une fraction de seconde (PermissionError / WinError 5 ou 32)."""
+    for attempt in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == tries - 1:
+                raise
+            time.sleep(delay)
+
+
 def atomic_write_text(path, text):
     """Écrit un fichier sans jamais laisser de version à moitié écrite : fichier temporaire dans le
-    même dossier, vidé sur le disque, puis remplacement atomique (os.replace)."""
+    même dossier, vidé sur le disque, puis remplacement atomique (os.replace, avec nouveaux essais)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
@@ -70,7 +83,7 @@ def atomic_write_text(path, text):
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        _replace_with_retry(tmp, path)
     finally:
         try:
             tmp.unlink(missing_ok=True)
@@ -97,18 +110,32 @@ def quarantine(path):
 INVALID_FILES = []  # fichiers de réglages illisibles mis de côté (affichés à l'utilisateur au démarrage)
 
 
-def read_json_file(path, kind=dict):
-    """Lit un fichier JSON de WeCraft. Absent -> None. Illisible ou de mauvais type -> le fichier est
-    conservé à part (quarantine), signalé, et None est renvoyé : il n'est jamais écrasé sans copie."""
+class SettingsUnreadable(OSError):
+    """Un fichier de réglages existe mais ne peut pas être lu pour l'instant (droits, verrou...) :
+    il ne faut surtout pas le réécrire à partir de réglages vides."""
+
+
+_UNREADABLE = set()  # fichiers existants mais illisibles (OSError) : jamais réécrits tant que c'est le cas
+
+
+def read_json_file(path, kind=dict, strict=False):
+    """Lit un fichier JSON de WeCraft. Absent -> None. Contenu invalide (JSON, encodage, type) -> le
+    fichier est conservé à part (quarantine), signalé, et None est renvoyé : il n'est jamais écrasé
+    sans copie. Impossible à lire (droits, verrou) -> None, ou SettingsUnreadable si strict=True."""
     path = Path(path)
     try:
-        raw = path.read_text(encoding="utf-8-sig")
+        raw = path.read_bytes()
     except FileNotFoundError:
+        _UNREADABLE.discard(str(path))
         return None
-    except OSError:
+    except OSError as e:
+        _UNREADABLE.add(str(path))
+        if strict:
+            raise SettingsUnreadable(f"{path.name} ne peut pas être lu ({e})") from None
         return None
+    _UNREADABLE.discard(str(path))
     try:
-        data = json.loads(raw)
+        data = json.loads(raw.decode("utf-8-sig"))  # UnicodeDecodeError est une ValueError
         if isinstance(data, kind):
             return data
     except ValueError:
@@ -420,10 +447,11 @@ def parse_ram(value):
     return ram if 1 <= ram <= 64 else None
 
 
-def load_meta():
-    """Réglages par instance. Un fichier illisible est mis de côté (jamais écrasé sans copie)."""
+def load_meta(strict=False):
+    """Réglages par instance. Un fichier invalide est mis de côté (jamais écrasé sans copie).
+    strict=True (avant une écriture) : lève SettingsUnreadable si le fichier existe mais ne peut pas être lu."""
     with _META_LOCK:
-        data = read_json_file(META_FILE)
+        data = read_json_file(META_FILE, strict=strict)
         return data if data is not None else {}
 
 
@@ -434,7 +462,7 @@ def _save_meta(meta):
 def update_meta(folder, set=None, remove=()):
     """Enregistre des réglages pour une instance sans jamais modifier son dossier."""
     with _META_LOCK:
-        meta = load_meta()
+        meta = load_meta(strict=True)
         entry = meta.get(meta_key(folder))
         entry = dict(entry) if isinstance(entry, dict) else {}
         entry.update(set or {})
@@ -449,7 +477,7 @@ def update_meta(folder, set=None, remove=()):
 
 def forget_meta(folder):
     with _META_LOCK:
-        meta = load_meta()
+        meta = load_meta(strict=True)
         if meta.pop(meta_key(folder), None) is not None:
             _save_meta(meta)
 
@@ -556,6 +584,9 @@ PROFILE_BACKUPS_KEPT = 15
 _OUR_PROFILE_NAME = re.compile(r"(WECRAFT|(?i:mon lanceur))( - .*)?", re.S)
 
 
+_PROFILE_SECRET_KEYS = ("authenticationDatabase", "clientToken", "selectedUser", "authenticationDatabaseV2")
+
+
 def backup_profiles_file(f):
     """Copie horodatée de launcher_profiles*.json AVANT chaque écriture (les 15 dernières sont gardées)
     dans %APPDATA%/.wecraft/backups/launcher_profiles. La toute première sauvegarde historique
@@ -567,7 +598,14 @@ def backup_profiles_file(f):
     PROFILE_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     dest = PROFILE_BACKUP_DIR / f"{f.stem}.{stamp}.json"
-    shutil.copy2(f, dest)
+    try:  # sans les éventuels jetons de connexion des anciens launchers : inutile de les multiplier
+        data = json.loads(f.read_text(encoding="utf-8-sig"))
+        if isinstance(data, dict):
+            for k in _PROFILE_SECRET_KEYS:
+                data.pop(k, None)
+        atomic_write_text(dest, json.dumps(data, indent=2, ensure_ascii=False))
+    except (OSError, ValueError):
+        shutil.copy2(f, dest)
     old = sorted(PROFILE_BACKUP_DIR.glob(f"{f.stem}.*.json"))
     for extra in old[:-PROFILE_BACKUPS_KEPT]:
         try:
@@ -733,9 +771,10 @@ def _http(url, timeout=10):
 # Clé PUBLIQUE de signature (32 octets en base64). Vide = vérification désactivée (comportement d'avant).
 # La clé PRIVÉE correspondante ne doit JAMAIS être dans ce dépôt : voir tools/sign_release.py.
 UPDATE_PUBLIC_KEY = "pELCCH6Cv98mKYOqqA/gTQsb2+EoV/MIAuG0gT2hx5Q="
-# False (transition) : une release SANS signature est encore acceptée (avec trace dans update.log).
-# True : toute release doit être signée. Dans tous les cas, une signature INVALIDE bloque la mise à jour.
-UPDATE_SIGNATURE_REQUIRED = False
+# True : toute mise à jour doit être signée (sinon un pirate n'aurait qu'à ne pas publier de .sig).
+# Toutes les releases produites par le workflow sont signées (il échoue sans la clé). Les versions
+# antérieures à celle-ci ne vérifient rien : seules les suivantes sont protégées.
+UPDATE_SIGNATURE_REQUIRED = True
 SIGNATURE_CONTEXT = "WeCraft-update-v1"
 
 
@@ -763,19 +802,31 @@ def verify_update_signature(version, sha256, signature_b64, public_key_b64=None)
         return False
 
 
+def signature_support_available():
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
 def check_update_signature(info, sha256):
     """Décision pour une mise à jour téléchargée dont l'empreinte est sha256 :
     lève une erreur si elle doit être refusée, sinon renvoie un texte (vide si rien à signaler)."""
     if not UPDATE_PUBLIC_KEY.strip():
         return ""
     sig = info.get("signature")
+    if sig and not signature_support_available():
+        raise RuntimeError("Le module de vérification des signatures est absent de cette version de WeCraft : "
+                           "la mise à jour ne peut pas être vérifiée. Téléchargez-la depuis la page des releases.")
     if sig:
         if verify_update_signature(info["version"], sha256, sig):
             return "signature vérifiée"
         raise RuntimeError("La signature de cette mise à jour est invalide : elle n'a pas été publiée par "
                            "l'auteur de WeCraft, ou a été modifiée. Mise à jour annulée.")
     if UPDATE_SIGNATURE_REQUIRED:
-        raise RuntimeError("Cette mise à jour n'est pas signée : mise à jour annulée par sécurité.")
+        raise RuntimeError("Cette mise à jour n'est pas signée par l'auteur de WeCraft : mise à jour annulée "
+                           "par sécurité.")
     return "release non signée acceptée (période de transition)"
 
 
@@ -899,44 +950,68 @@ def apply_update(new_exe, version=None):
             {"exe": str(cur), "old": str(old), "from": APP_VERSION, "to": version, "starts": 0}))
     except OSError:
         pass  # sans ce fichier, seul le retour arrière automatique est perdu
+    global _UPDATE_HANDED_OFF
+    _UPDATE_HANDED_OFF = True  # ce processus (l'ancienne version) ne doit plus rien valider ni supprimer
     update_log(f"mise à jour installée : v{APP_VERSION} -> v{version} (ancienne version gardée : {old.name})")
     env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI") and k != "_MEIPASS2"}
     subprocess.Popen([str(cur)], env=env, close_fds=True, cwd=str(cur.parent))
 
 
+_UPDATE_HANDED_OFF = False  # True dans l'ANCIEN processus après apply_update : il ne valide rien
+UPDATE_SKIP_FILE = Path(MC_DIR) / "update_skip.json"  # version abandonnée après un retour arrière
+
+
 def read_update_pending():
+    """Mise à jour en attente de validation, si elle concerne CET exe et CETTE version (la nouvelle).
+    Un fichier mal formé est ignoré (jamais d'erreur au démarrage)."""
     data = read_json_file(UPDATE_PENDING_FILE)
-    if not data or Path(str(data.get("exe", ""))) != Path(sys.executable):
+    try:
+        if (not data or Path(str(data.get("exe") or "")) != Path(sys.executable)
+                or str(data.get("to")) != APP_VERSION or not isinstance(data.get("old"), str)):
+            return None
+        data["starts"] = int(data.get("starts") or 0)
+    except (TypeError, ValueError):
         return None
     return data
 
 
 def update_startup_check():
     """Au démarrage : compte les démarrages de la nouvelle version tant qu'elle n'a pas été validée.
-    Renvoie les infos de mise à jour si un retour arrière doit être proposé, sinon None."""
+    Renvoie les infos de mise à jour si un retour arrière doit être proposé, sinon None.
+    Deux démarrages à moins de 30 s d'intervalle (double-clic) ne comptent que pour un."""
     if not FROZEN:
         return None
-    data = read_update_pending()
-    if data is None:
-        return None
-    data["starts"] = int(data.get("starts") or 0) + 1
     try:
+        data = read_update_pending()
+        if data is None:
+            return None
+        now = time.time()
+        if now - float(data.get("last_start") or 0) > 30:
+            data["starts"] += 1
+        data["last_start"] = now
         atomic_write_text(UPDATE_PENDING_FILE, json.dumps(data))
-    except OSError:
+        return data if data["starts"] >= 2 and Path(data["old"]).is_file() else None
+    except Exception as e:  # le contrôle ne doit jamais empêcher WeCraft de démarrer
+        update_log(f"contrôle de mise à jour au démarrage impossible ({e!r})")
         return None
-    return data if data["starts"] >= 2 and Path(data.get("old", "")).is_file() else None
 
 
 def mark_update_healthy():
     """La nouvelle version fonctionne : on oublie la mise à jour en attente et on supprime l'ancienne."""
-    if not FROZEN or read_update_pending() is None:
+    if not FROZEN or _UPDATE_HANDED_OFF or read_update_pending() is None:
         return
     try:
         UPDATE_PENDING_FILE.unlink(missing_ok=True)
+        UPDATE_SKIP_FILE.unlink(missing_ok=True)
     except OSError:
         return
     update_log(f"v{APP_VERSION} a démarré correctement : ancienne version supprimée")
     cleanup_update_leftovers()
+
+
+def skipped_update_version():
+    data = read_json_file(UPDATE_SKIP_FILE)
+    return str(data.get("version")) if data and data.get("version") else None
 
 
 def restore_previous_version(data):
@@ -950,6 +1025,10 @@ def restore_previous_version(data):
         failed.rename(cur)
         raise
     UPDATE_PENDING_FILE.unlink(missing_ok=True)
+    try:  # la version défaillante n'est plus proposée automatiquement (la vérification manuelle reste possible)
+        atomic_write_text(UPDATE_SKIP_FILE, json.dumps({"version": data.get("to")}))
+    except OSError:
+        pass
     update_log(f"retour à v{data.get('from')} (v{data.get('to')} ne démarrait pas, gardée : {failed.name})")
     env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI") and k != "_MEIPASS2"}
     subprocess.Popen([str(cur)], env=env, close_fds=True, cwd=str(cur.parent))
@@ -965,7 +1044,7 @@ def cleanup_update_leftovers():
         cur = Path(sys.executable)
         # Uniquement « <nom de l'exe>.old » (ex. WeCraft.exe.old), son éventuelle variante horodatée
         # « <nom de l'exe>.<chiffres>.old » et l'ancien script : jamais un autre fichier .old.
-        spare = re.compile(re.escape(cur.name) + r"\.\d+\.old")
+        spare = re.compile(re.escape(cur.name) + r"\.(\d+\.old|\d{8}-\d{6}\.echec)")
         targets = [cur.with_name(cur.name + ".old"), cur.with_name("wecraft_update.bat")]
         try:
             targets += [f for f in cur.parent.iterdir() if spare.fullmatch(f.name)]
@@ -2101,6 +2180,8 @@ class Launcher(tk.Tk):
                     msg = explain_update_error(e)
                     self.after(0, lambda: messagebox.showwarning("Mises à jour", msg))
                 return
+            if not manual and info["version"] == skipped_update_version():
+                return  # version abandonnée après un retour arrière : plus proposée automatiquement
             if is_newer(info["version"], APP_VERSION):
                 self.after(0, lambda: self.show_update(info))
             elif manual:
@@ -2190,7 +2271,13 @@ class Launcher(tk.Tk):
                 "splash": self.config_data.get("splash", True),
             }
         )
-        atomic_write_text(CONFIG_FILE, json.dumps(self.config_data, ensure_ascii=False))
+        if str(CONFIG_FILE) in _UNREADABLE and read_json_file(CONFIG_FILE) is None and str(CONFIG_FILE) in _UNREADABLE:
+            update_log(f"{CONFIG_FILE.name} illisible (droits ou verrou) : réglages non enregistrés pour ne pas l'écraser")
+            return
+        try:
+            atomic_write_text(CONFIG_FILE, json.dumps(self.config_data, ensure_ascii=False))
+        except OSError as e:  # un réglage non enregistré ne doit jamais empêcher de lancer le jeu
+            update_log(f"{CONFIG_FILE.name} : enregistrement impossible ({e})")
 
     def game_dir(self):
         """Dossier de l'instance : mods, saves, resourcepacks, options.txt..."""
@@ -3785,6 +3872,8 @@ class Launcher(tk.Tk):
         webbrowser.open(INSTANCES_DIR.as_uri())
 
     def poll_instances(self):
+        if INVALID_FILES:  # un fichier mis de côté pendant l'utilisation est signalé aussi
+            self.notify_invalid_files()
         self.refresh_instances()
         self.after(3000, self.poll_instances)
 
@@ -4627,6 +4716,10 @@ class Launcher(tk.Tk):
         finally:
             self.after(0, lambda: self.set_buttons("normal"))
 
+
+if __name__ == "__main__" and "--self-test-signature" in sys.argv:
+    # Utilisé par la CI sur l'exe compilé : le module de vérification est-il bien embarqué ?
+    sys.exit(0 if signature_support_available() and UPDATE_PUBLIC_KEY.strip() else 3)
 
 if __name__ == "__main__":
     try:  # Windows : icône du launcher dans la barre des tâches (au lieu de celle de Python)

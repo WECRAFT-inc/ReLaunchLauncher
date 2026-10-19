@@ -8,7 +8,8 @@ name: Release WeCraft
 # Sécurité de la chaîne de publication :
 # - le nom du tag n'est jamais inséré directement dans un script (variables d'environnement) ;
 # - les tests doivent réussir avant la compilation ;
-# - si le secret UPDATE_SIGNING_KEY existe, l'exe est signé (WeCraft.exe.sig, voir tools/sign_release.py).
+# - l'exe est signé (WeCraft.exe.sig, voir tools/sign_release.py) avec le secret UPDATE_SIGNING_KEY ;
+#   sans ce secret, ou si la signature ne correspond pas à UPDATE_PUBLIC_KEY, la release échoue.
 # À FAIRE (impossible depuis l'environnement qui a préparé ce fichier) : épingler chaque action sur son
 # SHA de commit complet (ex. actions/checkout@<sha40> # v4) ; Dependabot (.github/dependabot.yml) les
 # tiendra ensuite à jour.
@@ -39,9 +40,13 @@ jobs:
       contents: write
     env:
       TAG: ${{ github.ref_name }}
-      UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+      # La clé privée n'est PAS mise ici : seule l'étape « Signature » la reçoit (pip, PyInstaller et
+      # leurs dépendances tournent dans les autres étapes et ne doivent pas pouvoir la lire).
+      HAS_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -111,7 +116,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType File -Force fonts/.keep | Out-Null
-          pyinstaller --onefile --windowed --noupx --version-file version_info.txt --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py
+          pyinstaller --onefile --windowed --noupx --hidden-import cryptography.hazmat.primitives.asymmetric.ed25519 --version-file version_info.txt --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py
 
       - name: Empreinte SHA-256
         shell: pwsh
@@ -119,19 +124,40 @@ jobs:
           $h = (Get-FileHash dist/WeCraft.exe -Algorithm SHA256).Hash.ToLower()
           "$h  WeCraft.exe" | Out-File dist/WeCraft.exe.sha256 -Encoding ascii
 
-      - name: Signature (si le secret UPDATE_SIGNING_KEY est configuré)
-        if: env.UPDATE_SIGNING_KEY != ''
+      - name: Le module de vérification est-il dans l'exe ?
         shell: pwsh
         run: |
+          $p = Start-Process dist/WeCraft.exe -ArgumentList "--self-test-signature" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Write-Error "WeCraft.exe ne peut pas vérifier les signatures (code $($p.ExitCode))"; exit 1 }
+
+      - name: Clé de signature présente
+        if: env.HAS_SIGNING_KEY != 'true'
+        shell: bash
+        run: |
+          echo "Le secret UPDATE_SIGNING_KEY est absent : une release non signée serait refusée par WeCraft."
+          exit 1
+
+      - name: Signature
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
           python tools/sign_release.py sign dist/WeCraft.exe "$env:VERSION" | Out-File dist/WeCraft.exe.sig -Encoding ascii
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # La signature doit correspondre à la clé PUBLIQUE intégrée au launcher, sinon tous les
+      # utilisateurs refuseraient cette mise à jour.
+      - name: Vérification de la signature
+        shell: pwsh
+        run: |
+          $pub = python -c "import ast,sys; t=ast.parse(open('wecraft_launcher.py',encoding='utf-8').read()); print(next(ast.literal_eval(n.value) for n in t.body if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='UPDATE_PUBLIC_KEY'))"
+          python tools/sign_release.py verify dist/WeCraft.exe "$env:VERSION" dist/WeCraft.exe.sig $pub
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Liste des fichiers de la release
         shell: bash
         run: |
-          FILES="dist/WeCraft.exe dist/WeCraft.exe.sha256"
-          [ -f dist/WeCraft.exe.sig ] && FILES="$FILES dist/WeCraft.exe.sig"
-          echo "FILES=$FILES" >> "$GITHUB_ENV"
+          echo "FILES=dist/WeCraft.exe dist/WeCraft.exe.sha256 dist/WeCraft.exe.sig" >> "$GITHUB_ENV"
 
       # Archive dans le dépôt privé (invisible des utilisateurs).
       - name: Release dans le dépôt privé

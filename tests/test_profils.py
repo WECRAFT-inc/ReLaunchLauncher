@@ -87,6 +87,14 @@ class Profils(unittest.TestCase):
             wl.set_profile(self.mc, f"WECRAFT - {n}", "1.20.1", f"C:/{n}", 4)
         self.assertEqual(len(list((self.wc / "backups").glob("*.json"))), wl.PROFILE_BACKUPS_KEPT)
 
+    def test_sauvegardes_sans_jetons_de_connexion(self):
+        self.lp.write_text(json.dumps({"profiles": {}, "authenticationDatabase": {"x": {"accessToken": "SECRET"}},
+                                       "clientToken": "SECRET"}))
+        wl.set_profile(self.mc, "WECRAFT - A", "1.20.1", "C:/a", 4)
+        backup = next((self.wc / "backups").glob("*.json")).read_text()
+        self.assertNotIn("SECRET", backup)
+        self.assertIn("SECRET", self.lp.read_text(), "le vrai fichier n'est pas modifié sur ce point")
+
     def test_fichier_absent(self):
         with self.assertRaises(RuntimeError):
             wl.set_profile(fresh_dir("vide"), "WECRAFT - A", "1.20.1", "C:/a", 4)

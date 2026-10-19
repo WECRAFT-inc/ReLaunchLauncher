@@ -5,7 +5,7 @@ rem et ajoute les informations de version : l'exe local n'est donc pas identique
 python -m pip install -r requirements-build.txt pyinstaller || goto :erreur
 python -m unittest discover -s tests || goto :erreur
 if not exist fonts mkdir fonts
-pyinstaller --onefile --windowed --noupx --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py || goto :erreur
+pyinstaller --onefile --windowed --noupx --hidden-import cryptography.hazmat.primitives.asymmetric.ed25519 --icon assets/wecraft.ico --name WeCraft --add-data "assets;assets" --add-data "fonts;fonts" wecraft_launcher.py || goto :erreur
 pause
 exit /b 0
 :erreur

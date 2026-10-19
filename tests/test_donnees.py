@@ -47,6 +47,28 @@ class EcrituresEtLectures(unittest.TestCase):
         f.write_bytes(b"\xef\xbb\xbf" + b'{"ok": true}')
         self.assertEqual(wl.read_json_file(f), {"ok": True})
 
+    def test_encodage_non_utf8_mis_de_cote_sans_planter(self):
+        """Constat B1 de la revue : un fichier en ANSI (Bloc-notes) ou abîmé ne doit jamais faire planter."""
+        for raw in (b'{"nom": "\xe9t\xe9"}', b"\xff\xfe{\x00}\x00"):
+            f = self.d / f"enc{len(raw)}.json"
+            f.write_bytes(raw)
+            self.assertIsNone(wl.read_json_file(f))
+            self.assertEqual(len(list(self.d.glob(f.name + ".invalide-*"))), 1)
+
+    def test_ecriture_reessaie_si_le_fichier_est_bloque(self):
+        f = self.d / "verrou.json"
+        real, calls = os.replace, []
+
+        def flaky(src, dst):
+            calls.append(1)
+            if len(calls) < 3:
+                raise PermissionError(32, "utilisé par un autre processus")
+            real(src, dst)
+        with mock.patch.object(wl.os, "replace", flaky), mock.patch.object(wl.time, "sleep"):
+            wl.atomic_write_text(f, "{}")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(f.read_text(), "{}")
+
     def test_fichier_illisible_conserve_une_seule_fois(self):
         f = self.d / "cassé.json"
         f.write_text('{"a": ', encoding="utf-8")
@@ -89,6 +111,19 @@ class MetaInstances(unittest.TestCase):
         self.assertEqual([i["display"] for i in out], ["12", "b", "Créa"])
         self.assertEqual([i["ram"] for i in out], [None, None, 6])
         self.assertTrue(out[2]["fav"])
+
+    def test_meta_impossible_a_lire_jamais_reecrite(self):
+        """Constat I6 de la revue : un fichier verrouillé ne doit pas être remplacé par des réglages vides."""
+        self.meta.write_text('{"C:/a": {"name": "Gardé"}}', encoding="utf-8")
+        real_read = Path.read_bytes
+
+        def locked(path):
+            if path == self.meta:
+                raise PermissionError(13, "accès refusé")
+            return real_read(path)
+        with mock.patch.object(Path, "read_bytes", locked), self.assertRaises(wl.SettingsUnreadable):
+            wl.update_meta("C:/c", set={"hidden": True})
+        self.assertEqual(json.loads(self.meta.read_text()), {"C:/a": {"name": "Gardé"}})
 
     def test_parse_ram(self):
         self.assertEqual([wl.parse_ram(v) for v in (6, "8", "huit", None, 0, 999, 4.0)],
