@@ -94,3 +94,25 @@ ou par une nouvelle revue.
 
 Reste non vérifié : exe compilé par la CI, première release signée, fenêtres de mise à jour et de
 retour arrière en conditions réelles.
+
+## Première release de test signée (19/10/2026, 15:30 - 15:43)
+
+- PR #5 (lot 1 + 1b) et PR #6 (CI : release déjà créée depuis l'interface GitHub) fusionnées dans `main`.
+- `v1.2.7-rc1` : compilation, auto-test, signature et vérification réussies ; échec à l'étape « Release dans le
+  dépôt privé » (release déjà créée depuis l'interface) -> corrigé par la PR #6. Release privée vide, sans effet.
+- `v1.2.7-rc2` : workflow complet réussi ; brouillon dans `WeCraft-Releases` (pré-version, jamais proposée par la
+  mise à jour automatique, qui ne lit que `/releases/latest`).
+- Vérifié sur l'exe téléchargé : SHA-256 `6f607fe3…5d79d55` identique à l'empreinte GitHub ; signature valide pour
+  1.2.7-rc2 avec `UPDATE_PUBLIC_KEY`, refusée pour toute autre version.
+- `tools/essai_exe_windows.bat` (bac à sable) : `WeCraft.exe --self-test-signature` = 0, ouverture et fermeture
+  de l'exe = 0, aucune erreur de mise à jour dans `update.log`.
+
+## Reste à faire
+
+1. Sortir la v1.2.7 (tag `v1.2.7`, puis publier le brouillon public après essai) : les joueurs en v1.2.6 la
+   recevront ; seules les mises à jour suivantes seront vérifiées par signature.
+2. Tester une vraie mise à jour 1.2.7 -> 1.2.8 (téléchargement, signature, remplacement, retour arrière) dès la
+   prochaine version.
+3. Épingler les actions GitHub (SHA) et les dépendances (`--require-hashes`).
+4. Cas limites restants : M3 (nom de profil identique à ceux de WeCraft), exe qui ne démarre pas du tout,
+   `minecraft-launcher-lib` non audité (S11), découpage progressif du monofichier.
