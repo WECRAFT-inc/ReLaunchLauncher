@@ -22,7 +22,7 @@ npm install          # dépendances de développement (aucune dépendance d'exé
 npm run typecheck    # TypeScript strict, processus principal et interface
 npm test             # compilation + tests (node:test)
 npm start            # lance l'application en développement
-npm run dist:win     # exe portable Windows dans release/ (aucune publication)
+npm run dist:win     # installeur Windows release/WeCraft-Setup.exe (aucune publication)
 ```
 
 ## Organisation
@@ -49,6 +49,15 @@ npm run dist:win     # exe portable Windows dans release/ (aucune publication)
 - Un seul WeCraft à la fois. Outils de développement désactivés dans l'exe distribué.
 - Fuses Electron : `RunAsNode`, `NODE_OPTIONS` et `--inspect` désactivés, intégrité de l'archive
   `app.asar` vérifiée, chargement uniquement depuis l'archive.
+
+## Installation (décision du 20/10/2026)
+
+Installeur complet (`WeCraft-Setup.exe`, NSIS via electron-builder) : installation pour l'utilisateur seul,
+sans droits administrateur, dans `%LOCALAPPDATA%\Programs\WeCraft`, raccourcis Bureau et menu Démarrer.
+`build/installer.nsh` : si la même version (ou une plus récente) est déjà installée, l'installeur lance
+simplement l'appli. Ainsi, pendant la transition, l'ancien `WeCraft.exe` remplacé par l'installeur via la
+mise à jour Python continue de fonctionner. `/reinstall` force la réinstallation. La désinstallation retire
+l'appli et les raccourcis, jamais les réglages.
 
 ## Données
 

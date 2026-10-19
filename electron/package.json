@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "npm run build && node --test \"dist/tests/*.test.js\"",
     "start": "npm run build && electron .",
-    "dist:win": "npm run build && electron-builder --win portable --x64 --publish never"
+    "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -40,15 +40,12 @@
       "icon": "build/icon.ico",
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
         }
       ]
-    },
-    "portable": {
-      "artifactName": "WeCraft.exe"
     },
     "electronFuses": {
       "runAsNode": false,
@@ -59,6 +56,18 @@
       "onlyLoadAppFromAsar": true,
       "loadBrowserProcessSpecificV8Snapshot": false,
       "grantFileProtocolExtraPrivileges": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "WeCraft",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "WeCraft-Setup.exe",
+      "include": "build/installer.nsh"
     }
   }
 }

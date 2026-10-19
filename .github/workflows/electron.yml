@@ -1,7 +1,8 @@
 name: Electron (compilation de contrôle)
 
-# Lot E0 de la migration Electron : vérifie, compile et teste la version Electron sous Windows.
-# RIEN n'est publié : pas de release, pas de secret, pas de signature. L'exe produit est seulement
+# Lot E0 de la migration Electron : vérifie, compile et teste la version Electron sous Windows
+# (installeur complet, par utilisateur, décision du 20/10/2026).
+# RIEN n'est publié : pas de release, pas de secret, pas de signature. L'installeur produit est seulement
 # joint au run (« artefact », 14 jours) pour être essayé en bac à sable.
 on:
   push:
@@ -39,52 +40,91 @@ jobs:
       - name: Tests (bloquants)
         run: npm test
 
-      - name: Compilation de l'exe portable (sans publication)
+      - name: Compilation de l'installeur (sans publication)
         run: npm run dist:win
 
       - name: Empreinte SHA-256
         shell: pwsh
         run: |
-          $h = (Get-FileHash release/WeCraft.exe -Algorithm SHA256).Hash.ToLower()
-          "$h  WeCraft.exe" | Out-File release/WeCraft.exe.sha256 -Encoding ascii
-          Get-Item release/WeCraft.exe | Select-Object Name, Length | Format-Table
+          $h = (Get-FileHash release/WeCraft-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  WeCraft-Setup.exe" | Out-File release/WeCraft-Setup.exe.sha256 -Encoding ascii
+          Get-Item release/WeCraft-Setup.exe | Select-Object Name, Length | Format-Table
 
-      - name: Démarrage de l'application (essai de 15 s, données isolées)
+      # Scénario complet sur la machine de la CI (jetable) : installation, raccourcis, démarrage,
+      # relance de l'installeur comme le ferait un ancien raccourci, désinstallation.
+      # Un faux launcher_config.json sert de témoin : il ne doit JAMAIS être modifié.
+      - name: Installation, relance et désinstallation
         shell: pwsh
         run: |
-          # APPDATA redirigé vers un dossier vide : l'essai ne lit aucun réglage existant.
-          $sandbox = Join-Path $env:RUNNER_TEMP "wecraft-essai"
-          New-Item -ItemType Directory -Force $sandbox | Out-Null
-          $env:APPDATA = $sandbox
-          $p = Start-Process release/win-unpacked/WeCraft.exe -PassThru
-          Start-Sleep -Seconds 15
-          if ($p.HasExited) { Write-Error "WeCraft s'est arrêté au démarrage (code $($p.ExitCode))"; exit 1 }
-          Stop-Process -Id $p.Id -Force
-          Write-Host "WeCraft tournait toujours après 15 s."
+          $ErrorActionPreference = "Stop"
+          function Fail($msg) { Write-Error $msg; exit 1 }
+          function Stop-WeCraft { Get-Process -Name WeCraft -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 2 }
 
-      # Diagnostic de la lenteur au démarrage (15 s mesurées sur le PC du développeur, 19/10/2026) :
-      # mêmes fichiers, trois formes à comparer. Temporaire : sera retiré une fois le format choisi.
-      - name: Variantes de comparaison (sans compression, dossier non compressé)
-        shell: pwsh
-        run: |
-          # Arguments entre guillemets : sinon PowerShell coupe « -c.compression=store » au niveau du point.
-          npx electron-builder --win portable --x64 --publish never "-c.compression=store" "-c.portable.artifactName=WeCraft-sans-compression.exe" "-c.directories.output=release-store"
-          if ($LASTEXITCODE -ne 0) { Write-Error "Variante sans compression : échec (code $LASTEXITCODE)"; exit 1 }
-          Compress-Archive -Path release/win-unpacked/* -DestinationPath release/WeCraft-dossier.zip
-          foreach ($f in "release/WeCraft.exe", "release-store/WeCraft-sans-compression.exe", "release/WeCraft-dossier.zip") {
-            $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
-            $i = Get-Item $f
-            "$h  $($i.Name)  $([math]::Round($i.Length / 1MB)) Mo" | Tee-Object -Append release/EMPREINTES.txt
-          }
+          $setup = (Resolve-Path release/WeCraft-Setup.exe).Path
+          $cfgDir = Join-Path $env:APPDATA ".wecraft"
+          New-Item -ItemType Directory -Force $cfgDir | Out-Null
+          $cfg = Join-Path $cfgDir "launcher_config.json"
+          '{"theme": "glace", "temoin": "ne pas modifier"}' | Out-File $cfg -Encoding utf8
+          $cfgHash = (Get-FileHash $cfg).Hash
+
+          # 1. Installation silencieuse (par utilisateur, sans droits administrateur)
+          $p = Start-Process $setup -ArgumentList "/S" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { Fail "Installation : code $($p.ExitCode)" }
+          $entry = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+            Where-Object { $_.DisplayName -like "WeCraft*" } | Select-Object -First 1
+          if (-not $entry) { Fail "Aucune entrée de désinstallation trouvée (HKCU)" }
+          $dir = $entry.InstallLocation
+          if (-not $dir) { $dir = Join-Path $env:LOCALAPPDATA "Programs\WeCraft" }
+          $exe = Join-Path $dir "WeCraft.exe"
+          if (-not (Test-Path $exe)) { Fail "WeCraft.exe absent de $dir" }
+          if (-not $dir.StartsWith($env:LOCALAPPDATA)) { Fail "Installé hors du profil utilisateur : $dir" }
+          $desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "WeCraft.lnk"
+          $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\WeCraft.lnk"
+          if (-not (Test-Path $desktop)) { Fail "Raccourci Bureau absent" }
+          if (-not (Test-Path $menu)) { Fail "Raccourci menu Démarrer absent" }
+          $stamp = (Get-Item $exe).LastWriteTimeUtc
+          Write-Host "Installé : $dir (version $($entry.DisplayVersion)) ; raccourcis Bureau et menu Démarrer présents."
+
+          # 2. L'application installée démarre et reste ouverte
+          Stop-WeCraft
+          $app = Start-Process $exe -PassThru
+          Start-Sleep 12
+          if ($app.HasExited) { Fail "L'application installée s'est arrêtée (code $($app.ExitCode))" }
+          Stop-WeCraft
+          Write-Host "Application installée : démarrée, toujours ouverte après 12 s."
+
+          # 3. Relance de l'installeur sans option (cas d'un ancien raccourci vers WeCraft.exe) :
+          #    il doit lancer l'appli déjà installée, vite, sans réinstaller.
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          $p = Start-Process $setup -PassThru
+          if (-not $p.WaitForExit(30000)) { Fail "L'installeur relancé ne s'est pas arrêté en 30 s" }
+          $sw.Stop()
+          Start-Sleep 6
+          $running = Get-Process -Name WeCraft -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
+          if (-not $running) { Fail "L'installeur relancé n'a pas lancé l'application installée" }
+          if ((Get-Item $exe).LastWriteTimeUtc -ne $stamp) { Fail "L'installeur relancé a réinstallé l'application" }
+          Write-Host "Installeur relancé : appli lancée sans réinstallation, installeur fermé en $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s."
+          Stop-WeCraft
+
+          # 4. Désinstallation silencieuse : appli et raccourcis retirés, réglages conservés
+          $m = [regex]::Match($entry.UninstallString, '^"([^"]+)"')
+          if (-not $m.Success) { Fail "Commande de désinstallation illisible : $($entry.UninstallString)" }
+          Start-Process $m.Groups[1].Value -ArgumentList "/S", "/currentuser" -Wait
+          $deadline = (Get-Date).AddSeconds(90)
+          while ((Test-Path $exe) -and (Get-Date) -lt $deadline) { Start-Sleep 2 }
+          if (Test-Path $exe) { Fail "Désinstallation : WeCraft.exe toujours présent" }
+          if ((Test-Path $desktop) -or (Test-Path $menu)) { Fail "Désinstallation : raccourci restant" }
+
+          # 5. Témoin : réglages WeCraft intacts après installation, démarrages et désinstallation
+          if (-not (Test-Path $cfg)) { Fail "launcher_config.json a été supprimé" }
+          if ((Get-FileHash $cfg).Hash -ne $cfgHash) { Fail "launcher_config.json a été modifié" }
+          Write-Host "Désinstallation propre ; launcher_config.json intact."
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wecraft-electron-e0
+          name: wecraft-electron-installeur
           retention-days: 14
           path: |
-            electron/release/WeCraft.exe
-            electron/release/WeCraft.exe.sha256
-            electron/release/WeCraft-dossier.zip
-            electron/release/EMPREINTES.txt
-            electron/release-store/WeCraft-sans-compression.exe
+            electron/release/WeCraft-Setup.exe
+            electron/release/WeCraft-Setup.exe.sha256
             electron/package-lock.json
