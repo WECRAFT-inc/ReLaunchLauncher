@@ -121,8 +121,8 @@ retour arrière en conditions réelles.
 
 Référence : `docs/AUDIT_MIGRATION_ELECTRON.md` (audit du 19/10/2026, lots E0 à E9).
 
-**Décisions du développeur (19/10/2026)** : D1 transition des mises à jour par **exe portable** signé
-(stratégie A) ; D7 `C:\Users\lesci\OneDrive\Documents\Wecraft-test-new` = **bac à sable de test** ;
+**Décisions du développeur** : D1 transition des mises à jour par exe portable (19/10/2026), **révisée le
+20/10/2026 : installeur complet** (voir ci-dessous) ; D7 `C:\Users\lesci\OneDrive\Documents\Wecraft-test-new` = **bac à sable de test** ;
 D8 référence visuelle = maquette ReLaunch × WeCraft + capture de l'écran d'accueil (barre latérale, grand
 titre, bouton Jouer, deux cartes).
 
@@ -152,5 +152,18 @@ typecheck strict (y compris les fichiers qui importent `electron`), tests, compi
 `wecraft-electron-e0` (~100 Mo compressés, exe + `.sha256` + `package-lock.json`), conservé jusqu'au 02/11/2026.
 Journal détaillé et artefact non relus par l'IA (stockage GitHub Actions inaccessible depuis son environnement).
 
-Reste pour E0 : versionner `package-lock.json` produit par la CI puis passer
+Essai de l'exe portable sur le PC du développeur (19-20/10/2026) : avertissement SmartScreen
+(exe sans signature Authenticode, attendu) ; réglages trouvés et thème correct ; **~15 s de démarrage**.
+Comparaison : le même programme décompressé dans un dossier démarre rapidement -> la décompression à
+chaque lancement est en cause.
+
+**Installeur complet (20/10/2026)** : `WeCraft-Setup.exe` (NSIS, electron-builder), installation par
+utilisateur sans droits administrateur dans `%LOCALAPPDATA%\Programs\WeCraft`, raccourcis Bureau et menu
+Démarrer ; `build/installer.nsh` lance l'appli déjà installée (même version ou plus récente) au lieu de
+réinstaller ; désinstallation sans toucher aux réglages. CI Windows (run 39337155061) : **réussie** —
+installation silencieuse, raccourcis présents, appli installée démarrée, installeur relancé = appli lancée
+sans réinstallation, désinstallation complète, `launcher_config.json` témoin intact.
+
+Reste pour E0 : essai de l'installeur dans le bac à sable (avertissement, durée de démarrage, raccourci,
+désinstallation) ; versionner `package-lock.json` produit par la CI puis passer
 à `npm ci` ; essai de l'exe dans le bac à sable (démarrage sous Smart App Control / Defender, durée).

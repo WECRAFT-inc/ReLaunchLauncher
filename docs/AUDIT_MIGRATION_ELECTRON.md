@@ -104,7 +104,9 @@ Sous Windows, `electron-updater` s'appuie sur une empreinte publiée **dans la m
 | Inconvénients | Exe lourd (~100 Mo+) qui se décompresse dans `%TEMP%` à chaque démarrage (lenteur, antivirus) ; `process.execPath` désigne la copie temporaire : il faut utiliser le chemin d'origine (`PORTABLE_EXECUTABLE_FILE` avec electron-builder) pour `update_pending.json` et le remplacement. | Plus de travail initial ; dépend que tous les joueurs passent d'abord par la passerelle. |
 | Suite | Possible de basculer plus tard vers un installeur, une fois le parc migré. | Mises à jour Electron classiques ensuite. |
 
-**Recommandation : A pour la transition**, éventuellement suivie d'un passage à B. C'est la seule option qui ne touche pas au code d'exécution de fichiers déjà en production et qui garde un retour arrière immédiat vers la version Python. **À valider sur un vrai poste Windows avant toute publication** : démarrage de l'exe portable sous Smart App Control / Defender, durée de démarrage, comportement du renommage pendant l'exécution.
+> **Mise à jour du 20/10/2026 — décision D1 révisée : installeur complet (B), livré par le même chemin que A.** L'essai de l'exe portable sur le PC du développeur a mesuré ~15 s de démarrage, dues à la décompression à chaque lancement (le même programme décompressé dans un dossier démarre rapidement). L'updater Python installe désormais **l'installeur** (`WeCraft-Setup.exe`, signé Ed25519) à la place de `WeCraft.exe` ; celui-ci installe l'appli par utilisateur et, si elle est déjà installée, la lance simplement : aucun changement côté Python n'est nécessaire. Le retour arrière immédiat vers `WeCraft.exe.old` (version Python) reste possible. Vérifié en CI : installation, raccourcis, relance sans réinstallation, désinstallation sans toucher aux réglages.
+
+**Recommandation initiale (19/10) : A pour la transition**, éventuellement suivie d'un passage à B. C'est la seule option qui ne touche pas au code d'exécution de fichiers déjà en production et qui garde un retour arrière immédiat vers la version Python. **À valider sur un vrai poste Windows avant toute publication** : démarrage de l'exe portable sous Smart App Control / Defender, durée de démarrage, comportement du renommage pendant l'exécution.
 
 ### 4.4 Exigences pour la version Electron (quelle que soit la stratégie)
 
@@ -172,14 +174,14 @@ E0, E1 et l'audit de E3 peuvent avancer en parallèle. Rien n'est publié avant 
 
 | ID | Décision | Recommandation |
 |---|---|---|
-| D1 | Stratégie de transition des mises à jour (A exe portable / B installeur) | A |
+| D1 | Stratégie de transition des mises à jour (A exe portable / B installeur) | ~~A~~ → **Décidé : installeur complet** (20/10/2026, voir §4.3) |
 | D2 | Branche `ui/relaunch-style` : fusionner telle quelle (les joueurs en profitent pendant la migration) ou geler l'interface Tkinter | Fusionner après l'essai Windows prévu, puis geler Tkinter |
 | D3 | Nom et identité : WeCraft ou ReLaunch pour l'appli Electron ? (impacte `appId`, dossier de données, nom de l'exe — l'updater cherche « un » .exe, donc renommer est possible mais le chemin `%APPDATA%\.wecraft` doit rester) | Garder WeCraft tant que la fusion ReLaunch n'est pas décidée |
 | D4 | Framework d'interface : TS natif ou React | TS natif au départ |
 | D5 | Certificat Authenticode | Optionnel, à budgéter |
 | D6 | Périmètre ReLaunch (comptes, auth Microsoft, skins) | Hors périmètre de cette migration |
-| D7 | Rôle du dossier `Wecraft-test-new` : emplacement du nouveau projet, bac à sable de test, ou autre ? | — |
-| D8 | Capture de référence visuelle (§10.1) : à fournir, ou la maquette ReLaunch × WeCraft fait foi ? | — |
+| D7 | Rôle du dossier `Wecraft-test-new` | **Décidé : bac à sable de test** (19/10/2026) |
+| D8 | Référence visuelle (§10.1) | **Décidé : maquette ReLaunch × WeCraft + capture de l'accueil** (19/10/2026) |
 
 ---
 
