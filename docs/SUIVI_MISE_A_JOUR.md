@@ -43,9 +43,9 @@ fenêtres de retour arrière et de mise à jour, installation réelle de version
 
 1. **Tests sous Windows** : tests automatiques et démarrage de l'interface faits ; restent LANCER (bac à sable) et l'exe compilé.
 2. **Revue indépendante** des changements sensibles (profils, mise à jour, exécution) par une autre IA (§13).
-3. **Clé de signature** : la générer (`tools/sign_release.py generate`), mettre la clé publique dans
-   `UPDATE_PUBLIC_KEY`, la clé privée en secret `UPDATE_SIGNING_KEY`. Passer `UPDATE_SIGNATURE_REQUIRED`
-   à `True` une version plus tard.
+3. **Clé de signature** : générée par le développeur sur son PC le 19/10/2026 ; clé publique intégrée
+   (`UPDATE_PUBLIC_KEY = "pELCCH6C...hx5Q="`). Reste : clé privée en secret GitHub `UPDATE_SIGNING_KEY`,
+   puis `UPDATE_SIGNATURE_REQUIRED = True` dans la version qui suivra la première version signée.
 4. **Épinglage** des actions GitHub (SHA) et des dépendances (`pip-compile --generate-hashes`) depuis un
    poste connecté.
 5. **`RELEASES_TOKEN`** : vérifier qu'il s'agit d'un jeton fine-grained limité à `WeCraft-Releases`.

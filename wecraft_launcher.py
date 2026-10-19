@@ -732,7 +732,7 @@ def _http(url, timeout=10):
 # ---- Signature des mises à jour (Ed25519)
 # Clé PUBLIQUE de signature (32 octets en base64). Vide = vérification désactivée (comportement d'avant).
 # La clé PRIVÉE correspondante ne doit JAMAIS être dans ce dépôt : voir tools/sign_release.py.
-UPDATE_PUBLIC_KEY = ""
+UPDATE_PUBLIC_KEY = "pELCCH6Cv98mKYOqqA/gTQsb2+EoV/MIAuG0gT2hx5Q="
 # False (transition) : une release SANS signature est encore acceptée (avec trace dans update.log).
 # True : toute release doit être signée. Dans tous les cas, une signature INVALIDE bloque la mise à jour.
 UPDATE_SIGNATURE_REQUIRED = False

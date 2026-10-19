@@ -59,6 +59,12 @@ class Signature(unittest.TestCase):
         self.assertFalse(wl.verify_update_signature("1.2.1", self.sha, sig, other_pub), "autre clé")
         self.assertFalse(wl.verify_update_signature("1.2.1", self.sha, "pas du base64!", self.pub))
 
+    def test_cle_publique_integree_valide(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        key = base64.b64decode(wl.UPDATE_PUBLIC_KEY, validate=True)
+        self.assertEqual(len(key), 32)
+        Ed25519PublicKey.from_public_bytes(key)  # lève une erreur si la clé est abîmée
+
     def test_politique(self):
         info = {"version": "1.2.1", "signature": self.sign("1.2.1", self.sha)}
         with mock.patch.object(wl, "UPDATE_PUBLIC_KEY", ""):
