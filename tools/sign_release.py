@@ -65,7 +65,7 @@ def main(argv):
     if len(argv) >= 5 and argv[0] == "verify":
         exe, version, sig_file, pub = argv[1:5]
         Ed25519PublicKey.from_public_bytes(base64.b64decode(pub, validate=True)).verify(
-            base64.b64decode(Path(sig_file).read_text().strip(), validate=True), message(version, sha256_file(exe)))
+            base64.b64decode(Path(sig_file).read_text(encoding="ascii").strip(), validate=True), message(version, sha256_file(exe)))
         print("Signature valide.")
         return
     sys.exit(__doc__)
