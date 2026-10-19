@@ -146,5 +146,11 @@ interface rendue dans Chromium (1180x760, 900x600, thèmes) sans erreur de conso
 Non vérifié localement (registre npm inaccessible depuis l'environnement de développement) : typecheck des
 fichiers qui importent `electron`, compilation de l'exe, démarrage réel d'Electron -> confiés à la CI.
 
-Reste pour E0 : résultat de la CI Windows ; versionner `package-lock.json` produit par la CI puis passer
+CI Windows (run 39309109584, 19/10/2026, `windows-latest`) : **toutes les étapes réussies** — installation,
+typecheck strict (y compris les fichiers qui importent `electron`), tests, compilation de l'exe portable
+(~3 min 20 s), démarrage de 15 s avec APPDATA isolé (l'application tournait toujours). Artefact
+`wecraft-electron-e0` (~100 Mo compressés, exe + `.sha256` + `package-lock.json`), conservé jusqu'au 02/11/2026.
+Journal détaillé et artefact non relus par l'IA (stockage GitHub Actions inaccessible depuis son environnement).
+
+Reste pour E0 : versionner `package-lock.json` produit par la CI puis passer
 à `npm ci` ; essai de l'exe dans le bac à sable (démarrage sous Smart App Control / Defender, durée).
