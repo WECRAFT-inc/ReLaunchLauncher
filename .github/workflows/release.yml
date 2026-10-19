@@ -1,6 +1,7 @@
 name: Release WeCraft
 
-# Construit WeCraft.exe à chaque tag « vX.Y.Z » (ou « vX.Y.Z-rc1 »).
+# Construit WeCraft.exe à chaque tag « vX.Y.Z » (ou « vX.Y.Z-rc1 »), qu'il soit poussé avec git ou créé
+# depuis la page « Releases » de GitHub (la release existante reçoit alors les fichiers).
 # Rien n'est distribué aux utilisateurs automatiquement : la release du dépôt public est créée en
 # BROUILLON. Le launcher ne voit que les releases publiées : il faut la publier à la main sur GitHub
 # après avoir testé l'exe.
@@ -165,8 +166,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" $FILES --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes \
-            $([[ "$VERSION" == *-* ]] && echo --prerelease)
+          # La release peut déjà exister (créée depuis la page « Releases » de GitHub) : on y ajoute les fichiers.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" $FILES --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" $FILES --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes \
+              $([[ "$VERSION" == *-* ]] && echo --prerelease)
+          fi
 
       # Dépôt public : BROUILLON. Publiez-le à la main sur GitHub après avoir testé l'exe.
       # RELEASES_TOKEN : jeton « fine-grained » limité au dépôt WeCraft-Releases, permission Contents: write.
@@ -176,6 +182,15 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           HASH=$(cut -d' ' -f1 dist/WeCraft.exe.sha256)
-          gh release create "$TAG" $FILES --repo Rexidelamort/WeCraft-Releases --draft \
+          PUB=Rexidelamort/WeCraft-Releases
+          if gh release view "$TAG" --repo "$PUB" --json isDraft --jq .isDraft >/tmp/draft 2>/dev/null; then
+            # Ne jamais modifier une release DÉJÀ PUBLIÉE : les joueurs l'ont peut-être déjà téléchargée.
+            if [ "$(cat /tmp/draft)" != "true" ]; then
+              echo "La release $TAG est déjà publiée dans $PUB : rien n'est modifié. Utilisez un nouveau tag."; exit 1
+            fi
+            gh release upload "$TAG" $FILES --repo "$PUB" --clobber
+            exit 0
+          fi
+          gh release create "$TAG" $FILES --repo "$PUB" --draft \
             --title "$TAG" --notes "WeCraft $TAG - SHA-256 : $HASH" \
             $([[ "$VERSION" == *-* ]] && echo --prerelease)
