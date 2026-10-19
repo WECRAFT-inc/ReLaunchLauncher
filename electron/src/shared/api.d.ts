@@ -23,6 +23,10 @@ export interface AppInfo {
   dataDirExists: boolean;
   /** Thème lu dans launcher_config.json, s'il est lisible et connu ; sinon null. */
   savedTheme: ThemeKey | null;
+  /** Temps écoulé entre le démarrage du processus Electron et la première demande de l'interface (ms). */
+  startupMs: number;
+  /** Lancé depuis l'exe portable (décompressé à chaque démarrage) ? */
+  portable: boolean;
 }
 
 export interface WeCraftApi {

@@ -26,6 +26,8 @@ const RENDERER_ROOT = path.join(__dirname, "..", "renderer");
 const PRELOAD = path.join(__dirname, "..", "preload", "preload.js");
 
 let mainWindow: BrowserWindow | null = null;
+/** Mesuré une seule fois, à la première demande de l'interface (diagnostic de lenteur au démarrage). */
+let startupMs: number | undefined;
 
 // ---------------------------------------------------------------- avant « ready »
 app.enableSandbox(); // tous les processus de rendu en bac à sable, sans exception
@@ -159,6 +161,8 @@ function registerIpc(): void {
       dataDir,
       dataDirExists,
       savedTheme: await readSavedTheme(configFile(env)),
+      startupMs: startupMs ??= Math.round(process.uptime() * 1000),
+      portable: Boolean(process.env["PORTABLE_EXECUTABLE_FILE"]),
     };
   });
 

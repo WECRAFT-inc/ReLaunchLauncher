@@ -13,3 +13,4 @@ electron/node_modules/
 electron/dist/
 electron/release/
 !electron/build/
+electron/release-store/

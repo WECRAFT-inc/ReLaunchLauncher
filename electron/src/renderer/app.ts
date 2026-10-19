@@ -108,6 +108,8 @@ function renderInfo(info: AppInfo): void {
     ["Chromium", info.chrome],
     ["Node.js", info.node],
     ["Système", `${info.platform} (${info.arch})`],
+    ["Démarrage", `${(info.startupMs / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} s (Electron seul)`],
+    ["Exe portable", info.portable ? "oui (décompressé à chaque lancement)" : "non"],
     ["Réglages", info.dataDir],
   ];
   const diag = el("diag");
