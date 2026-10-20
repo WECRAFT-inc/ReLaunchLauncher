@@ -176,3 +176,31 @@ d'installation : `electron-winstaller` (dépendance d'electron-builder). La CI u
 **Statut E0 : réalisé, testé (CI + PC du développeur) ; à fusionner après relecture de la PR.**
 Points ouverts hors E0 : actions GitHub à passer en version Node 24 et à épingler par SHA (avertissement
 de dépréciation de Node 20 sur `checkout@v4` / `setup-node@v4`) ; signature Authenticode (D5).
+
+### Lot E1 : réglages (branche `electron/e1-reglages`, à partir d'E0 ; version 0.2.0)
+
+- `storage/jsonStore.ts` : port de `read_json_file`, `quarantine` et `atomic_write_text` (constats S5, B1,
+  I5, I6) — fichier invalide copié en `<nom>.invalide-<date>` (une copie par contenu, copies Python
+  reconnues, date d'origine conservée), signalé, jamais supprimé ; fichier illisible jamais réécrit ;
+  écriture temporaire + remplacement atomique, 10 essais espacés de 100 ms (antivirus).
+- Différence volontaire avec Python : une modification relit le fichier juste avant d'écrire et ne change
+  que la clé concernée (les autres réglages, même inconnus, sont conservés) ; écritures d'un même fichier
+  faites l'une après l'autre.
+- `storage/migrate.ts` : reprise par copie depuis les anciens dossiers (`mon_launcher`, ancien calcul S8),
+  jamais d'écrasement.
+- Thème enregistré dans `launcher_config.json` (clé `theme`, comme la branche UI Python) ; messages clairs
+  si le fichier est verrouillé ; avertissement à l'écran des fichiers mis de côté et des réglages repris.
+- `tools/essai_bac_a_sable.bat` : essais Windows avec `APPDATA` redirigé (options `/copier`, `/casse`) ;
+  refuse de démarrer si WeCraft Electron est déjà ouvert (il utiliserait les vrais réglages). Déposé dans
+  le bac à sable du développeur.
+
+Vérifié (20/10/2026) : 43 tests (`node:test`) dont 3 de compatibilité croisée exécutant le vrai code
+Python (lecture mutuelle, copies reconnues dans les deux sens ; obligatoires en CI) ; interface rendue
+dans Chromium (avertissement, enregistrement réussi / fichier verrouillé). CI Windows (runs 39354026985,
+39354436843) : **réussie**, y compris le scénario de bout en bout « réglages abîmés » sur l'appli
+installée (copie créée, original intact, vrais réglages non touchés).
+
+Risque : **élevé (données utilisateur)** -> double validation requise (§15) : revue indépendante par
+une autre IA + validation coordinatrice, puis essai en bac à sable par le développeur.
+Limite connue : si les versions Python et Electron sont ouvertes en même temps, la version Python peut
+réécrire le thème avec la valeur qu'elle avait en mémoire (elle ne relit pas avant d'écrire).
