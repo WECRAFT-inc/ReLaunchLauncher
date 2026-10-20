@@ -18,7 +18,10 @@ export const APP_ENTRY = `${APP_ORIGIN}/index.html`;
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   `script-src ${APP_ORIGIN}`,
-  `style-src ${APP_ORIGIN}`,
+  // Feuilles de style : uniquement celles de l'application. Attributs style="…" autorisés : l'interface
+  // (copiée du prototype) s'en sert pour ses couleurs et dimensions. Aucun script en ligne n'est permis.
+  `style-src-elem ${APP_ORIGIN}`,
+  "style-src-attr 'unsafe-inline'",
   `img-src ${APP_ORIGIN} data:`,
   `font-src ${APP_ORIGIN}`,
   "connect-src 'none'",
@@ -90,6 +93,7 @@ const MIME: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".webp": "image/webp",
   ".ico": "image/x-icon",
   ".ttf": "font/ttf",
   ".otf": "font/otf",

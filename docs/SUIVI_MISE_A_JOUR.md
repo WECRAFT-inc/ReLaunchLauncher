@@ -204,3 +204,20 @@ Risque : **élevé (données utilisateur)** -> double validation requise (§15) 
 une autre IA + validation coordinatrice, puis essai en bac à sable par le développeur.
 Limite connue : si les versions Python et Electron sont ouvertes en même temps, la version Python peut
 réécrire le thème avec la valeur qu'elle avait en mémoire (elle ne relit pas avant d'écrire).
+
+### Interface : copie du prototype « Prototype ReLaunch × WeCraft » (branche `electron/interface-prototype`, version 0.3.0)
+
+Demande du développeur (20/10/2026) : reprendre l'interface du prototype HTML (artifact Claude) en
+copié-collé. Fait par `electron/scripts/import-prototype.py` (CSS et script repris tels quels, ~235 Ko).
+Modifications limitées, marquées `[WeCraft]` : polices locales, outils de la page de démonstration retirés
+(annotations, vues premium/staff), **lancement simulé remplacé par un message** (§10.4), thème relié à
+`launcher_config.json` (E1), marque permanente « Aperçu · contenus fictifs ». CSP : seule ouverture,
+les attributs `style="…"` (`style-src-attr 'unsafe-inline'`), scripts toujours limités aux fichiers de l'appli.
+
+Vérifié : 43 tests ; rendu dans Chromium avec la même CSP (accueil, WeCraft, Réglages, 900x600) sans
+aucune erreur de console ; thème enregistré repris au démarrage, thème choisi envoyé à l'enregistrement ;
+bouton Jouer = message, aucune barre de progression.
+
+À trancher : le prototype est aux couleurs **ReLaunch** (titre, comptes ReLink, amis, lives, shop, staff) ;
+ces zones restent des maquettes tant que D3 (nom) et D6 (comptes, connexion Microsoft, hors §6 du prompt
+maître) ne sont pas décidés.

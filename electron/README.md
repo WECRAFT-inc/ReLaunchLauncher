@@ -6,21 +6,29 @@ version distribuée tant que la migration n'est pas terminée et validée.
 Références : `docs/AUDIT_MIGRATION_ELECTRON.md` (audit, plan des lots E0 à E9, décisions) et
 `docs/SUIVI_MISE_A_JOUR.md` (avancement).
 
-## Ce que fait cette version (lots E0 et E1)
+## Interface (20/10/2026) : copie du prototype ReLaunch × WeCraft
 
-- Ouvre la fenêtre WeCraft (accueil, instances, modpacks, paramètres) dans le style de la maquette
-  ReLaunch × WeCraft.
-- Affiche des informations **réelles** : version, chemin des réglages WeCraft et leur présence.
-- **Réglages (E1)** : lit et écrit `launcher_config.json` avec les mêmes garde-fous que la version Python
-  (`src/main/storage/jsonStore.ts`) :
-  - fichier invalide -> copie `<nom>.invalide-<date>` conservée (une seule par contenu, copies Python
-    reconnues), signalée à l'utilisateur, original jamais supprimé ;
-  - fichier impossible à lire (verrou, droits) -> jamais réécrit ;
-  - écriture atomique (temporaire + remplacement), 10 essais si un antivirus bloque le fichier ;
-  - seule la clé modifiée change ; les autres réglages, même inconnus, sont conservés ;
-  - reprise par copie des réglages d'anciens dossiers (`mon_launcher`, ancien calcul de chemin).
-- Le thème choisi est enregistré (clé `theme`, la même que la version Python).
-- Ne lance encore rien : le bouton « Jouer » est désactivé et l'interface dit pourquoi.
+L'interface est la copie du prototype HTML « Prototype ReLaunch × WeCraft » (artifact Claude), importée
+par `scripts/import-prototype.py` en `src/renderer/prototype.css`, `prototype.js` et `index.html`. Pour
+reprendre une nouvelle version du prototype : relancer ce script sur le fichier HTML exporté.
+
+Seules modifications, toutes marquées `[WeCraft]` dans le code :
+- polices locales (pas de Google Fonts ; Inter remplace Manrope) ;
+- mode développeur / annotations et boutons « Vue premium / staff » de la page de démonstration retirés ;
+- bouton Jouer : plus de progression simulée (§10.4), un message indique que le lancement n'est pas prêt ;
+- thème : les 4 thèmes de base sont lus et enregistrés dans `launcher_config.json` (lot E1) ;
+- la fenêtre Electron remplace le cadre de fenêtre dessiné par la page ;
+- une marque « Aperçu · contenus fictifs » reste affichée tant que les données sont des exemples.
+
+**Les contenus (instances, serveurs, amis, lives, actualités, shop, staff) sont fictifs.** Ils seront
+remplacés par les vraies données lot par lot (E2 instances, E4 lancement, E7 modpacks…). Les réglages
+d'interface du prototype (barres, épingles, style) restent dans le stockage local d'Electron.
+
+## Réglages (lot E1)
+
+`launcher_config.json` est lu et écrit avec les mêmes garde-fous que la version Python
+(`src/main/storage/jsonStore.ts`) : copie des fichiers invalides, jamais d'écriture dans un fichier
+illisible, écriture atomique, seule la clé modifiée change, reprise des anciens dossiers.
 
 ## Essai en bac à sable (Windows)
 
@@ -53,8 +61,9 @@ npm run dist:win     # installeur Windows release/WeCraft-Setup.exe (aucune publ
 - `contextIsolation`, `sandbox` (pour tous les processus de rendu), `nodeIntegration` désactivé.
 - Interface servie par un protocole privé `app://wecraft` (pas `file://`) ; chaque fichier demandé est
   vérifié pour rester dans le dossier de l'interface ; types de fichiers limités.
-- Content Security Policy stricte (en-tête + balise) : pas d'eval, pas de script en ligne, aucune
-  connexion réseau depuis l'interface (et toute requête qui n'est pas `app://` est bloquée).
+- Content Security Policy stricte (en-tête + balise) : pas d'eval, pas de script ni de balise `<style>` en
+  ligne, aucune connexion réseau depuis l'interface (et toute requête qui n'est pas `app://` est bloquée).
+  Seule exception : les attributs `style="…"`, utilisés par l'interface pour ses couleurs.
 - Navigation, redirections, fenêtres secondaires et `<webview>` refusées ; permissions du navigateur
   (caméra, micro, notifications…) refusées.
 - Messages IPC acceptés seulement depuis la fenêtre principale affichant `app://wecraft` ; arguments

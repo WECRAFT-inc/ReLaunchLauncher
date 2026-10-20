@@ -1,7 +1,7 @@
 {
   "name": "wecraft",
   "productName": "WeCraft",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "WeCraft - lanceur d'instances Minecraft (version Electron, en cours de migration)",
   "private": true,
   "main": "dist/src/main/main.js",

@@ -29,7 +29,11 @@ test("options de fenêtre : isolation, bac à sable, pas de Node", () => {
 });
 
 test("CSP : ni eval, ni script en ligne, ni réseau depuis l'interface", () => {
-  assert.doesNotMatch(CONTENT_SECURITY_POLICY, /unsafe-eval|unsafe-inline|\*/);
+  assert.doesNotMatch(CONTENT_SECURITY_POLICY, /unsafe-eval|\*/);
+  // Seule exception : les attributs style="…" (pas les scripts, pas les balises <style>).
+  const unsafe = CONTENT_SECURITY_POLICY.split("; ").filter((d) => d.includes("unsafe-inline"));
+  assert.deepEqual(unsafe, ["style-src-attr 'unsafe-inline'"]);
+  assert.match(CONTENT_SECURITY_POLICY, /script-src app:\/\/wecraft(;|$)/);
   assert.match(CONTENT_SECURITY_POLICY, /default-src 'none'/);
   assert.match(CONTENT_SECURITY_POLICY, /connect-src 'none'/);
   assert.match(CONTENT_SECURITY_POLICY, /object-src 'none'/);

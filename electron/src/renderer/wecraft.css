@@ -1,0 +1,24 @@
+/* Ajustements WeCraft par-dessus le prototype : la fenêtre Electron EST la fenêtre du launcher
+   (le prototype la dessinait dans une page de démonstration). */
+html, body { height: 100%; }
+body { margin: 0; padding: 0 !important; overflow: hidden; background: var(--night); }
+.app { height: 100vh !important; }
+
+/* Marque permanente : tant que les données réelles ne sont pas branchées (lots E2 et suivants),
+   l'interface montre des contenus d'exemple. Le prompt maître (§10.4) interdit de les faire passer
+   pour réels. */
+.wc-demo {
+  position: fixed; z-index: 100; left: 50%; top: 8px; transform: translateX(-50%);
+  padding: 4px 12px; border-radius: 999px; pointer-events: none;
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .04em; color: #1a1204;
+  background: #fbbf24; box-shadow: 0 6px 18px rgba(0, 0, 0, .45); white-space: nowrap;
+}
+
+/* Fichiers de réglages mis de côté (lot E1) */
+.wc-notice {
+  position: fixed; z-index: 101; top: 40px; left: 50%; transform: translateX(-50%);
+  width: min(720px, calc(100% - 32px)); display: flex; gap: 14px; align-items: flex-start;
+  padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(251, 191, 36, .5);
+  background: rgba(40, 30, 8, .96); box-shadow: 0 18px 40px rgba(0, 0, 0, .55);
+}
+.wc-notice p { margin: 0; flex: 1; font-size: 13.5px; color: #fde68a; overflow-wrap: anywhere; }

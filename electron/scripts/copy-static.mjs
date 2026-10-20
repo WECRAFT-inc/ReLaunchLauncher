@@ -8,5 +8,5 @@ const src = join(root, "src", "renderer");
 const out = join(root, "dist", "src", "renderer");
 mkdirSync(out, { recursive: true });
 cpSync(join(src, "index.html"), join(out, "index.html"));
-cpSync(join(src, "styles.css"), join(out, "styles.css"));
+for (const f of ["fonts.css", "prototype.css", "wecraft.css", "prototype.js"]) cpSync(join(src, f), join(out, f));
 cpSync(join(src, "assets"), join(out, "assets"), { recursive: true });
