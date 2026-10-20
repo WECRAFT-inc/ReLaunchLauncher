@@ -66,6 +66,8 @@ const THEME_MESSAGES: Record<FailureReason, string> = {
   invalid: "Thème inconnu : rien n'a été enregistré.",
   unreadable:
     "Thème appliqué pour cette session seulement : le fichier de réglages est utilisé par un autre programme ou inaccessible. Il n'a pas été modifié.",
+  "not-backed-up":
+    "Thème appliqué pour cette session seulement : le fichier de réglages est abîmé et n'a pas pu être copié de côté, il n'a donc pas été modifié.",
   "write-failed": "Thème appliqué pour cette session seulement : l'enregistrement a échoué. Réessayez plus tard.",
 };
 
@@ -84,7 +86,11 @@ function setupThemes(): void {
         result = { ok: false, reason: "write-failed" };
       }
       if (document.documentElement.dataset["theme"] !== key) return; // un autre thème a été choisi entre-temps
-      note.textContent = result.ok ? "Thème enregistré dans vos réglages WeCraft." : THEME_MESSAGES[result.reason];
+      note.textContent = !result.ok
+        ? THEME_MESSAGES[result.reason]
+        : result.reset
+          ? `Thème enregistré. Attention : ${result.reset.name} était abîmé ; il a été copié dans ${result.reset.copyName} puis remplacé, vos autres réglages sont revenus aux valeurs par défaut.`
+          : "Thème enregistré dans vos réglages WeCraft.";
     });
   });
 }

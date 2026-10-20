@@ -62,3 +62,32 @@ test("fichier verrouillé : refus « unreadable », fichier intact", async () =>
     cleanup();
   }
 });
+
+test("fichier abîmé remplacé lors d'un enregistrement : signalé avec le nom de la copie (revue E1, I1)", async () => {
+  const { dir, cleanup } = tempDir("theme-reset");
+  try {
+    const f = path.join(dir, "launcher_config.json");
+    writeFileSync(f, '{"ram": 6', "utf8");
+    const r = await new Settings(new JsonStore(), f).setTheme("glace");
+    assert.equal(r.ok, true);
+    assert.ok(r.ok && r.reset && r.reset.name === "launcher_config.json");
+    assert.ok(r.ok && r.reset && r.reset.copyName.startsWith("launcher_config.json.invalide-"));
+    assert.equal(readFileSync(path.join(dir, r.ok && r.reset ? r.reset.copyName : ""), "utf8"), '{"ram": 6');
+  } finally {
+    cleanup();
+  }
+});
+
+test("fichier abîmé non copiable : refus « not-backed-up », fichier intact", async () => {
+  const { dir, cleanup } = tempDir("theme-nobackup");
+  try {
+    const f = path.join(dir, "launcher_config.json");
+    writeFileSync(f, '{"ram": 6', "utf8");
+    const fs = faultyFs({ writeNew: async () => { throw sysError("EACCES"); } });
+    const s = new Settings(new JsonStore({ fs }), f);
+    assert.deepEqual(await s.setTheme("glace"), { ok: false, reason: "not-backed-up" });
+    assert.equal(readFileSync(f, "utf8"), '{"ram": 6');
+  } finally {
+    cleanup();
+  }
+});

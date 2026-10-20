@@ -2,7 +2,8 @@
 // Lecture tolérante et écriture sûre via JsonStore (lot E1). Seules les clés que la version Electron
 // gère sont modifiées ; toutes les autres (y compris inconnues) sont conservées telles quelles.
 import type { SettingResult, ThemeKey } from "../shared/api";
-import { JsonStore, SettingsUnreadable } from "./storage/jsonStore";
+import path from "node:path";
+import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "./storage/jsonStore";
 
 export const THEME_KEYS: readonly ThemeKey[] = ["phenix", "relink", "aurore", "glace"];
 
@@ -27,10 +28,14 @@ export class Settings {
   async setTheme(theme: unknown): Promise<SettingResult> {
     if (!isThemeKey(theme)) return { ok: false, reason: "invalid" };
     try {
-      await this.store.update(this.file, (data) => ({ ...data, theme }));
+      const { reset } = await this.store.update(this.file, (data) => ({ ...data, theme }));
+      // Fichier invalide remplacé : l'utilisateur doit le savoir (ses autres réglages sont dans la copie).
+      if (reset) return { ok: true, reset: { name: path.basename(reset.file), copyName: path.basename(reset.copy ?? "") } };
       return { ok: true };
     } catch (e) {
-      return { ok: false, reason: e instanceof SettingsUnreadable ? "unreadable" : "write-failed" };
+      if (e instanceof SettingsUnreadable) return { ok: false, reason: "unreadable" };
+      if (e instanceof SettingsNotBackedUp) return { ok: false, reason: "not-backed-up" };
+      return { ok: false, reason: "write-failed" };
     }
   }
 }
