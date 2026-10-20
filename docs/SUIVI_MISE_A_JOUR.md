@@ -176,6 +176,3 @@ d'installation : `electron-winstaller` (dépendance d'electron-builder). La CI u
 **Statut E0 : réalisé, testé (CI + PC du développeur) ; à fusionner après relecture de la PR.**
 Points ouverts hors E0 : actions GitHub à passer en version Node 24 et à épingler par SHA (avertissement
 de dépréciation de Node 20 sur `checkout@v4` / `setup-node@v4`) ; signature Authenticode (D5).
-
-Ancienne note (avant le versionnement) : versionner `package-lock.json` produit par la CI puis passer
-à `npm ci` ; essai de l'exe dans le bac à sable (démarrage sous Smart App Control / Defender, durée).
