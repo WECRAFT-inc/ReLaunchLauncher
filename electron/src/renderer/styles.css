@@ -78,7 +78,10 @@ button { font: inherit; color: inherit; }
 }
 
 /* ---------------------------------------------------------------- barre latérale */
+/* La barre latérale passe au-dessus du contenu : sans cela, les plaques de verre de la page (qui
+   créent leur propre couche d'affichage) recouvrent les infobulles des icônes. */
 .sidebar {
+  position: relative; z-index: 5;
   display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 14px 0; border-radius: 22px;
   background: rgba(10, 12, 18, 0.55);
@@ -113,7 +116,7 @@ button { font: inherit; color: inherit; }
 .nav-btn:hover::after, .nav-btn:focus-visible::after { opacity: 1; }
 
 /* ---------------------------------------------------------------- contenu */
-.content { min-width: 0; overflow-y: auto; border-radius: 22px; }
+.content { position: relative; z-index: 1; min-width: 0; overflow-y: auto; border-radius: 22px; }
 .page { min-height: 100%; padding: 28px 40px 40px; }
 
 /* Accueil : contenu posé en bas, comme sur la maquette */
