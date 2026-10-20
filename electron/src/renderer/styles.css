@@ -151,6 +151,16 @@ button { font: inherit; color: inherit; }
 .card p { margin: 0; color: var(--ink-soft); font-size: 13.5px; overflow-wrap: anywhere; }
 .mono { font-family: var(--f-mono); font-size: 12.5px; }
 
+/* Avertissement (fichiers de réglages mis de côté, réglages repris) */
+.notice {
+  position: absolute; top: 14px; left: 40px; right: 40px; z-index: 3;
+  padding: 14px 18px; display: flex; gap: 16px; align-items: flex-start;
+  border-color: rgba(251, 191, 36, 0.45);
+  background: linear-gradient(160deg, rgba(60, 44, 10, 0.92), rgba(30, 24, 12, 0.92));
+}
+.notice p { margin: 0; flex: 1; font-size: 14px; color: #fde68a; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .notice { left: 24px; right: 24px; } }
+
 /* Pages secondaires */
 .page-head h1 { margin: 0 0 4px; font-family: var(--f-display); font-weight: 700; font-size: 30px; }
 .page-head p { margin: 0 0 20px; color: var(--ink-soft); }

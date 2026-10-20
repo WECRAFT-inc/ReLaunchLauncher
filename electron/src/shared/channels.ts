@@ -3,6 +3,7 @@
 export const CHANNELS = {
   getInfo: "app:get-info",
   openLink: "link:open",
+  setTheme: "settings:set-theme",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];

@@ -34,6 +34,10 @@
     </nav>
 
     <main class="content">
+      <div class="notice glass" id="notice" role="alert" hidden>
+        <p id="notice-text"></p>
+        <button class="btn" type="button" id="notice-close">Compris</button>
+      </div>
       <!-- Accueil -->
       <section class="page" id="page-home" role="tabpanel" aria-label="Accueil">
         <div class="hero">
@@ -99,7 +103,7 @@
               <button type="button" role="radio" data-theme-key="aurore" aria-checked="false"><i class="sw sw-aurore"></i>Aurore</button>
               <button type="button" role="radio" data-theme-key="glace" aria-checked="false"><i class="sw sw-glace"></i>Glace</button>
             </div>
-            <p class="note" id="theme-note">Le thème choisi ici s'applique à cette session. Son enregistrement arrivera avec l'écriture des réglages (lot E1).</p>
+            <p class="note" id="theme-note" role="status">Le thème choisi est enregistré dans vos réglages WeCraft (partagés avec la version actuelle).</p>
           </section>
           <section class="panel glass">
             <h2>Diagnostic</h2>

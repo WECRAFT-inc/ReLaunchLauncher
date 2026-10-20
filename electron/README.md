@@ -6,14 +6,27 @@ version distribuée tant que la migration n'est pas terminée et validée.
 Références : `docs/AUDIT_MIGRATION_ELECTRON.md` (audit, plan des lots E0 à E9, décisions) et
 `docs/SUIVI_MISE_A_JOUR.md` (avancement).
 
-## Lot E0 : ce que fait cette version
+## Ce que fait cette version (lots E0 et E1)
 
 - Ouvre la fenêtre WeCraft (accueil, instances, modpacks, paramètres) dans le style de la maquette
   ReLaunch × WeCraft.
-- Affiche des informations **réelles** : version, chemin des réglages WeCraft et leur présence, thème
-  enregistré par la version Python.
-- **N'écrit rien** dans les données de l'utilisateur et ne lance rien. Le bouton « Jouer » est désactivé
-  et l'interface dit pourquoi.
+- Affiche des informations **réelles** : version, chemin des réglages WeCraft et leur présence.
+- **Réglages (E1)** : lit et écrit `launcher_config.json` avec les mêmes garde-fous que la version Python
+  (`src/main/storage/jsonStore.ts`) :
+  - fichier invalide -> copie `<nom>.invalide-<date>` conservée (une seule par contenu, copies Python
+    reconnues), signalée à l'utilisateur, original jamais supprimé ;
+  - fichier impossible à lire (verrou, droits) -> jamais réécrit ;
+  - écriture atomique (temporaire + remplacement), 10 essais si un antivirus bloque le fichier ;
+  - seule la clé modifiée change ; les autres réglages, même inconnus, sont conservés ;
+  - reprise par copie des réglages d'anciens dossiers (`mon_launcher`, ancien calcul de chemin).
+- Le thème choisi est enregistré (clé `theme`, la même que la version Python).
+- Ne lance encore rien : le bouton « Jouer » est désactivé et l'interface dit pourquoi.
+
+## Essai en bac à sable (Windows)
+
+`tools\essai_bac_a_sable.bat` lance WeCraft installé avec un dossier de réglages séparé, à côté du script
+(`bac_a_sable\AppData\Roaming\.wecraft`). Vos vrais réglages ne sont pas touchés. Options : `/copier`
+(copie vos vrais réglages dans le bac à sable) et `/casse` (fichier abîmé pour vérifier la mise de côté).
 
 ## Commandes
 

@@ -19,7 +19,7 @@ export interface AppInfo {
   arch: string;
   /** Dossier des réglages WeCraft partagé avec la version Python (%APPDATA%\.wecraft). */
   dataDir: string;
-  /** Le dossier existe-t-il ? (lecture seule : E0 n'y écrit rien) */
+  /** Le dossier existe-t-il ? */
   dataDirExists: boolean;
   /** Thème lu dans launcher_config.json, s'il est lisible et connu ; sinon null. */
   savedTheme: ThemeKey | null;
@@ -27,11 +27,30 @@ export interface AppInfo {
   startupMs: number;
   /** Lancé depuis l'exe portable (décompressé à chaque démarrage) ? */
   portable: boolean;
+  /** Fichiers de réglages illisibles mis de côté depuis la dernière demande (à signaler une fois). */
+  invalidFiles: InvalidFileNotice[];
+  /** Réglages repris d'un ancien dossier au démarrage (copie). */
+  migrated: string[];
 }
+
+/** Fichier de réglages invalide : conservé à part (copie), jamais effacé. Noms seuls, dans dataDir. */
+export interface InvalidFileNotice {
+  name: string;
+  /** Nom de la copie mise de côté ; null si la copie a échoué. */
+  copyName: string | null;
+}
+
+/** Résultat d'un enregistrement de réglage. */
+export type SettingResult =
+  | { ok: true }
+  | { ok: false; reason: "invalid" | "unreadable" | "write-failed" };
 
 export interface WeCraftApi {
   app: {
     getInfo(): Promise<AppInfo>;
+  };
+  settings: {
+    setTheme(theme: ThemeKey): Promise<SettingResult>;
   };
   links: {
     open(id: ExternalLinkId): Promise<boolean>;

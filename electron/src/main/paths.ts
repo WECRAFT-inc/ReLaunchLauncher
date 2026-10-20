@@ -50,3 +50,34 @@ export function wecraftDataDir(e: PathEnv): string {
 export function configFile(e: PathEnv): string {
   return lib(e.platform).join(wecraftDataDir(e), "launcher_config.json");
 }
+
+/** Nom de dossier comparable (Windows ne distingue pas majuscules et minuscules). */
+function sameDir(a: string, b: string, platform: NodeJS.Platform): boolean {
+  const p = lib(platform);
+  const na = p.normalize(a);
+  const nb = p.normalize(b);
+  return platform === "win32" ? na.toLowerCase() === nb.toLowerCase() : na === nb;
+}
+
+/**
+ * Anciens dossiers d'où reprendre des réglages, dans l'ordre, comme _BUGGY_DIRS + [_OLD_DIR] en Python :
+ * - avant la 1.2.1, le chemin était calculé en remplaçant TOUTES les occurrences de « minecraft »
+ *   (bug S8 si le nom d'utilisateur en contient) ;
+ * - le launcher s'appelait autrefois « mon_launcher ».
+ */
+export function legacyDataDirs(e: PathEnv): string[] {
+  const mc = minecraftDir(e);
+  const data = wecraftDataDir(e);
+  const old = siblingDir(mc, "mon_launcher", e.platform);
+  const out: string[] = [];
+  for (const candidate of [mc.split("minecraft").join("wecraft"), mc.split("minecraft").join("mon_launcher")]) {
+    if (sameDir(candidate, data, e.platform) || sameDir(candidate, old, e.platform)) continue;
+    if (out.some((d) => sameDir(d, candidate, e.platform))) continue;
+    out.push(candidate);
+  }
+  out.push(old);
+  return out;
+}
+
+/** Fichiers de réglages repris depuis les anciens dossiers (jamais déplacés : copiés). */
+export const MIGRATED_FILES = ["launcher_config.json", "instances_meta.json"] as const;

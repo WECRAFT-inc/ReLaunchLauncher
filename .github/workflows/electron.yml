@@ -92,6 +92,28 @@ jobs:
           Stop-WeCraft
           Write-Host "Application installée : démarrée, toujours ouverte après 12 s."
 
+          # 2b. Lot E1 : réglages abîmés -> copie mise de côté au démarrage, original jamais modifié.
+          #     APPDATA est redirigé pour l'appli seulement (bac à sable), puis rétabli.
+          $realAppData = $env:APPDATA
+          $bac = Join-Path $env:RUNNER_TEMP "bac-e1\AppData\Roaming"
+          $bacCfgDir = Join-Path $bac ".wecraft"
+          New-Item -ItemType Directory -Force $bacCfgDir | Out-Null
+          $bacCfg = Join-Path $bacCfgDir "launcher_config.json"
+          $broken = '{"theme": "glace", "fichier": "abime volontairement"'
+          [IO.File]::WriteAllText($bacCfg, $broken)
+          $env:APPDATA = $bac
+          $app = Start-Process $exe -PassThru
+          $env:APPDATA = $realAppData
+          Start-Sleep 12
+          if ($app.HasExited) { Fail "Réglages abîmés : l'application s'est arrêtée (code $($app.ExitCode))" }
+          Stop-WeCraft
+          if ([IO.File]::ReadAllText($bacCfg) -ne $broken) { Fail "Réglages abîmés : l'original a été modifié" }
+          $copies = @(Get-ChildItem $bacCfgDir -Filter "launcher_config.json.invalide-*")
+          if ($copies.Count -ne 1) { Fail "Réglages abîmés : $($copies.Count) copie(s) au lieu d'une" }
+          if ([IO.File]::ReadAllText($copies[0].FullName) -ne $broken) { Fail "Réglages abîmés : la copie diffère de l'original" }
+          if ((Get-FileHash $cfg).Hash -ne $cfgHash) { Fail "Le vrai launcher_config.json a été touché pendant l'essai en bac à sable" }
+          Write-Host "Réglages abîmés : copie $($copies[0].Name) créée, original intact, vrais réglages non touchés."
+
           # 3. Relance de l'installeur sans option (cas d'un ancien raccourci vers WeCraft.exe) :
           #    il doit lancer l'appli déjà installée, vite, sans réinstaller.
           $sw = [Diagnostics.Stopwatch]::StartNew()

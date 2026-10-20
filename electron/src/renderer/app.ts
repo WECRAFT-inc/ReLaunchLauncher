@@ -1,6 +1,6 @@
 // Interface WeCraft (processus de rendu). Aucun accès au système : uniquement window.wecraft.
 // Règle du prompt maître (§10.4) : aucune information fictive, aucun état de réussite non vérifié.
-import type { AppInfo, ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
+import type { AppInfo, ExternalLinkId, SettingResult, ThemeKey, WeCraftApi } from "../shared/api";
 
 declare global {
   interface Window {
@@ -60,13 +60,55 @@ function applyTheme(key: ThemeKey): void {
   });
 }
 
+type FailureReason = Extract<SettingResult, { ok: false }>["reason"];
+
+const THEME_MESSAGES: Record<FailureReason, string> = {
+  invalid: "Thème inconnu : rien n'a été enregistré.",
+  unreadable:
+    "Thème appliqué pour cette session seulement : le fichier de réglages est utilisé par un autre programme ou inaccessible. Il n'a pas été modifié.",
+  "write-failed": "Thème appliqué pour cette session seulement : l'enregistrement a échoué. Réessayez plus tard.",
+};
+
 function setupThemes(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-theme-key]").forEach((b) => {
-    b.addEventListener("click", () => {
+    b.addEventListener("click", async () => {
       const key = b.dataset["themeKey"];
-      if (isThemeKey(key)) applyTheme(key);
+      if (!isThemeKey(key)) return;
+      applyTheme(key);
+      const note = el("theme-note");
+      note.textContent = "Enregistrement…";
+      let result: SettingResult;
+      try {
+        result = await window.wecraft.settings.setTheme(key);
+      } catch {
+        result = { ok: false, reason: "write-failed" };
+      }
+      if (document.documentElement.dataset["theme"] !== key) return; // un autre thème a été choisi entre-temps
+      note.textContent = result.ok ? "Thème enregistré dans vos réglages WeCraft." : THEME_MESSAGES[result.reason];
     });
   });
+}
+
+// ---------------------------------------------------------------- avertissements
+function showNotices(info: AppInfo): void {
+  const lines: string[] = [];
+  if (info.invalidFiles.length > 0) {
+    lines.push(
+      "Certains fichiers de réglages étaient illisibles. Ils n'ont pas été effacés : une copie a été conservée " +
+        "dans le dossier des réglages, et des valeurs par défaut sont utilisées.",
+    );
+    for (const f of info.invalidFiles) {
+      lines.push(`• ${f.name} → ${f.copyName ? `copie : ${f.copyName}` : "copie impossible (fichier laissé tel quel)"}`);
+    }
+  }
+  if (info.migrated.length > 0) {
+    lines.push(`Réglages repris d'un ancien dossier WeCraft (copie) : ${info.migrated.join(", ")}.`);
+  }
+  if (lines.length === 0) return;
+  const box = el("notice");
+  const text = el("notice-text");
+  text.replaceChildren(...lines.flatMap((l, i) => (i === 0 ? [l] : [document.createElement("br"), l])));
+  box.hidden = false;
 }
 
 // ---------------------------------------------------------------- liens externes
@@ -84,7 +126,7 @@ function renderInfo(info: AppInfo): void {
   const dot = el("status-dot");
   dot.className = "dot " + (info.dataDirExists ? "ok" : "warn");
   el("status-text").textContent = info.dataDirExists
-    ? "Réglages WeCraft trouvés (lecture seule)"
+    ? "Réglages WeCraft trouvés"
     : "Aucun réglage WeCraft trouvé sur ce PC";
 
   const data = el("card-data");
@@ -98,9 +140,9 @@ function renderInfo(info: AppInfo): void {
 
   if (info.savedTheme) {
     applyTheme(info.savedTheme);
-    el("theme-note").textContent =
-      "Thème repris de vos réglages WeCraft. Un changement ici s'applique à cette session ; son enregistrement arrivera au lot E1.";
+    el("theme-note").textContent = "Thème repris de vos réglages WeCraft.";
   }
+  showNotices(info);
 
   const rows: Array<[string, string]> = [
     ["WeCraft", info.version],
@@ -134,6 +176,9 @@ async function main(): Promise<void> {
   setupNavigation();
   setupThemes();
   setupLinks();
+  el("notice-close").addEventListener("click", () => {
+    el("notice").hidden = true;
+  });
   try {
     renderInfo(await window.wecraft.app.getInfo());
   } catch {

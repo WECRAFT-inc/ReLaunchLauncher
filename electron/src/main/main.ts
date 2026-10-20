@@ -1,15 +1,17 @@
 // Processus principal de WeCraft (Electron). Seul processus autorisé à toucher au disque, au réseau
-// et aux autres programmes. Lot E0 : fenêtre sécurisée + lecture seule des informations d'accueil.
-// Aucune donnée utilisateur n'est modifiée par cette version.
+// et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
+// Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
 import { app, BrowserWindow, ipcMain, Menu, protocol, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AppInfo } from "../shared/api";
+import type { AppInfo, InvalidFileNotice, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
-import { readSavedTheme } from "./config";
-import { configFile, wecraftDataDir, type PathEnv } from "./paths";
+import { Settings } from "./config";
+import { configFile, legacyDataDirs, wecraftDataDir, type PathEnv } from "./paths";
+import { JsonStore } from "./storage/jsonStore";
+import { migrateOldSettings } from "./storage/migrate";
 import {
   APP_ENTRY,
   APP_SCHEME,
@@ -28,6 +30,9 @@ const PRELOAD = path.join(__dirname, "..", "preload", "preload.js");
 let mainWindow: BrowserWindow | null = null;
 /** Mesuré une seule fois, à la première demande de l'interface (diagnostic de lenteur au démarrage). */
 let startupMs: number | undefined;
+const store = new JsonStore();
+let settings: Settings | null = null;
+let migrated: string[] = [];
 
 // ---------------------------------------------------------------- avant « ready »
 app.enableSandbox(); // tous les processus de rendu en bac à sable, sans exception
@@ -107,6 +112,13 @@ function lockDownSession(): void {
 }
 
 async function start(): Promise<void> {
+  const env = pathEnv();
+  try {
+    migrated = (await migrateOldSettings(wecraftDataDir(env), legacyDataDirs(env))).map((m) => path.basename(m.file));
+  } catch {
+    migrated = []; // une reprise impossible ne doit jamais empêcher WeCraft de démarrer
+  }
+  settings = new Settings(store, configFile(env));
   lockDownSession();
   protocol.handle(APP_SCHEME, serveAsset);
   registerIpc();
@@ -160,10 +172,20 @@ function registerIpc(): void {
       arch: process.arch,
       dataDir,
       dataDirExists,
-      savedTheme: await readSavedTheme(configFile(env)),
+      savedTheme: settings ? await settings.theme() : null,
       startupMs: startupMs ??= Math.round(process.uptime() * 1000),
       portable: Boolean(process.env["PORTABLE_EXECUTABLE_FILE"]),
+      invalidFiles: store.takeInvalidFiles().map(
+        (r): InvalidFileNotice => ({ name: path.basename(r.file), copyName: r.copy ? path.basename(r.copy) : null }),
+      ),
+      migrated: migrated.splice(0),
     };
+  });
+
+  ipcMain.handle(CHANNELS.setTheme, async (event, theme: unknown): Promise<SettingResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!settings) return { ok: false, reason: "write-failed" };
+    return settings.setTheme(theme); // valeur vérifiée dans setTheme (liste fermée de thèmes)
   });
 
   ipcMain.handle(CHANNELS.openLink, async (event, id: unknown): Promise<boolean> => {
