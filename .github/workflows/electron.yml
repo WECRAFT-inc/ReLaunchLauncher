@@ -45,9 +45,9 @@ jobs:
       - name: Empreinte SHA-256
         shell: pwsh
         run: |
-          $h = (Get-FileHash release/WeCraft-Setup.exe -Algorithm SHA256).Hash.ToLower()
-          "$h  WeCraft-Setup.exe" | Out-File release/WeCraft-Setup.exe.sha256 -Encoding ascii
-          Get-Item release/WeCraft-Setup.exe | Select-Object Name, Length | Format-Table
+          $h = (Get-FileHash release/ReLaunch-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  ReLaunch-Setup.exe" | Out-File release/ReLaunch-Setup.exe.sha256 -Encoding ascii
+          Get-Item release/ReLaunch-Setup.exe | Select-Object Name, Length | Format-Table
 
       # Scénario complet sur la machine de la CI (jetable) : installation, raccourcis, démarrage,
       # relance de l'installeur comme le ferait un ancien raccourci, désinstallation.
@@ -57,9 +57,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           function Fail($msg) { Write-Error $msg; exit 1 }
-          function Stop-WeCraft { Get-Process -Name WeCraft -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 2 }
+          function Stop-ReLaunch { Get-Process -Name ReLaunch -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 2 }
 
-          $setup = (Resolve-Path release/WeCraft-Setup.exe).Path
+          $setup = (Resolve-Path release/ReLaunch-Setup.exe).Path
           $cfgDir = Join-Path $env:APPDATA ".wecraft"
           New-Item -ItemType Directory -Force $cfgDir | Out-Null
           $cfg = Join-Path $cfgDir "launcher_config.json"
@@ -70,26 +70,26 @@ jobs:
           $p = Start-Process $setup -ArgumentList "/S" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Fail "Installation : code $($p.ExitCode)" }
           $entry = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
-            Where-Object { $_.DisplayName -like "WeCraft*" } | Select-Object -First 1
+            Where-Object { $_.DisplayName -like "ReLaunch*" } | Select-Object -First 1
           if (-not $entry) { Fail "Aucune entrée de désinstallation trouvée (HKCU)" }
           $dir = $entry.InstallLocation
-          if (-not $dir) { $dir = Join-Path $env:LOCALAPPDATA "Programs\WeCraft" }
-          $exe = Join-Path $dir "WeCraft.exe"
-          if (-not (Test-Path $exe)) { Fail "WeCraft.exe absent de $dir" }
+          if (-not $dir) { $dir = Join-Path $env:LOCALAPPDATA "Programs\ReLaunch" }
+          $exe = Join-Path $dir "ReLaunch.exe"
+          if (-not (Test-Path $exe)) { Fail "ReLaunch.exe absent de $dir" }
           if (-not $dir.StartsWith($env:LOCALAPPDATA)) { Fail "Installé hors du profil utilisateur : $dir" }
-          $desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "WeCraft.lnk"
-          $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\WeCraft.lnk"
+          $desktop = Join-Path ([Environment]::GetFolderPath("Desktop")) "ReLaunch.lnk"
+          $menu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\ReLaunch.lnk"
           if (-not (Test-Path $desktop)) { Fail "Raccourci Bureau absent" }
           if (-not (Test-Path $menu)) { Fail "Raccourci menu Démarrer absent" }
           $stamp = (Get-Item $exe).LastWriteTimeUtc
           Write-Host "Installé : $dir (version $($entry.DisplayVersion)) ; raccourcis Bureau et menu Démarrer présents."
 
           # 2. L'application installée démarre et reste ouverte
-          Stop-WeCraft
+          Stop-ReLaunch
           $app = Start-Process $exe -PassThru
           Start-Sleep 12
           if ($app.HasExited) { Fail "L'application installée s'est arrêtée (code $($app.ExitCode))" }
-          Stop-WeCraft
+          Stop-ReLaunch
           Write-Host "Application installée : démarrée, toujours ouverte après 12 s."
 
           # 2b. Lot E1 : réglages abîmés -> copie mise de côté au démarrage, original jamais modifié.
@@ -106,7 +106,7 @@ jobs:
           $env:APPDATA = $realAppData
           Start-Sleep 12
           if ($app.HasExited) { Fail "Réglages abîmés : l'application s'est arrêtée (code $($app.ExitCode))" }
-          Stop-WeCraft
+          Stop-ReLaunch
           if ([IO.File]::ReadAllText($bacCfg) -ne $broken) { Fail "Réglages abîmés : l'original a été modifié" }
           $copies = @(Get-ChildItem $bacCfgDir -Filter "launcher_config.json.invalide-*")
           if ($copies.Count -ne 1) { Fail "Réglages abîmés : $($copies.Count) copie(s) au lieu d'une" }
@@ -121,11 +121,11 @@ jobs:
           if (-not $p.WaitForExit(30000)) { Fail "L'installeur relancé ne s'est pas arrêté en 30 s" }
           $sw.Stop()
           Start-Sleep 6
-          $running = Get-Process -Name WeCraft -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
+          $running = Get-Process -Name ReLaunch -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
           if (-not $running) { Fail "L'installeur relancé n'a pas lancé l'application installée" }
           if ((Get-Item $exe).LastWriteTimeUtc -ne $stamp) { Fail "L'installeur relancé a réinstallé l'application" }
           Write-Host "Installeur relancé : appli lancée sans réinstallation, installeur fermé en $([math]::Round($sw.Elapsed.TotalSeconds, 1)) s."
-          Stop-WeCraft
+          Stop-ReLaunch
 
           # 4. Désinstallation silencieuse : appli et raccourcis retirés, réglages conservés
           $m = [regex]::Match($entry.UninstallString, '^"([^"]+)"')
@@ -133,7 +133,7 @@ jobs:
           Start-Process $m.Groups[1].Value -ArgumentList "/S", "/currentuser" -Wait
           $deadline = (Get-Date).AddSeconds(90)
           while ((Test-Path $exe) -and (Get-Date) -lt $deadline) { Start-Sleep 2 }
-          if (Test-Path $exe) { Fail "Désinstallation : WeCraft.exe toujours présent" }
+          if (Test-Path $exe) { Fail "Désinstallation : ReLaunch.exe toujours présent" }
           if ((Test-Path $desktop) -or (Test-Path $menu)) { Fail "Désinstallation : raccourci restant" }
 
           # 5. Témoin : réglages WeCraft intacts après installation, démarrages et désinstallation
@@ -143,8 +143,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wecraft-electron-installeur
+          name: relaunch-installeur
           retention-days: 14
           path: |
-            electron/release/WeCraft-Setup.exe
-            electron/release/WeCraft-Setup.exe.sha256
+            electron/release/ReLaunch-Setup.exe
+            electron/release/ReLaunch-Setup.exe.sha256

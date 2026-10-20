@@ -1,11 +1,11 @@
 {
-  "name": "wecraft",
-  "productName": "WeCraft",
-  "version": "0.3.0",
-  "description": "WeCraft - lanceur d'instances Minecraft (version Electron, en cours de migration)",
+  "name": "relaunch",
+  "productName": "ReLaunch",
+  "version": "0.4.0",
+  "description": "ReLaunch - launcher Minecraft (version Electron, en cours de migration depuis WeCraft)",
   "private": true,
   "main": "dist/src/main/main.js",
-  "author": "WeCraft",
+  "author": "ReLaunch",
   "license": "UNLICENSED",
   "scripts": {
     "clean": "node scripts/clean.mjs",
@@ -22,8 +22,8 @@
     "typescript": "6.0.3"
   },
   "build": {
-    "appId": "fr.wecraft.launcher",
-    "productName": "WeCraft",
+    "appId": "fr.relaunch.launcher",
+    "productName": "ReLaunch",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -63,10 +63,10 @@
       "allowElevation": false,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "WeCraft",
+      "shortcutName": "ReLaunch",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "WeCraft-Setup.exe",
+      "artifactName": "ReLaunch-Setup.exe",
       "include": "build/installer.nsh"
     }
   }

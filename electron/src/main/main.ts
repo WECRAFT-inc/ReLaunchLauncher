@@ -1,4 +1,4 @@
-// Processus principal de WeCraft (Electron). Seul processus autorisé à toucher au disque, au réseau
+// Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
 import { app, BrowserWindow, ipcMain, Menu, protocol, session, shell } from "electron";
@@ -36,13 +36,13 @@ let migrated: string[] = [];
 
 // ---------------------------------------------------------------- avant « ready »
 app.enableSandbox(); // tous les processus de rendu en bac à sable, sans exception
-app.setAppUserModelId("WeCraft.Launcher"); // même identifiant que la version Python (barre des tâches)
+app.setAppUserModelId("ReLaunch.Launcher");
 
 protocol.registerSchemesAsPrivileged([
   { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: false } },
 ]);
 
-// Un seul WeCraft à la fois : un second lancement remet simplement la fenêtre existante au premier plan.
+// Un seul ReLaunch à la fois : un second lancement remet simplement la fenêtre existante au premier plan.
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -128,7 +128,7 @@ async function start(): Promise<void> {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    title: "WeCraft",
+    title: "ReLaunch",
     width: 1180,
     height: 760,
     minWidth: 900,

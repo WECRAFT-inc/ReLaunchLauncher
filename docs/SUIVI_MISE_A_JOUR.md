@@ -221,3 +221,25 @@ bouton Jouer = message, aucune barre de progression.
 À trancher : le prototype est aux couleurs **ReLaunch** (titre, comptes ReLink, amis, lives, shop, staff) ;
 ces zones restent des maquettes tant que D3 (nom) et D6 (comptes, connexion Microsoft, hors §6 du prompt
 maître) ne sont pas décidés.
+
+### Interface vidée et nom ReLaunch (même branche, version 0.4.0)
+
+Décisions du développeur (20/10/2026) : **D3 = ReLaunch**, **D4 = React**, retirer toutes les données
+fictives, ajouter le réglage de taille des barres latérales.
+
+- Nom : appli, fenêtre, exe, raccourcis et installeur `ReLaunch` (`ReLaunch-Setup.exe`,
+  `%LOCALAPPDATA%\Programs\ReLaunch`, appId `fr.relaunch.launcher`). Les réglages restent dans
+  `%APPDATA%\.wecraft` (inchangé). Comme l'appId change, une ancienne installation d'essai « WeCraft »
+  ne sera pas remplacée : la désinstaller à la main.
+- Données fictives retirées : instances, serveurs, téléchargements, amis, demandes, lives, actualités,
+  captures, signalements, notifications, compte, épingles, compte à rebours. Chaque page affiche
+  « Pas encore disponible » ; l'accueil indique qu'aucune instance n'est détectée ; les actions non
+  branchées affichent un message au lieu d'un faux succès (§10.4). La marque « Aperçu » n'a plus lieu d'être.
+- Réglages > Navigation : « Taille des barres » (Très fine 60 px → Très grande 116 px), enregistrée avec
+  les autres réglages de navigation ; les anciennes épingles sont nettoyées.
+- `scripts/import-prototype.py` supprimé : l'interface est maintenant modifiée directement.
+
+Vérifié localement : 43 tests ; toutes les pages rendues dans Chromium avec la CSP sans erreur de console ;
+plus aucun texte fictif ; tailles xs et xl appliquées.
+
+Suite : portage de l'interface en React (D4), puis lot E2 (détection des instances).

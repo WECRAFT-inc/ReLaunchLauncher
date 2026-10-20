@@ -1,4 +1,4 @@
-; WeCraft - personnalisation de l'installeur (electron-builder, NSIS).
+; ReLaunch - personnalisation de l'installeur (electron-builder, NSIS).
 ;
 ; Pendant la transition, la version Python installe CET installeur à la place de son WeCraft.exe
 ; (mise à jour signée Ed25519). Les raccourcis et épingles existants pointent donc vers l'installeur.

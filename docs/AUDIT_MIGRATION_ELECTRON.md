@@ -176,8 +176,8 @@ E0, E1 et l'audit de E3 peuvent avancer en parallèle. Rien n'est publié avant 
 |---|---|---|
 | D1 | Stratégie de transition des mises à jour (A exe portable / B installeur) | ~~A~~ → **Décidé : installeur complet** (20/10/2026, voir §4.3) |
 | D2 | Branche `ui/relaunch-style` : fusionner telle quelle (les joueurs en profitent pendant la migration) ou geler l'interface Tkinter | Fusionner après l'essai Windows prévu, puis geler Tkinter |
-| D3 | Nom et identité : WeCraft ou ReLaunch pour l'appli Electron ? (impacte `appId`, dossier de données, nom de l'exe — l'updater cherche « un » .exe, donc renommer est possible mais le chemin `%APPDATA%\.wecraft` doit rester) | Garder WeCraft tant que la fusion ReLaunch n'est pas décidée |
-| D4 | Framework d'interface : TS natif ou React | TS natif au départ |
+| D3 | Nom et identité : WeCraft ou ReLaunch pour l'appli Electron ? (impacte `appId`, dossier de données, nom de l'exe — l'updater cherche « un » .exe, donc renommer est possible mais le chemin `%APPDATA%\.wecraft` doit rester) | **Décidé : ReLaunch** (20/10/2026). Nom de l'appli, de l'exe et de l'installeur ; `%APPDATA%\.wecraft` reste le dossier des réglages |
+| D4 | Framework d'interface : TS natif ou React | **Décidé : React** (20/10/2026), portage de l'interface du prototype en prochaine étape |
 | D5 | Certificat Authenticode | Optionnel, à budgéter |
 | D6 | Périmètre ReLaunch (comptes, auth Microsoft, skins) | Hors périmètre de cette migration |
 | D7 | Rôle du dossier `Wecraft-test-new` | **Décidé : bac à sable de test** (19/10/2026) |

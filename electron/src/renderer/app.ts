@@ -1,4 +1,4 @@
-// Pont entre l'interface (copiée du prototype ReLaunch × WeCraft, prototype.js) et le processus
+// Pont entre l'interface (reprise du prototype ReLaunch × WeCraft, prototype.js) et le processus
 // principal. Aucun accès au système ici : uniquement window.wecraft.
 // - Thème : celui de launcher_config.json est appliqué au démarrage ; un thème choisi dans
 //   Réglages > Apparence y est enregistré (les 4 thèmes de base ; la couleur personnalisée reste locale).
@@ -85,6 +85,7 @@ async function main(): Promise<void> {
     toast("Informations de l'application indisponibles.");
     return;
   }
+  document.dispatchEvent(new CustomEvent("relaunch:info", { detail: { version: info.version } }));
   if (info.savedTheme) {
     applyingSaved = true; // le thème vient des réglages : inutile de le réécrire
     document.dispatchEvent(new CustomEvent("wecraft:apply-skin", { detail: info.savedTheme }));

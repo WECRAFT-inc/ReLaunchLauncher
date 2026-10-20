@@ -56,46 +56,15 @@
 
   /* ---------- Données d'exemple ---------- */
   var DAY=864e5, NOW=Date.now();
-  var INST=[
-    {id:"i1",k:"wc",n:"Survie entre potes",v:"1.20.1",l:"Fabric",lv:"0.16.5",m:84,r:6,s:"Prism",fav:true,last:NOW-2*36e5,created:NOW-40*DAY,c:["#7c2d12","#f97316"]},
-    {id:"i2",k:"wc",n:"Create Above & Beyond",v:"1.16.5",l:"Forge",lv:"36.2",m:212,r:8,s:"CurseForge",fav:true,last:NOW-3*DAY,created:NOW-90*DAY,c:["#1e3a8a","#38bdf8"]},
-    {id:"i3",k:"wc",n:"Vanilla+ léger",v:"1.21.1",l:"Fabric",lv:"0.16.9",m:31,r:4,s:"WeCraft",fav:true,last:NOW-6*DAY,created:NOW-4*DAY,c:["#14532d","#4ade80"]},
-    {id:"i4",k:"wc",n:"Nordique",v:"1.20.1",l:"NeoForge",lv:"47.1",m:146,r:8,s:"Modrinth",fav:false,last:NOW-12*DAY,created:NOW-12*DAY,c:["#164e63","#67e8f9"]},
-    {id:"i5",k:"wc",n:"Test shaders",v:"1.21.1",l:"Quilt",lv:"0.26",m:12,r:4,s:"WeCraft",fav:false,last:NOW-20*DAY,created:NOW-2*DAY,c:["#3f3f46","#a1a1aa"]},
-    {id:"i6",k:"wc",n:"Tech hardcore",v:"1.19.2",l:"Forge",lv:"43.3",m:263,r:10,s:"CurseForge",fav:false,last:NOW-30*DAY,created:NOW-120*DAY,c:["#7f1d1d","#fb7185"]}
-  ];
-  var SRV=[
-    {id:"s1",k:"rl",n:"Les Terres Brûlées",d:"Event RE · Saison 3",v:"1.20.1",p:0,max:500,status:"Ouvre samedi 21h",fav:true,last:NOW-26*36e5,c:["#7c2d12","#fde68a"]},
-    {id:"s2",k:"rl",n:"Lobby RE",d:"Hub des serveurs ReLaunch",v:"1.21.1",p:214,max:1000,status:"En ligne",fav:false,last:NOW-5*DAY,c:["#312e81","#a78bfa"]},
-    {id:"s3",k:"rl",n:"Skyblock RE",d:"Skyblock coopératif",v:"1.20.1",p:87,max:300,status:"En ligne",fav:true,last:NOW-9*DAY,c:["#0c4a6e","#7dd3fc"]},
-    {id:"s4",k:"rl",n:"UHC du vendredi",d:"Ultra Hardcore en équipes",v:"1.21.1",p:0,max:120,status:"Vendredi 20h",fav:false,last:0,c:["#7f1d1d","#fca5a5"]}
-  ];
+  /* [ReLaunch] Données d'exemple du prototype retirées (20/10/2026) : listes vides jusqu'à ce que les
+     vraies données soient branchées (instances : lot E2). */
+  var INST=[];
+  var SRV=[];
   function all(){return INST.concat(SRV)}
-  var DL=[
-    {id:'d1',n:'Survie FR+',sub:'Modpack · 80 mods',size:412,done:.62,speed:8.4,st:'active',c:['#14532d','#4ade80']},
-    {id:'d2',n:'Minecraft 1.21.4',sub:'Client, bibliothèques et ressources',size:640,done:.31,speed:5.1,st:'active',c:['#334155','#94a3b8']},
-    {id:'d3',n:'Complementary Shaders',sub:'Shader · Iris',size:12,done:0,speed:0,st:'queued',c:['#1e1b4b','#818cf8']},
-    {id:'d4',n:'Modpack d\'event Terres Brûlées',sub:'Mise à jour · 14 fichiers',size:86,done:1,st:'done',c:['#7c2d12','#fb923c']},
-    {id:'d5',n:'Sodium 0.6.3',sub:'Mod · Vanilla+ léger',size:1.2,done:1,st:'done',c:['#334155','#94a3b8']}
-  ];
-  var FRIENDS=[
-    {n:'Nking',on:'game',st:'Sur Lobby RE',join:'s2',sk:6},
-    {n:'Mina',on:'game',st:'Joue à Survie entre potes',join:'i1',sk:1},
-    {n:'Atelier Pixel',on:'live',st:'En live · Terres Brûlées',sk:2},
-    {n:'Kaori',on:'online',st:'En ligne · dans les menus',sk:3},
-    {n:'Blocs & Co',on:'away',st:'Absent',sk:4},
-    {n:'Le Mineur Fou',on:'off',st:'Vu il y a 2 h',sk:5},
-    {n:'Zed',on:'off',st:'Vu hier',sk:7},
-    {n:'Lunaria',on:'off',st:'Vu il y a 4 jours',sk:0}
-  ];
-  var REQS=[{n:'Pixou_42',st:'3 amis en commun',sk:9},{n:'TheoBuild',st:'A joué aux Terres Brûlées',sk:8}];
-  var LIVES=[
-    {id:'l1',n:'Atelier Pixel',t:'Visite de la carte des Terres Brûlées avant l\'ouverture',v:2341,tag:'Event RE',pf:'Twitch',sk:2,sc:['#f97316','#fde68a','#fbbf24','#7c2d12','#431407','70%'],srv:'s1'},
-    {id:'l2',n:'Kaori',t:'Speedrun 1.21 any%, objectif sous 15 min',v:1530,tag:'Partenaire',pf:'Twitch',sk:3,sc:['#0f172a','#4c1d95','#a5f3fc','#1e293b','#0f172a','25%']},
-    {id:'l3',n:'Mina Craft',t:'Survie détente avec la communauté',v:812,tag:'Partenaire',pf:'YouTube',sk:1,sc:['#7dd3fc','#e0f2fe','#fef08a','#4ade80','#15803d','40%']},
-    {id:'l4',n:'ReLaunch',t:'Annonce du tournoi Skyblock et des récompenses',v:640,tag:'Event RE',pf:'Twitch',sk:8,sc:['#0ea5e9','#e0f2fe','#ffffff','#22c55e','#166534','60%'],srv:'s3'},
-    {id:'l5',n:'Nking',t:'Build battle d\'entraînement, venez jouer',v:203,tag:'Ami',pf:'Twitch',sk:6,sc:['#6366f1','#c7d2fe','#fef9c3','#a3a3a3','#525252','50%'],srv:'s2'}
-  ];
+  var DL=[];
+  var FRIENDS=[];
+  var REQS=[];
+  var LIVES=[];
   function byId(id){return all().find(function(x){return x.id===id})}
   var SC={WeCraft:"var(--acc)",CurseForge:"#f16436",Prism:"#5eead4",Modrinth:"#1bd96a"};
   function ago(t){if(!t)return 'jamais';var d=NOW-t;if(d<36e5)return 'il y a quelques minutes';if(d<DAY)return 'il y a '+Math.round(d/36e5)+' h';var j=Math.round(d/DAY);return j===1?'hier':'il y a '+j+' jours'}
@@ -105,7 +74,7 @@
   /* ---------- État ---------- */
   var S={fold:{orga:true,pins:true},newsSel:'n1',newsF:'Tout',drawer:null,liveF:'Tous',liveSel:'l1',view:'home',sel:'i1',wcSrc:'all',wcQ:'',delId:null,rlTab:'profil',skin:0,setTab:'nav',dTab:'modpacks',dQ:'',dSort:'pertinence',dPage:1,installed:{},shotF:'all',welTab:'Tout'};
   var NAVDEF={mode:'single',single:'left',h:'top',v:'left',junction:'logo',pinMode:'inline',dock:{side:'bottom',align:'center'},
-    pins:[{t:'i',id:'i1'},{t:'g',id:'gre',name:'Serveurs RE',items:['s1','s3']}],items:[
+    pins:[],items:[
     {id:'wecraft',on:true,bar:'h'},{id:'relaunch',on:true,bar:'h'},{id:'welive',on:true,bar:'h'},{id:'sep1',on:true,bar:'v'},
     {id:'discover',on:true,bar:'v'},{id:'create',on:true,bar:'v'},{id:'favorites',on:true,bar:'v'},{id:'shop',on:true,bar:'v'},{id:'sep2',on:true,bar:'v'},
     {id:'pins',on:true,bar:'v'},{id:'spacer',on:true,bar:'v'},
@@ -130,29 +99,15 @@
   var HOME=load('proto-home3',null)||{resume:true};
   /* Encarts d'actualité : contenu choisi par l'équipe, affichage réglé par le joueur */
   var CAR=load('proto-car',null)||{on:true,n:3,auto:true,speed:6}; CAR.on=true;
-  var NEWS=[
-    {id:'n1',body:'Les Terres Brûlées ouvrent samedi à 21h : une carte volcanique, de la survie RP sur trois mois et 500 places. Le modpack d\'event s\'installe automatiquement depuis ReLaunch.',cta:'Voir l\'event',t:'Ouverture des Terres Brûlées',d:'Samedi 24 oct. · 21h',tags:[['Event','#ea580c'],['Survie RP','#7c2d12']],sc:['#f97316','#fde68a','#fbbf24','#7c2d12','#431407','70%'],go:'relaunch',unread:true},
-    {id:'n2',body:'Découvre en vidéo les nouveaux biomes, les factions et les premières quêtes de la saison 3. Diffusée en avant-première par six partenaires.',cta:'Regarder',t:'Bande-annonce de la saison 3',d:'2 min 14',tags:[['Vidéo','#dc2626']],sc:['#1e1b4b','#7c3aed','#f0abfc','#3b0764','#1e1b4b','30%'],video:true,go:'live',unread:true},
-    {id:'n3',body:'Barre de navigation personnalisable, mode Liquid Glass, instances épinglées en groupes, Download Manager et panneau Amis. Mise à jour signée, installée au prochain démarrage.',cta:'Voir les réglages',t:'ReLaunch 2.0.1',d:'20 oct. · Notes de mise à jour',tags:[['Update','#16a34a'],['Launcher','#334155']],sc:['#065f46','#34d399','#ecfccb','#14532d','#052e16','55%'],go:'settings',unread:true},
-    {id:'n4',body:'CitéCraft, la ville en économie joueurs, devient serveur partenaire : accès direct depuis ReLaunch et événements communs dès novembre.',cta:'Découvrir le serveur',t:'CitéCraft rejoint ReLaunch',d:'15 oct. · Serveur partenaire',tags:[['Serveur','#0284c7'],['Partenaire','#7c3aed']],sc:['#0ea5e9','#e0f2fe','#ffffff','#a3a3a3','#525252','60%'],go:'discover'},
-    {id:'n5',body:'La cape Phénix passe à 400 crédits au lieu de 500 dans le shop ReLink, jusqu\'au 27 octobre.',cta:'Ouvrir le shop',t:'Cape Phénix à -20 %',d:'Jusqu\'au 27 oct.',tags:[['Shop','#ca8a04']],sc:['#7c2d12','#ea580c','#fde68a','#451a03','#1c0a02','40%'],go:'relink',rl:'shop'},
-    {id:'n6',body:'32 îles, équipes de 2, récompenses en crédits ReLink pour le podium. Inscriptions ouvertes jusqu\'au 13 novembre.',cta:'S\'inscrire',t:'Tournoi Skyblock : inscriptions',d:'Samedi 15 nov. · 16h',tags:[['Event','#ea580c'],['Skyblock','#0369a1']],sc:['#38bdf8','#bae6fd','#fef3c7','#22c55e','#166534','25%'],go:'relaunch'}
-  ];
-  var REPORTS=[
-    {id:'r1',who:'Zed',why:'Langage insultant dans le chat',where:'Lobby RE',t:'il y a 8 min'},
-    {id:'r2',who:'xX_Grief_Xx',why:'Destruction de constructions',where:'Les Terres Brûlées (test)',t:'il y a 25 min'},
-    {id:'r3',who:'Pixou_42',why:'Pseudo inapproprié',where:'Inscription ReLink',t:'il y a 1 h'}
-  ];
-  var NOTIFS=[
-    {i:'friends',t:'Pixou_42 veut être ton ami',d:'il y a 12 min',act:'friends'},
-    {i:'downloads',t:'Modpack d\'event mis à jour',d:'il y a 1 h',act:'downloads'},
-    {i:'relaunch',t:'Rappel : Terres Brûlées samedi 21h',d:'il y a 3 h',go:'relaunch'},
-    {i:'live',t:'Atelier Pixel est en live',d:'il y a 5 min',go:'live'}
-  ];
+  var NEWS=[];
+  var REPORTS=[];
+  var NOTIFS=[];
   S.car=0;
   var PREF=load('proto-pref2',null)||{skin:'phenix',ram:6,discord:false,reopen:true,start:'home',java:true};
   if(!PREF.custom) PREF.custom={h:330,s:80,l:60}; if(!PREF.bg) PREF.bg='pattern';
-  var PREM=false; try{PREM=localStorage.getItem('proto-premium')==='1'}catch(e){}
+  var PREM=false; /* [ReLaunch] pas d'offre Premium : couleur personnalisée masquée */
+  var APPVER='';
+  document.addEventListener('relaunch:info',function(e){APPVER=String((e.detail&&e.detail.version)||'');if(S.view==='settings')RENDER.settings()});
 
   /* ---------- Navigation ---------- */
   var VIEWS=['news','home','wecraft','relaunch','welive','live','relink','settings','favorites','discover'];
@@ -208,19 +163,19 @@
   /* Boutons d'usage regroupés avec le profil, en haut à droite */
   function utilBtn(id){
     if(id==='news'){ var nu=NEWS.filter(function(n){return n.unread}).length+NOTIFS.length; return '<button class="nb" data-act="drawer" data-drawer="news" data-a="nav-news" data-tip="Nouveautés et notifications" aria-label="Nouveautés et notifications" aria-pressed="false">'+IC.bell+(nu?'<span class="cnt">'+nu+'</span>':'')+'</button>'; }
-    if(id==='live') return '<button class="nb" data-go="live" data-a="nav-live" data-tip="Diffusion Partenaires · '+LIVES.length+' lives" aria-label="Diffusion Partenaires">'+IC.live+'<span class="livedot"></span></button>';
+    if(id==='live') return '<button class="nb" data-go="live" data-a="nav-live" data-tip="Diffusion Partenaires · '+LIVES.length+' lives" aria-label="Diffusion Partenaires">'+IC.live+(LIVES.length?'<span class="livedot"></span>':'')+'</button>';
     var cnt=id==='downloads'?DL.filter(function(d){return d.st==='active'||d.st==='queued'}).length:FRIENDS.filter(function(f){return f.on!=='off'}).length;
     var l=id==='downloads'?'Download Manager':'Amis';
     return '<button class="nb" data-act="drawer" data-drawer="'+id+'" data-a="nav-'+id+'" data-tip="'+l+'" aria-label="'+l+'" aria-pressed="false">'+IC[id]+(cnt?'<span class="cnt">'+cnt+'</span>':'')+'</button>';
   }
-  var STAFF=false; try{STAFF=localStorage.getItem('proto-staff')==='1'}catch(e){}
+  var STAFF=false;
   function utilsHTML(){return (STAFF?'<button class="nb staffb" data-act="drawer" data-drawer="staff" data-a="nav-staff" data-tip="Menu staff" aria-label="Menu staff" aria-pressed="false">'+IC.staff+(REPORTS.length?'<span class="cnt">'+REPORTS.length+'</span>':'')+'</button>':'')+utilBtn('news')+utilBtn('live')+utilBtn('downloads')+utilBtn('friends')}
   function headHTML(s,size){
     s=s||SKINS[S.skin];
     return '<span class="head3d" style="--s:'+size+'px;--sk:'+s.sk+';--hair:'+s.hair+';--eye:'+s.eye+'"><i class="b"></i><i class="u"></i><i class="l"></i><i class="t"></i><i class="r"></i><i class="f"></i></span>';
   }
   var LOGOBTN='<button class="nb logo" data-go="home" data-a="nav-logo" data-tip="Accueil" aria-label="Accueil"><img src="'+LOGO+'" alt=""></button>';
-  function profBtn(){return '<button class="nb prof" data-go="relink" data-a="nav-profile" data-tip="Rexi_de_la_mort · ReLink" aria-label="Profil ReLink">'+headHTML(null,19)+'</button>'}
+  function profBtn(){return '<button class="nb prof" data-go="relink" data-a="nav-profile" data-tip="Compte ReLink" aria-label="Compte ReLink">'+headHTML(null,Math.round(barSize().b*.48))+'</button>'}
   function sepEl(o){return '<span class="'+(o==='v'?'sepv':'seph')+'"></span>'}
   function cleanSeps(html){
     var d=document.createElement('div'); d.innerHTML=html; var kids=[].slice.call(d.children), prevSep=true;
@@ -244,7 +199,12 @@
   }
   function occupied(c){c=c||NAV;return c.mode==='single'?[c.single]:[c.h,c.v]}
   function dockSide(){var occ=occupied(),all4=['bottom','right','top','left'];if(occ.indexOf(NAV.dock.side)>-1) NAV.dock.side=all4.filter(function(s){return occ.indexOf(s)<0})[0];return NAV.dock.side}
+  /* [ReLaunch] Taille des barres (Réglages > Navigation) : épaisseur des barres et taille des boutons. */
+  var BARSIZES={xs:{v:60,h:54,b:30,l:'Très fine'},s:{v:72,h:64,b:35,l:'Fine'},m:{v:84,h:74,b:40,l:'Normale'},l:{v:100,h:88,b:48,l:'Grande'},xl:{v:116,h:102,b:56,l:'Très grande'}};
+  function barSize(){return BARSIZES[NAV.size]||BARSIZES.m}
   function renderBars(){
+    var BS=barSize(), BV=BS.v+'px', BH=BS.h+'px';
+    appRoot.style.setProperty('--nb',BS.b+'px');
     var lgOn=PREF.style==='lg', bars=$('bars'), html='', g, R=lgOn?24:16, m=lgOn?12:10, pp=profPlace();
     var zone=NAV.pinMode==='inline'?' data-pin-zone="1"':'';
     function piece(cls,area,inner,touch,key){
@@ -261,11 +221,11 @@
       var o=(NAV.single==='left'||NAV.single==='right')?'v':'h';
       var inner=(pp==='start'?profBtn()+utilsHTML()+sepEl(o):'')+LOGOBTN+sepEl(o)+list(null,o)+GR(null)+setB(null,o)+(pp==='end'?sepEl(o)+utilsHTML()+profBtn():'');
       html=piece(o,'bar',inner,{},'bar-main');
-      g={left:['84px minmax(0,1fr)','minmax(0,1fr)','"bar main"'],right:['minmax(0,1fr) 84px','minmax(0,1fr)','"main bar"'],top:['minmax(0,1fr)','74px minmax(0,1fr)','"bar" "main"'],bottom:['minmax(0,1fr)','minmax(0,1fr) 74px','"main" "bar"']}[NAV.single];
+      g={left:[BV+' minmax(0,1fr)','minmax(0,1fr)','"bar main"'],right:['minmax(0,1fr) '+BV,'minmax(0,1fr)','"main bar"'],top:['minmax(0,1fr)',BH+' minmax(0,1fr)','"bar" "main"'],bottom:['minmax(0,1fr)','minmax(0,1fr) '+BH,'"main" "bar"']}[NAV.single];
     } else if(NAV.joined===false){
       /* Deux barres indépendantes : chacune sur son bord, sans se toucher dans les angles */
       var sides=[NAV.h,NAV.v], has=function(x){return sides.indexOf(x)>-1}, ori=function(x){return (x==='top'||x==='bottom')?'h':'v'};
-      var cols=(has('left')?'84px ':'')+'minmax(0,1fr)'+(has('right')?' 84px':''), rws=(has('top')?'74px ':'')+'minmax(0,1fr)'+(has('bottom')?' 74px':'');
+      var cols=(has('left')?BV+' ':'')+'minmax(0,1fr)'+(has('right')?' '+BV:''), rws=(has('top')?BH+' ':'')+'minmax(0,1fr)'+(has('bottom')?' '+BH:'');
       var rr=(has('top')?['top']:[]).concat(['mid']).concat(has('bottom')?['bottom']:[]), cc=(has('left')?['left']:[]).concat(['mid']).concat(has('right')?['right']:[]);
       var ar=rr.map(function(r){return '"'+cc.map(function(c){if(r==='mid'&&c==='mid')return 'main';if(r!=='mid'&&c==='mid')return 'b'+r;if(r==='mid'&&c!=='mid')return 'b'+c;return '.'}).join(' ')+'"'}).join(' ');
       [['h',NAV.h],['v',NAV.v]].forEach(function(p){
@@ -276,7 +236,7 @@
       g=[cols,rws,ar];
     } else {
       var top=NAV.h==='top', left=NAV.v==='left';
-      var cols=left?'84px minmax(0,1fr)':'minmax(0,1fr) 84px', rows=top?'74px minmax(0,1fr)':'minmax(0,1fr) 74px';
+      var cols=left?BV+' minmax(0,1fr)':'minmax(0,1fr) '+BV, rows=top?BH+' minmax(0,1fr)':'minmax(0,1fr) '+BH;
       var rowH=left?'"corner hbar"':'"hbar corner"', rowV=left?'"vbar main"':'"main vbar"';
       var areas=top?rowH+' '+rowV:rowV+' '+rowH;
       var corner=pp==='corner'?profBtn():LOGOBTN;
@@ -305,7 +265,7 @@
   }
 
   /* ---------- Épingles : éléments seuls ou groupes nommés ---------- */
-  function normPins(){NAV.pins=(NAV.pins||[]).map(function(p){return typeof p==='string'?{t:'i',id:p}:p}).filter(function(p){return p.t==='g'||byId(p.id)});NAV.pinMode=NAV.pinMode||'inline';NAV.dock=NAV.dock||{side:'bottom',align:'center'}}
+  function normPins(){NAV.pins=(NAV.pins||[]).map(function(p){return typeof p==='string'?{t:'i',id:p}:p}).map(function(p){if(p.t==='g')p.items=(p.items||[]).filter(byId);return p}).filter(function(p){return p.t==='g'?p.items.length>0:byId(p.id)});NAV.pinMode=NAV.pinMode||'inline';NAV.dock=NAV.dock||{side:'bottom',align:'center'}}
   function pinCount(){return NAV.pins.reduce(function(a,p){return a+(p.t==='i'?1:p.items.length)},0)}
   function gById(id){return NAV.pins.find(function(p){return p.t==='g'&&p.id===id})}
   function groupOf(id){return NAV.pins.find(function(p){return p.t==='g'&&p.items.indexOf(id)>-1})}
@@ -486,22 +446,13 @@
   }
   $('lClose').addEventListener('click',function(){clearTimeout(lt);$('launchBox').hidden=true;refresh()});
 
+  /* [ReLaunch] Pages dont le contenu n'existe pas encore : un état vide honnête. */
+  function soon(view,title,sub,text){
+    $(view).innerHTML='<div class="vhead"><div><h2>'+title+'</h2><div class="sub">'+sub+'</div></div></div>'+
+      '<div class="card rl-empty"><b>Pas encore disponible</b><p class="muted">'+text+'</p></div>';
+  }
   /* ================= ACCUEIL ================= */
   function lastPlayed(){return all().filter(function(x){return x.last}).sort(function(a,b){return b.last-a.last})[0]}
-  function cardHTML(t,i){
-    var T=CARDTYPES[t], body='';
-    var c={
-      event:{go:'relaunch',b:'Les Terres Brûlées · Saison 3',p:'Ouverture samedi 21h. Inscriptions ouvertes.',c:['#7c2d12','#fb923c'],x:'<span class="tag">J-4</span>'},
-      content:{go:'welive',b:'Hardcore à deux · épisode 25',p:'Nouvel épisode d\'Atelier Pixel, 18 min.',c:['#3b0764','#c084fc'],x:'<span class="tag">Nouveau</span>'},
-      maj:{act:'notes',b:'ReLaunch 2.0.1 disponible',p:'Barre de navigation personnalisable et nouveaux thèmes.',c:['#14532d','#4ade80'],x:'<span class="tag">Installer</span>'},
-      decouvrir:{go:'discover',b:'Serveur CitéCraft',p:'Ville en économie joueurs · 312 joueurs.',c:['#0c4a6e','#38bdf8'],x:'<span class="tag">Serveur</span>'},
-      reseaux:{act:'social',b:'Rejoins la communauté',p:'Discord · YouTube · TikTok · Twitch',c:['#831843','#f472b6'],x:'<span class="tag">4 réseaux</span>'},
-      shop:{go:'relink',rl:'shop',b:'Cape Phénix à -20 %',p:'Jusqu\'à dimanche dans le shop ReLink.',c:['#713f12','#facc15'],x:'<span class="tag">Promo</span>'}
-    }[t];
-    return '<button class="icard" data-a="hcard-'+(i+1)+'" '+(c.go?'data-go="'+c.go+'"'+(c.rl?' data-rl="'+c.rl+'"':''):'data-act="'+c.act+'"')+'>'+
-      '<span class="top2"><span class="badge" style="--bc:'+T.c+'">'+T.l+'</span>'+c.x+'</span>'+
-      '<span class="cover" style="--c1:'+c.c[0]+';--c2:'+c.c[1]+'"></span><b>'+c.b+'</b><p>'+c.p+'</p></button>';
-  }
   function sc2(c){return '<span class="sc" style="'+scStyle(c)+'"></span>'}
   function newsCard(n){return '<button class="ncard" data-news="'+n.id+'" data-a="news-'+n.id+'">'+sc2(n.sc)+(n.video?'<span class="vplay">'+IC.play+'</span>':'')+(n.unread?'<span class="unread" aria-label="Non lu"></span>':'')+'<span class="ntags">'+n.tags.map(function(t){return '<span class="ntag" style="--tc:'+t[1]+'">'+esc(t[0])+'</span>'}).join('')+'</span><b>'+esc(n.t)+'</b><small>'+esc(n.d)+'</small></button>'}
   function carMax(){return Math.max(0,NEWS.length-CAR.n)}
@@ -537,20 +488,28 @@
   function openNews(id){var n=NEWS.find(function(x){return x.id===id});if(!n)return;n.unread=false;renderBars();if(lstOf().indexOf(n)<0)S.newsF='Tout';show('news',{newsSel:id})}
   function goNews(id){var n=NEWS.find(function(x){return x.id===id});var o={};if(n.rl)o.rlTab=n.rl;show(n.go,o)}
   RENDER.home=function(){
-    var sel=byId(S.sel)||INST[0], lp=lastPlayed();
+    var sel=byId(S.sel)||INST[0]||SRV[0], lp=lastPlayed();
+    if(!sel){
+      $('v-home').innerHTML='<div class="home nocar"><div class="hmain">'+
+        '<h2 class="huge" aria-label="ReLaunch">RELAUNCH</h2>'+
+        '<div class="playrow"><select id="homeSel" aria-label="Instance ou serveur" disabled><option>Aucune instance pour l\'instant</option></select><button class="btn play" id="homePlay" data-act="noInst">Jouer</button></div>'+
+        '<span class="seldet" id="homeDet">La détection de tes instances (WeCraft, CurseForge, Modrinth, Prism) arrive dans une prochaine version.</span>'+
+      '</div></div>';
+      return;
+    }
     var opts='<optgroup label="ReLaunch · serveurs">'+SRV.map(function(x){return '<option value="'+x.id+'"'+(x.id===sel.id?' selected':'')+'>'+esc(x.n)+'</option>'}).join('')+'</optgroup>'+
       '<optgroup label="WeCraft · instances">'+INST.map(function(x){return '<option value="'+x.id+'"'+(x.id===sel.id?' selected':'')+'>'+esc(x.n)+'</option>'}).join('')+'</optgroup>';
     $('v-home').innerHTML='<div class="home">'+
       '<div class="hmain">'+
-        '<span class="hmeta"><span class="online">3 amis en ligne · 1 284 joueurs sur ReLaunch</span><button class="newsbtn" data-go="news" data-a="home-news">'+IC.news+'Info &amp; News'+(NEWS.some(function(n){return n.unread})?'<span class="ndot"></span>':'')+'</button></span>'+
+        '<span class="hmeta"><button class="newsbtn" data-go="news" data-a="home-news">'+IC.news+'Info &amp; News'+(NEWS.some(function(n){return n.unread})?'<span class="ndot"></span>':'')+'</button></span>'+
         '<h2 class="huge" aria-label="ReLaunch">RELAUNCH</h2>'+
         '<div class="playrow"><select id="homeSel" aria-label="Instance ou serveur">'+opts+'</select><button class="btn play" data-play="'+sel.id+'" id="homePlay">Jouer</button></div>'+
         '<span class="seldet" id="homeDet">'+esc(detail(sel))+'</span>'+
         (HOME.resume&&lp?'<button class="resume" data-play="'+lp.id+'" data-a="resume"><span class="cover" style="--c1:'+lp.c[0]+';--c2:'+lp.c[1]+'"></span><span><small>Reprendre · '+ago(lp.last)+'</small><b>'+esc(lp.n)+'</b><small>'+(lp.k==='wc'?'Modpack WeCraft':'Serveur ReLaunch')+'</small></span><span class="go">'+IC.play+'</span></button>':'')+
       '</div>'+
-      (CAR.on?carouselHTML():'')+
+      (CAR.on&&NEWS.length?carouselHTML():'')+
     '</div>';
-    if(!CAR.on) $('v-home').firstChild.classList.add('nocar');
+    if(!CAR.on||!NEWS.length) $('v-home').firstChild.classList.add('nocar');
     startCar();
     $('homeSel').addEventListener('change',function(){S.sel=this.value;var x=byId(S.sel);$('homeDet').textContent=detail(x);$('homePlay').dataset.play=x.id;});
   };
@@ -565,7 +524,7 @@
         '<button class="btn" data-act="import">'+IC.import+'Importer une instance<small>Prism, CurseForge, Modrinth</small></button>'+
         '<button class="btn" data-go="discover">'+IC.discover+'Parcourir les modpacks<small>Catalogue de contenus</small></button>'+
       '</div>'+
-      '<div class="sect"><h3>Dernières instances lancées</h3><div class="hscroll">'+recent.map(function(x){
+      '<div class="sect"><h3>Dernières instances lancées</h3><div class="hscroll">'+(recent.length?'':'<span class="faint" style="font-size:13px">Aucune instance lancée pour l\'instant.</span>')+recent.map(function(x){
         return '<div class="wcard" data-a="wrec-'+x.id+'"><div class="cover" style="--c1:'+x.c[0]+';--c2:'+x.c[1]+'"></div><b>'+esc(x.n)+'</b><small>'+x.l+' · '+x.v+' · '+ago(x.last)+'</small><span class="row"><button class="btn sm pri" data-play="'+x.id+'">'+IC.play+'Jouer</button>'+pinBtn(x.id)+'</span></div>'}).join('')+'</div></div>'+
       '<div class="sect"><h3>Toutes les instances</h3>'+
         '<div class="toolbar"><div class="chips" id="wcSrc">'+['all','WeCraft','CurseForge','Prism','Modrinth'].map(function(s){return '<button class="chip" data-src="'+s+'" aria-pressed="'+(S.wcSrc===s)+'">'+(s==='all'?'Toutes':s)+'</button>'}).join('')+'</div>'+
@@ -583,48 +542,14 @@
     var rows=INST.filter(function(i){return (S.wcSrc==='all'||i.s===S.wcSrc)&&i.n.toLowerCase().indexOf(q)>-1});
     $('wcRows').innerHTML=rows.map(function(i){
       return '<tr data-a="inst-'+i.id+'"><td><button class="star" data-act="fav" data-id="'+i.id+'" aria-pressed="'+i.fav+'" aria-label="Favori">★</button></td><td><b>'+esc(i.n)+'</b></td><td class="num">'+i.v+'</td><td>'+i.l+' '+i.lv+'</td><td class="num">'+i.m+'</td><td class="num">'+i.r+' Go</td><td><span class="src" style="--sc:'+SC[i.s]+'">'+i.s+'</span></td><td><span class="row" style="justify-content:flex-end">'+pinBtn(i.id)+'<button class="btn sm pri" data-play="'+i.id+'">Jouer</button><button class="btn sm danger" data-act="del" data-id="'+i.id+'">Supprimer</button></span></td></tr>';
-    }).join('')||'<tr><td colspan="8" class="faint">Aucune instance ne correspond.</td></tr>';
+    }).join('')||'<tr><td colspan="8" class="faint">'+(INST.length?'Aucune instance ne correspond.':'Aucune instance pour l\'instant : la détection arrive dans une prochaine version.')+'</td></tr>';
   }
 
   /* ================= RELAUNCH ================= */
-  var target=NOW+((4*24+10)*60+47)*60000;
-  RENDER.relaunch=function(){
-    $('v-relaunch').innerHTML=
-      '<div class="vhead"><div><h2>ReLaunch</h2><div class="sub">Events et serveurs du RE</div></div><span class="online">1 284 joueurs connectés</span></div>'+
-      '<div class="evhero" data-a="rl-hero"><div><span class="eyebrow">Event RE · Saison 3</span><h3>Les Terres Brûlées</h3><p class="muted" style="max-width:52ch;font-size:14px">Survie RP sur une carte volcanique, 3 mois, 500 places. Le modpack d\'event s\'installe tout seul.</p></div>'+
-        '<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end"><div class="count" aria-label="Compte à rebours"><div><b id="cD"></b><span>jours</span></div><div><b id="cH"></b><span>heures</span></div><div><b id="cM"></b><span>min</span></div></div>'+
-        '<span class="row"><button class="btn" data-act="remind">Me prévenir</button><button class="btn pri" data-play="s1">'+IC.play+'Rejoindre</button></span></div></div>'+
-      '<div class="two">'+
-        '<div class="sect"><h3>Serveurs</h3>'+SRV.map(function(x){
-          return '<div class="srv" data-a="srv-'+x.id+'"><div class="cover" style="--c1:'+x.c[0]+';--c2:'+x.c[1]+'"></div><div style="min-width:0"><b>'+esc(x.n)+'</b><small>'+esc(x.d)+' · '+(x.p?'<span class="ok">● '+x.p+' / '+x.max+'</span>':x.status)+'</small></div><span class="row">'+pinBtn(x.id)+'<button class="btn sm'+(x.p?' pri':'')+'" data-play="'+x.id+'">'+(x.p?'Rejoindre':'Détails')+'</button></span></div>'}).join('')+'</div>'+
-        '<div class="sect"><h3>Prochains events</h3>'+[
-          ['24','oct.','Ouverture des Terres Brûlées','Samedi 21h · Survie RP'],
-          ['31','oct.','UHC d\'Halloween','Vendredi 20h · équipes de 3'],
-          ['08','nov.','Build battle','Samedi 18h · thème surprise'],
-          ['15','nov.','Tournoi Skyblock','Samedi 16h · 32 îles']
-        ].map(function(e,i){return '<div class="cal" data-a="cal-'+(i+1)+'"><div class="d"><b>'+e[0]+'</b><span>'+e[1]+'</span></div><div><b>'+e[2]+'</b><small>'+e[3]+'</small></div></div>'}).join('')+'</div>'+
-      '</div>';
-    cd();
-  };
-  function cd(){var d=Math.max(0,target-Date.now());if(!$('cD'))return;$('cD').textContent=Math.floor(d/864e5);$('cH').textContent=Math.floor(d/36e5)%24;$('cM').textContent=Math.floor(d/6e4)%60}
-  setInterval(cd,30000);
 
   /* ================= WELIVE ================= */
-  var WL={
-    'Pour toi':[['Hardcore à deux','Série · 25 épisodes',['#3f6212','#a3e635'],'Série'],['Atelier Pixel','Live · builds médiévaux',['#1e3a8a','#60a5fa'],'Live',1],['CitéCraft','Serveur · 312 joueurs',['#581c87','#e879f9'],'Serveur'],['Nordique','Modpack · 146 mods',['#164e63','#67e8f9'],'Modpack'],['Redstone facile','Tuto · 12 vidéos',['#7f1d1d','#fca5a5'],'Tuto'],['Île perdue','Série · saison 2',['#0f766e','#5eead4'],'Série']],
-    'Serveurs FR du moment':[['CitéCraft','Économie · 312 en ligne',['#581c87','#e879f9'],'Serveur'],['Les Terres Brûlées','Event RE · bientôt',['#7c2d12','#fb923c'],'Serveur'],['PvP Arène','Mini-jeux · 540 en ligne',['#7f1d1d','#f87171'],'Serveur'],['Skyblock RE','Coop · 87 en ligne',['#0c4a6e','#7dd3fc'],'Serveur'],['Faction Nord','Faction · 205 en ligne',['#334155','#94a3b8'],'Serveur']],
-    'Créateurs à suivre':[['Atelier Pixel','Builds',['#1e3a8a','#60a5fa']],['Les Bâtisseurs du Nord','Redstone',['#7f1d1d','#fca5a5']],['Mina Craft','Survie détente',['#831843','#f9a8d4']],['Blocs & Co','Actus MC',['#713f12','#fcd34d']],['Le Mineur Fou','Hardcore',['#14532d','#86efac']],['Kaori','Speedrun',['#312e81','#a5b4fc']]]
-  };
-  RENDER.welive=function(){
-    var cats=['Tout','Séries','Lives','Serveurs','Créateurs','Modpacks'];
-    function row(t,tall){return '<div class="sect"><h3>'+t+'</h3><div class="hscroll">'+WL[t].map(function(x){return '<button class="pcard'+(tall?' tall':'')+'" data-a="wl-'+slug(t)+'-'+slug(x[0])+'" data-act="watch"><span class="cover" style="--c1:'+x[2][0]+';--c2:'+x[2][1]+'">'+(x[3]?'<span class="tag">'+x[3]+'</span>':'')+(x[4]?'<span class="live">LIVE</span>':'')+'</span><b>'+esc(x[0])+'</b><small>'+esc(x[1])+'</small></button>'}).join('')+'</div></div>'}
-    $('v-welive').innerHTML=
-      '<div class="vhead"><div><h2>WeLive</h2><div class="sub">Le meilleur du Minecraft francophone, choisi pour toi</div></div></div>'+
-      '<div class="tabs" id="wlTabs">'+cats.map(function(c){return '<button class="chip" aria-pressed="'+(S.welTab===c)+'">'+c+'</button>'}).join('')+'</div>'+
-      '<div class="feat" data-a="wl-feat"><span class="k">À la une · série</span><h3>Hardcore à deux</h3><p>Deux joueurs, une seule vie chacun, et 100 jours pour battre l\'Ender Dragon. Le nouvel épisode est sorti ce matin.</p><span class="row" style="justify-content:flex-start"><button class="btn pri" data-act="watch">'+IC.play+'Regarder</button><button class="btn" data-act="mylist">+ Ma liste</button><button class="btn" data-act="why">Pourquoi ce conseil ?</button></span></div>'+
-      row('Pour toi')+row('Serveurs FR du moment')+row('Créateurs à suivre',true);
-    $('wlTabs').addEventListener('click',function(e){var b=e.target.closest('.chip');if(!b)return;S.welTab=b.textContent;this.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed',String(c===b))})});
-  };
+  RENDER.relaunch=function(){ soon('v-relaunch','ReLaunch','Events et serveurs','Les events et serveurs ReLaunch arriveront avec les comptes ReLink.'); };
+  RENDER.welive=function(){ soon('v-welive','WeLive','Contenus Minecraft francophones','Les séries, lives, serveurs et créateurs recommandés arriveront dans une prochaine version.'); };
 
   /* ================= RELINK ================= */
   var SKINS=[
@@ -641,41 +566,10 @@
   ];
   function mc(s,u){return '<span class="mc" style="--u:'+u+'px;--sk:'+s.sk+';--hair:'+s.hair+';--eye:'+s.eye+';--shirt:'+s.shirt+';--pants:'+s.pants+';--shoe:'+s.shoe+'"><i class="al"></i><i class="ar"></i><i class="ll"></i><i class="lr"></i><i class="bd"></i><i class="hd"></i></span>'}
   /* Captures d'écran (affichées dans l'espace compte) */
-  var SH=[['i1','Coucher de soleil au village',['#f97316','#fde68a','#fbbf24','#65a30d','#3f6212','72%']],['i1','Base dans la falaise',['#38bdf8','#bae6fd','#fef3c7','#57534e','#292524','30%']],['s3','Île n°12',['#0ea5e9','#e0f2fe','#ffffff','#22c55e','#166534','60%']],['i2','Usine Create',['#334155','#64748b','#fde047','#78716c','#44403c','80%']],['i4','Aurore nordique',['#0f172a','#4c1d95','#a5f3fc','#e2e8f0','#94a3b8','20%']],['s2','Spawn du lobby',['#6366f1','#c7d2fe','#fef9c3','#a3a3a3','#525252','50%']],['i3','Premier jour',['#7dd3fc','#e0f2fe','#fef08a','#4ade80','#15803d','40%']],['i6','Réacteur',['#450a0a','#991b1b','#fca5a5','#3f3f46','#18181b','65%']],['i1','Nuit d\'orage',['#020617','#1e293b','#e2e8f0','#1f2937','#0f172a','85%']]];
   function scStyle(c){return '--sky1:'+c[0]+';--sky2:'+c[1]+';--sun:'+c[2]+';--g1:'+c[3]+';--g2:'+c[4]+';--sx:'+c[5]}
   function shotTiles(list){return list.map(function(x){var s=x[0],o=byId(s[0]);return '<button class="shot" data-shot="'+x[1]+'" data-a="shot-'+x[1]+'"><span class="sc" style="'+scStyle(s[2])+'"></span><small>'+esc(s[1])+' · '+esc(o?o.n:'')+'</small></button>'}).join('')}
 
-  RENDER.relink=function(){
-    var tabs=[['profil','Profil'],['captures','Captures d\'écran'],['skins','Skins'],['shop','Shop']], body='';
-    if(S.rlTab==='profil'){
-      body='<div class="qa">'+[['128 h','Temps de jeu'],['14','Events joués'],['Niv. 23','Rang ReLink'],[String(SH.length),'Captures d\'écran']].map(function(x,i){return '<div class="card" data-a="st-'+i+'"><b style="font-family:var(--f-display);font-size:22px">'+x[0]+'</b><div class="sub">'+x[1]+'</div></div>'}).join('')+'</div>'+
-        '<div class="sect"><div class="row"><h3 style="font-size:13px;font-family:var(--f-mono);font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)">Dernières captures</h3><button class="btn sm" data-act="rlTab" data-t="captures">Voir les '+SH.length+' captures</button></div><div class="shots">'+shotTiles(SH.slice(0,4).map(function(s,i){return [s,i]}))+'</div></div>'+
-        '<div class="sect"><h3>Badges</h3><div class="chips">'+['Pionnier S1','Survivant S2','Bâtisseur','Top 10 UHC','Fidèle 1 an','Phénix'].map(function(b){return '<span class="tag" style="font-size:12px;padding:5px 10px">'+b+'</span>'}).join('')+'</div></div>'+
-        '<div class="sect"><h3>Amis en ligne</h3><div class="chips">'+['Nking · Lobby RE','Mina · Survie entre potes','Kaori · en menu'].map(function(b){return '<span class="tag" style="font-size:12px;padding:5px 10px"><span class="ok">●</span> '+b+'</span>'}).join('')+'</div></div>';
-    } else if(S.rlTab==='captures'){
-      var ids=['all'].concat(SH.map(function(s){return s[0]}).filter(function(v,i,a){return a.indexOf(v)===i}));
-      var lst=SH.map(function(s,i){return [s,i]}).filter(function(x){return S.shotF==='all'||x[0][0]===S.shotF});
-      body='<div class="toolbar"><div class="chips" id="shF">'+ids.map(function(id){return '<button class="chip" data-f="'+id+'" aria-pressed="'+(S.shotF===id)+'">'+(id==='all'?'Toutes':esc(byId(id).n))+'</button>'}).join('')+'</div><button class="btn sm" data-act="folder">'+IC.folder+'Ouvrir le dossier</button></div>'+
-        '<div class="shots">'+shotTiles(lst)+'</div><span class="faint" style="font-size:12.5px">Touche F2 en jeu pour prendre une capture.</span>';
-    } else if(S.rlTab==='skins'){
-      var cur=SKINS[S.skin];
-      body='<div class="skins"><div class="skinprev" data-a="skin-preview"><h3 style="align-self:flex-start;font-size:18px">Sélecteur de skin</h3><div class="stage">'+mc(cur,7)+'</div><span class="faint" style="font-size:12.5px">Survole pour tourner</span><span class="row"><button class="btn sm" data-act="editSkin">'+IC.paint+'Modifier</button><button class="btn sm" data-act="cape">Cape</button></span></div>'+
-        '<div style="display:flex;flex-direction:column;gap:16px;min-width:0">'+
-          '<div class="sect"><h3>Skins enregistrés</h3><div class="skingrid"><button class="skin add" data-act="addSkin"><span>+</span>Ajouter un skin<small>Glisser-déposer</small></button>'+SKINS.map(function(s,i){return s.saved?'<button class="skin" data-skin-i="'+i+'" data-a="skin-'+slug(s.n)+'" aria-pressed="'+(S.skin===i)+'" aria-label="'+esc(s.n)+'">'+mc(s,3.4)+'</button>':''}).join('')+'</div></div>'+
-          '<div class="sect"><h3>Skins par défaut</h3><div class="skingrid">'+SKINS.map(function(s,i){return s.saved?'':'<button class="skin" data-skin-i="'+i+'" data-a="skin-'+slug(s.n)+'" aria-pressed="'+(S.skin===i)+'" aria-label="'+esc(s.n)+'">'+mc(s,3.4)+'</button>'}).join('')+'</div></div>'+
-        '</div></div>'+
-        '<div class="banner" data-a="skin-banner"><b>'+IC.info.replace('<svg','<svg width="18" height="18"')+'Le skin s\'applique en jeu une fois ton compte Microsoft lié.</b><button class="btn sm" data-act="ms" style="background:#16a34a;border-color:transparent;color:#fff"><span style="width:16px;height:16px;display:inline-block">'+IC.ms+'</span>Lier Microsoft</button></div>';
-    } else {
-      var items=[['Cape Phénix','Cape',['#7c2d12','#ff8a3d'],'400','500'],['Ailes de braise','Cosmétique',['#991b1b','#fbbf24'],'650'],['Traînée d\'étoiles','Particules',['#1e3a8a','#a5b4fc'],'300'],['Grade Phénix · 1 mois','Grade',['#713f12','#facc15'],'900'],['Emote Danse du feu','Emote',['#831843','#f472b6'],'200'],['Cadre de profil Aurore','Profil',['#312e81','#c4b5fd'],'250']];
-      body='<div class="banner"><b>Solde : 1 250 crédits</b><button class="btn sm pri" data-act="credits">Recharger</button></div><div class="shop">'+items.map(function(x){return '<div class="shopi" data-a="shop-'+slug(x[0])+'"><div class="cover" style="--c1:'+x[2][0]+';--c2:'+x[2][1]+'"></div><span class="tag" style="align-self:flex-start">'+x[1]+'</span><b>'+x[0]+'</b><div class="row"><span class="price">'+(x[4]?'<s>'+x[4]+'</s>':'')+x[3]+' cr.</span><button class="btn sm pri" data-act="buy">Acheter</button></div></div>'}).join('')+'</div>';
-    }
-    $('v-relink').innerHTML=
-      '<div class="acct gl" data-a="rl-acct"><div class="av">'+headHTML(null,30)+'</div><div><h3>Rexi_de_la_mort</h3><div class="sub">Grade Phénix · membre depuis 2024'+(PREM?' · <span class="prembadge">Premium</span>':'')+(STAFF?' · <span class="staffbadge">Staff · Modérateur</span>':'')+'</div></div><div class="stats">'+(STAFF?'<button class="btn sm" data-act="openStaff" style="border-color:color-mix(in srgb,#8b5cf6 60%,transparent);color:#ddd6fe">'+IC.staff+'Espace staff</button>':'')+'<div><b>1 250</b><span>crédits</span></div><div><b>23</b><span>niveau</span></div><button class="btn sm" data-go="settings" data-set="compte">'+IC.settings+'Paramètres du compte</button></div></div>'+
-      '<div class="tabs" id="rlTabs">'+tabs.map(function(t){return '<button class="chip" data-t="'+t[0]+'" aria-pressed="'+(S.rlTab===t[0])+'">'+t[1]+'</button>'}).join('')+'</div>'+body;
-    $('rlTabs').addEventListener('click',function(e){var b=e.target.closest('[data-t]');if(!b)return;S.rlTab=b.dataset.t;RENDER.relink();refresh()});
-    var sf=$('shF'); if(sf) sf.addEventListener('click',function(e){var b=e.target.closest('[data-f]');if(!b)return;S.shotF=b.dataset.f;RENDER.relink();refresh()});
-    markNav();
-  };
+  RENDER.relink=function(){ soon('v-relink','Compte ReLink','Profil, captures d\'écran, skins et shop','Les comptes ReLink ne sont pas encore disponibles.'); markNav(); };
 
   /* ================= RÉGLAGES ================= */
   function mini(c){
@@ -766,12 +660,12 @@
       body='<div class="grp"><h3>Style de l\'interface</h3><p>Les quatre thèmes de couleur existent dans les deux styles.</p><div class="styles">'+
         [['standard','std','Standard','Surfaces sombres et nettes'],['lg','lgv','Liquid Glass','Verre translucide, reflets, fond coloré']].map(function(x){return '<button class="stylec" data-act="style" data-v="'+x[0]+'" aria-pressed="'+((PREF.style||'standard')===x[0])+'"><span class="spv '+x[1]+'"><span class="sb"></span><span class="sp"><i></i></span></span><span class="snm"><b>'+x[2]+'</b><small>'+x[3]+'</small></span></button>'}).join('')+'</div></div>'+
         '<div class="grp"><h3>Thème de couleurs</h3><p>La couleur d\'accent de toute l\'appli.</p><div class="themes">'+[['phenix','Phénix','#ff8a3d'],['relink','ReLink','#3fd08a'],['aurore','Aurore','#8b7bff'],['glace','Glace','#5cc8ff']].concat(PREM?[['custom','Personnalisé',hsl(PREF.custom)]]:[]).map(function(t){return '<button class="theme" data-theme="'+t[0]+'" aria-pressed="'+(PREF.skin===t[0])+'" style="--tc:'+t[2]+'"><span class="pv" style="display:flex"><i></i><span></span></span><span class="nm">'+t[1]+'</span></button>'}).join('')+'</div></div>'+
-        '<div class="grp"><h3>Couleur personnalisée <span class="prembadge">Premium</span></h3><p>Choisis n\'importe quelle teinte pour tout le launcher, dans les deux styles.</p>'+
+        (PREM?'<div class="grp"><h3>Couleur personnalisée <span class="prembadge">Premium</span></h3><p>Choisis n\'importe quelle teinte pour tout le launcher, dans les deux styles.</p>'+
         '<div class="wheelbox'+(PREM?'':' locked')+'" data-a="color-wheel"><div class="wheel" id="wheel" tabindex="0" role="slider" aria-label="Roue des couleurs" aria-valuemin="0" aria-valuemax="360" aria-valuenow="'+PREF.custom.h+'" style="--wl:'+PREF.custom.l+'%"><span class="knobw" id="wknob"></span></div>'+
         '<div class="wctl"><div class="sw"><i id="wsw1"></i><i id="wsw2"></i><i id="wsw3"></i><span class="faint" style="font-size:12.5px">Accent, clair, foncé</span></div>'+
         '<label class="field">Luminosité<input type="range" id="wl" min="40" max="72" value="'+PREF.custom.l+'"></label>'+
         '<span class="row" style="justify-content:flex-start"><span class="tag" id="whex"></span><button class="btn sm" data-act="wheelReset">Réinitialiser</button></span></div>'+
-        (PREM?'':'<div class="lockov"><b>Réservé aux membres Premium</b><button class="btn sm gold" data-act="goPremium">Passer Premium</button></div>')+'</div></div>'+
+        '</div></div>':'')+
         '<div class="grp"><h3>Fond</h3><p>Le fond derrière les pages du launcher.</p><div class="bgopts">'+[['pattern','pat','Avec motifs'],['plain','grad','Sans motifs'],['flat','flat','Uni']].map(function(x){return '<button class="bgopt" data-act="bgMode" data-v="'+x[0]+'" aria-pressed="'+((PREF.bg||'pattern')===x[0])+'"><span class="bpv '+x[1]+'"></span><span class="n">'+x[2]+'</span></button>'}).join('')+'</div></div>';
     } else if(S.setTab==='nav'){
       var singles=[['left','Gauche'],['top','Haut'],['right','Droite'],['bottom','Bas']];
@@ -803,6 +697,7 @@
           ['all','Toutes les features','Toutes les sections à gauche, épingles dans une barre à droite.'],
           ['split','Réparti','Espaces en haut, outils à gauche, barres séparées, épingles à droite.']
         ].map(function(p){var P=PRESETS[p[0]]();return '<button class="preset" data-act="preset" data-p="'+p[0]+'" data-a="preset-'+p[0]+'">'+mini(P.cfg)+'<b>'+p[1]+'</b><small>'+p[2]+'</small></button>'}).join('')+'</div></div>'+
+        '<div class="grp" data-a="bar-size"><h3>Taille des barres</h3><p>Épaisseur des barres de navigation et taille de leurs boutons.</p><div class="chips" role="radiogroup" aria-label="Taille des barres">'+Object.keys(BARSIZES).map(function(k){return '<button class="chip" role="radio" data-act="barSize" data-v="'+k+'" aria-checked="'+((NAV.size||'m')===k)+'" aria-pressed="'+((NAV.size||'m')===k)+'">'+BARSIZES[k].l+'</button>'}).join('')+'</div></div>'+
         foldHead('orga','Organisation des barres',orgSum+' · '+NAV.items.filter(function(x){return x.on&&!NAVINFO[x.id].sep&&x.id!=='spacer'}).length+' sections')+(S.fold.orga?'':orgBody)+
         pinMgr();
     } else if(S.setTab==='accueil'){
@@ -820,21 +715,13 @@
       body='<div class="setrow"><span><b>Recliquer sur la section ouverte</b><small>Par exemple, recliquer sur Favoris quand Favoris est déjà affiché</small></span><span class="chips">'+[['back','Page précédente'],['home','Accueil'],['none','Ne rien faire']].map(function(x){return '<button class="chip" data-act="reclickPref" data-v="'+x[0]+'" aria-pressed="'+((PREF.reclick||'back')===x[0])+'">'+x[1]+'</button>'}).join('')+'</span></div>'+
         '<div class="setrow"><span><b>Statut Discord</b><small>Affiche le jeu en cours sur ton profil Discord</small></span><button class="toggle" role="switch" aria-checked="'+PREF.discord+'" data-act="pref" data-k="discord" aria-label="Statut Discord"></button></div>'+
         '<div class="setrow"><span><b>Rouvrir ReLaunch à la fermeture du jeu</b><small>Sinon l\'appli reste réduite</small></span><button class="toggle" role="switch" aria-checked="'+PREF.reopen+'" data-act="pref" data-k="reopen" aria-label="Rouvrir à la fermeture"></button></div>'+
-        '<div class="setrow"><span><b>Mises à jour</b><small>ReLaunch 2.0.0 · signature vérifiée</small></span><button class="btn sm" data-act="notes">Rechercher</button></div>';
+        '<div class="setrow"><span><b>Mises à jour</b><small>Pas encore gérées par cette version</small></span><span></span></div>';
     } else {
-      body='<div class="grp"><h3>Compte ReLink</h3><div class="form">'+
-        '<label class="field">Pseudo ReLink<input type="text" value="Rexi_de_la_mort" id="f-pseudo"></label>'+
-        '<label class="field">Adresse e-mail<input type="text" value="r•••••@gmail.com" id="f-mail"></label></div></div>'+
-        '<div class="setrow"><span><b>Mot de passe</b><small>Modifié il y a 3 mois</small></span><button class="btn sm" data-act="pwd">Changer</button></div>'+
-        '<div class="setrow"><span><b>Compte Microsoft</b><small>Non lié · nécessaire pour l\'Espace WeCraft et les skins en jeu</small></span><button class="btn sm" data-act="ms"><span style="width:16px;height:16px;display:inline-block">'+IC.ms+'</span>Lier</button></div>'+
-        '<div class="setrow"><span><b>Double authentification</b><small>Code à chaque nouvelle connexion</small></span><button class="toggle" role="switch" aria-checked="true" data-act="tgl" aria-label="Double authentification"></button></div>'+
-        '<div class="setrow"><span><b>Profil public</b><small>Tes amis voient ton activité</small></span><button class="toggle" role="switch" aria-checked="true" data-act="tgl" aria-label="Profil public"></button></div>'+
-        '<div class="setrow"><span><b>Historique d\'achats</b><small>6 achats dans le shop</small></span><button class="btn sm" data-go="relink" data-rl="shop">Voir</button></div>'+
-        '<div class="row" style="justify-content:flex-start"><button class="btn danger" data-act="logout">Se déconnecter</button></div>';
+      body='<div class="grp"><h3>Compte ReLink</h3><p>Les comptes ReLink ne sont pas encore disponibles.</p></div>';
     }
     function mb(m){return '<button data-settab="'+m[0]+'" aria-current="'+(S.setTab===m[0])+'">'+m[2]+m[1]+'</button>'}
     $('v-settings').innerHTML='<div class="setwin"><div class="setnav"><h4>Affichage</h4>'+menu.slice(0,3).map(mb).join('')+'<h4>Jeu</h4>'+menu.slice(3,5).map(mb).join('')+
-      '<h4>Compte</h4>'+mb(menu[5])+'<span class="ver">ReLaunch 2.0.0<br>Windows 10</span></div><div class="setbody">'+body+'</div></div>';
+      '<h4>Compte</h4>'+mb(menu[5])+'<span class="ver">ReLaunch '+esc(APPVER)+'</span></div><div class="setbody">'+body+'</div></div>';
     if($('pinAdd')) $('pinAdd').addEventListener('change',function(){if(!this.value)return;NAV.pins.push({t:'i',id:this.value});savePins()});
     $('v-settings').querySelectorAll('[data-gname]').forEach(function(inp){inp.addEventListener('input',function(){var g=gById(inp.dataset.gname);if(!g)return;g.name=inp.value.trim()||'Groupe';store('proto-nav5',NAV);renderBars()})});
     if(S.setTab==='apparence') wireWheel();
@@ -870,46 +757,9 @@
   function renderDrawer(){
     var d=$('drawer');
     if(!S.drawer){ d.hidden=true; markNav(); refresh(); return; }
-    d.hidden=false; d.dataset.a='drawer-'+S.drawer; d.dataset.name={downloads:'Download Manager',friends:'Amis',news:'Nouveautés',staff:'Menu staff'}[S.drawer];
-    d.classList.toggle('staff',S.drawer==='staff');
-    if(S.drawer==='staff'){
-      d.innerHTML='<header><h3>'+IC.staff+'Menu staff <span class="staffbadge">Modérateur</span></h3><button class="xbtn" data-act="closeDrawer" aria-label="Fermer">✕</button></header><div class="dbody">'+
-        '<div class="sstat"><div><b>1 284</b><span>joueurs en ligne</span></div><div><b>'+REPORTS.length+'</b><span>signalements</span></div><div><b>4</b><span>staff en ligne</span></div></div>'+
-        '<div class="dsec"><h4>Signalements à traiter</h4>'+(REPORTS.length?REPORTS.map(function(r){return '<div class="rep" data-a="rep-'+r.id+'"><span style="min-width:0"><b>'+esc(r.who)+' · '+esc(r.why)+'</b><small>'+esc(r.where)+' · '+r.t+'</small></span><span class="acts"><button class="btn sm" data-act="repOpen" data-id="'+r.id+'">Voir</button><button class="ib" data-act="repDone" data-id="'+r.id+'" aria-label="Classer" title="Classer">✓</button></span></div>'}).join(''):'<div class="empty">Aucun signalement en attente.</div>')+'</div>'+
-        '<div class="dsec"><h4>Actions rapides</h4><div class="sgrid">'+[
-          ['sAnnounce','Annonce en jeu','Message sur tous les serveurs'],['sNews','Publier une actualité','Info &amp; News et encarts'],
-          ['sEvent','Gérer les events','Créer, ouvrir, fermer'],['sSanction','Sanctionner un joueur','Avertir, muter, bannir'],
-          ['sPack','Publier un modpack','Nouvelle version signée'],['sLogs','Journaux','Connexions et actions staff']
-        ].map(function(x){return '<button class="sbtn" data-act="staffAct" data-k="'+x[0]+'" data-a="staff-'+x[0]+'"><b>'+x[1]+'</b><small>'+x[2]+'</small></button>'}).join('')+'</div></div>'+
-        '<div class="dsec"><h4>Serveurs</h4>'+[['Lobby RE','En ligne · 214 joueurs · TPS 20','var(--ok)'],['Skyblock RE','En ligne · 87 joueurs · TPS 19,6','var(--ok)'],['Les Terres Brûlées','Maintenance · ouverture samedi','var(--warn)'],['UHC du vendredi','Arrêté','var(--ink-faint)']].map(function(x,i){return '<div class="srvrow" data-a="ssrv-'+i+'"><i style="--sc:'+x[2]+'"></i><span><b>'+x[0]+'</b><br><small>'+x[1]+'</small></span><button class="btn sm" data-act="staffAct" data-k="sSrv">Gérer</button></div>'}).join('')+'</div>'+
-        '<button class="btn" data-act="staffAct" data-k="sPanel">'+IC.ext+'Ouvrir le panel web complet</button></div>';
-      markNav(); refresh(); return;
-    }
-    if(S.drawer==='news'){
-      d.innerHTML='<header><h3>'+IC.bell+'Nouveautés</h3><button class="xbtn" data-act="closeDrawer" aria-label="Fermer">✕</button></header><div class="dbody">'+
-        '<div class="row"><span class="faint" style="font-size:12.5px">'+NEWS.filter(function(n){return n.unread}).length+' actualités non lues</span><button class="btn sm" data-act="readAll">Tout marquer comme lu</button></div>'+
-        (NOTIFS.length?'<div class="dsec"><h4>Notifications</h4>'+NOTIFS.map(function(n,i){return '<button class="notif" data-act="notifGo" data-i="'+i+'" data-a="notif-'+i+'" style="all:unset;cursor:pointer;display:grid;grid-template-columns:32px minmax(0,1fr);gap:10px;padding:9px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--line)"><span class="ni" style="width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--acc) 20%,transparent);color:var(--acc-2)">'+IC[n.i].replace('<svg','<svg width="16" height="16"')+'</span><span><b style="font-size:13px;display:block">'+esc(n.t)+'</b><small style="font-size:11.5px;color:var(--ink-soft)">'+esc(n.d)+'</small></span></button>'}).join('')+'</div>':'')+
-        '<div class="dsec"><div class="row"><h4 style="margin:0;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);font-weight:500">Actualités</h4><button class="btn sm" data-go="news" data-act="closeDrawer">Info &amp; News →</button></div>'+NEWS.map(function(n){return '<button class="nitem" data-news="'+n.id+'" data-a="ni-'+n.id+'"><span class="th">'+sc2(n.sc)+'</span><span style="min-width:0"><b>'+esc(n.t)+'</b><small>'+n.tags.map(function(t){return t[0]}).join(' · ')+' · '+esc(n.d)+'</small></span>'+(n.unread?'<span class="unread"></span>':'')+'</button>'}).join('')+'</div></div>';
-      markNav(); refresh(); return;
-    }
-    if(S.drawer==='downloads'){
-      var act=DL.filter(function(x){return x.st!=='done'}), fin=DL.filter(function(x){return x.st==='done'});
-      var speed=act.filter(function(x){return x.st==='active'}).reduce(function(a,x){return a+x.speed},0);
-      d.innerHTML='<header><h3>'+IC.downloads+'Download Manager</h3><button class="xbtn" data-act="closeDrawer" aria-label="Fermer">✕</button></header><div class="dbody">'+
-        '<div class="banner" style="padding:10px 12px"><span><b>'+act.length+' en cours</b><small class="faint" style="display:block;font-size:12px" id="dlSpeed">'+(speed?speed.toFixed(1).replace('.',',')+' Mo/s au total':'Aucun transfert actif')+'</small></span><button class="btn sm" data-act="dlPauseAll">'+(act.some(function(x){return x.st==='active'})?'Tout mettre en pause':'Tout reprendre')+'</button></div>'+
-        '<div class="dsec"><h4>En cours</h4>'+(act.length?act.map(dlItem).join(''):'<div class="empty">Rien à télécharger.</div>')+'</div>'+
-        '<div class="dsec"><div class="row"><h4 style="margin:0;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);font-weight:500">Terminés</h4>'+(fin.length?'<button class="btn sm" data-act="dlClear">Vider la liste</button>':'')+'</div>'+(fin.length?fin.map(dlItem).join(''):'<div class="empty">Aucun téléchargement terminé.</div>')+'</div>'+
-        '<div class="setrow" style="font-size:13px"><span><b>Limiter la bande passante</b><small>Pendant que tu joues</small></span><button class="toggle" role="switch" aria-checked="true" data-act="tgl" aria-label="Limiter la bande passante"></button></div></div>';
-    } else {
-      var on=FRIENDS.filter(function(f){return f.on!=='off'}), off=FRIENDS.filter(function(f){return f.on==='off'});
-      d.innerHTML='<header><h3>'+IC.friends+'Amis <span class="tag">'+on.length+' en ligne</span></h3><button class="xbtn" data-act="closeDrawer" aria-label="Fermer">✕</button></header><div class="dbody">'+
-        '<div style="display:flex;gap:6px"><input type="search" id="frAdd" placeholder="Ajouter un ami (pseudo ReLink)" aria-label="Ajouter un ami" style="flex:1"><button class="btn sm pri" data-act="frSend">Ajouter</button></div>'+
-        '<div class="setrow" style="font-size:13px;padding:10px 12px"><span><b>Mon statut</b><small>Visible par tes amis</small></span><select aria-label="Mon statut" style="font-size:12.5px;padding:6px 30px 6px 10px"><option>En ligne</option><option>Absent</option><option>Ne pas déranger</option><option>Invisible</option></select></div>'+
-        (REQS.length?'<div class="dsec"><h4>Demandes ('+REQS.length+')</h4><div class="reqs">'+REQS.map(function(r){return friendRow({n:r.n,on:'online',st:r.st,sk:r.sk},true)}).join('')+'</div></div>':'')+
-        '<div class="dsec"><h4>En jeu et en live</h4>'+on.filter(function(f){return f.on==='game'||f.on==='live'}).map(function(f){return friendRow(f)}).join('')+'</div>'+
-        '<div class="dsec"><h4>En ligne</h4>'+on.filter(function(f){return f.on==='online'||f.on==='away'}).map(function(f){return friendRow(f)}).join('')+'</div>'+
-        '<div class="dsec"><h4>Hors ligne ('+off.length+')</h4>'+off.map(function(f){return friendRow(f)}).join('')+'</div></div>';
-    }
+    var T={downloads:['downloads','Téléchargements','Aucun téléchargement en cours.'],friends:['friends','Amis','Les amis arriveront avec les comptes ReLink.'],news:['bell','Nouveautés','Aucune notification pour l\'instant.'],staff:['staff','Menu staff','Pas encore disponible.']}[S.drawer];
+    d.hidden=false; d.dataset.a='drawer-'+S.drawer; d.dataset.name=T[1]; d.classList.toggle('staff',S.drawer==='staff');
+    d.innerHTML='<header><h3>'+IC[T[0]]+T[1]+'</h3><button class="xbtn" data-act="closeDrawer" aria-label="Fermer">✕</button></header><div class="dbody"><div class="empty">'+T[2]+'</div></div>';
     markNav(); refresh();
   }
   function toggleDrawer(k){ S.drawer=(S.drawer===k)?null:k; renderDrawer(); }
@@ -917,32 +767,9 @@
     var n=DL.filter(function(d){return d.st==='active'||d.st==='queued'}).length;
     document.querySelectorAll('[data-drawer="downloads"]').forEach(function(b){var c=b.querySelector('.cnt'); if(n){ if(!c){c=document.createElement('span');c.className='cnt';b.appendChild(c)} c.textContent=n; } else if(c) c.remove();});
   }
-  /* Progression simulée des téléchargements */
-  setInterval(function(){
-    var changed=false;
-    DL.forEach(function(d){ if(d.st==='active'){ d.done=Math.min(1,d.done+d.speed/d.size*0.9); if(d.done>=1){d.st='done';changed=true;var q=DL.find(function(x){return x.st==='queued'}); if(q){q.st='active';q.speed=6.2}} } });
-    if(S.drawer==='downloads'){
-      if(changed) renderDrawer();
-      else DL.forEach(function(d){ var el=document.querySelector('[data-dl="'+d.id+'"]'); if(!el||d.st==='done') return; var i=el.querySelector('.pbar i'); if(i) i.style.width=Math.round(d.done*100)+'%'; var tmp=document.createElement('div'); tmp.innerHTML=dlItem(d); el.querySelector('.dlinfo').textContent=tmp.querySelector('.dlinfo').textContent; });
-    }
-    if(changed) updateCounts();
-  },1500);
 
   /* ================= DIFFUSION ================= */
-  RENDER.live=function(){
-    var cur=LIVES.find(function(l){return l.id===S.liveSel})||LIVES[0];
-    var cats=['Tous','Event RE','Partenaire','Ami'];
-    var lst=LIVES.filter(function(l){return S.liveF==='Tous'||l.tag===S.liveF});
-    function sc(c){return '<span class="sc" style="'+scStyle(c)+'"></span>'}
-    $('v-live').innerHTML='<div class="vhead"><div><h2>Diffusion Partenaires</h2><div class="sub">Les partenaires en direct sur nos events et ailleurs</div></div><span class="online">'+LIVES.length+' lives en cours</span></div>'+
-      '<div class="tabs" id="liveTabs">'+cats.map(function(c){return '<button class="chip" aria-pressed="'+(S.liveF===c)+'">'+(c==='Partenaire'?'Partenaires':c==='Ami'?'Mes amis':c==='Event RE'?'Events ReLaunch':c)+'</button>'}).join('')+'</div>'+
-      '<div class="player"><div style="display:flex;flex-direction:column;gap:10px;min-width:0"><div class="screen" data-a="live-player">'+sc(cur.sc)+'<div class="ov"><span class="row" style="justify-content:flex-start"><span class="livebadge">● LIVE</span><span class="viewers">'+cur.v.toLocaleString('fr-FR')+' spectateurs</span><span class="viewers">'+cur.pf+'</span></span><span class="streamer"><span class="fa">'+headHTML(SKINS[cur.sk],20)+'</span><span><b>'+esc(cur.n)+'</b><small>'+esc(cur.t)+'</small></span></span></div><button class="bigplay" data-act="watchLive" aria-label="Lancer le direct">'+IC.play+'</button></div>'+
-        '<span class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn pri" data-act="watchLive">'+IC.ext+'Regarder sur '+cur.pf+'</button>'+(cur.srv?'<button class="btn" data-play="'+cur.srv+'">'+IC.play+'Rejoindre le serveur</button>':'')+'<button class="btn" data-act="follow">Suivre '+esc(cur.n)+'</button><span class="tag">'+esc(cur.tag)+'</span></span></div>'+
-        '<div class="side3"><h3 style="font-size:13px;font-family:var(--f-mono);font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint)">Autres lives</h3>'+LIVES.filter(function(l){return l.id!==cur.id}).map(function(l){return '<button class="mini3" data-live="'+l.id+'" data-a="mini-'+l.id+'"><span class="th">'+sc(l.sc)+'</span><span style="min-width:0"><b>'+esc(l.n)+'</b><small>'+l.v.toLocaleString('fr-FR')+' · '+esc(l.tag)+'</small></span></button>'}).join('')+'</div></div>'+
-      '<div class="sect"><h3>En direct maintenant</h3><div class="lgrid">'+lst.map(function(l){return '<button class="lcard" data-live="'+l.id+'" data-a="live-'+l.id+'"><span class="th">'+sc(l.sc)+'<span class="livebadge">LIVE</span><span class="tag">'+esc(l.tag)+'</span><span class="viewers">'+l.v.toLocaleString('fr-FR')+' spectateurs</span></span><b>'+esc(l.t)+'</b><small>'+esc(l.n)+' · '+l.pf+'</small></button>'}).join('')+'</div></div>'+
-      '<div class="sect"><h3>Prochaines diffusions</h3>'+[['24','oct.','Ouverture des Terres Brûlées','Samedi 20h45 · 6 partenaires en live'],['31','oct.','UHC d\'Halloween','Vendredi 20h · cast officiel ReLaunch'],['15','nov.','Tournoi Skyblock','Samedi 16h · commenté par Kaori']].map(function(e,i){return '<div class="cal" data-a="lcal-'+(i+1)+'"><div class="d"><b>'+e[0]+'</b><span>'+e[1]+'</span></div><div class="row"><span><b>'+e[2]+'</b><small>'+e[3]+'</small></span><button class="btn sm" data-act="remind">Me prévenir</button></div></div>'}).join('')+'</div>';
-    $('liveTabs').addEventListener('click',function(e){var b=e.target.closest('.chip');if(!b)return;S.liveF=cats[[].indexOf.call(this.children,b)];RENDER.live();refresh()});
-  };
+  RENDER.live=function(){ soon('v-live','Diffusion Partenaires','Lives des partenaires','Aucun live pour l\'instant.'); };
 
   /* ================= INFO & NEWS ================= */
   function lstOf(){return NEWS.filter(function(n){return S.newsF==='Tout'||n.tags.some(function(t){return t[0]===S.newsF})})}
@@ -957,21 +784,7 @@
   }
   $('v-news').addEventListener('mouseover',function(e){if(e.target.closest('.nhero')&&!newsPaused){newsPaused=true;clearTimeout(newsT);var p=$('nprog');if(p)p.classList.remove('run')}});
   $('v-news').addEventListener('mouseout',function(e){var h=e.target.closest('.nhero');if(h&&!h.contains(e.relatedTarget)){newsPaused=false;startNews()}});
-  RENDER.news=function(){
-    var cats=['Tout','Event','Update','Vidéo','Serveur','Shop'];
-    var cur=lstOf().find(function(n){return n.id===S.newsSel})||lstOf()[0]||NEWS[0]; S.newsSel=cur.id;
-    var lst=lstOf();
-    function tags(n){return '<span class="ntags">'+n.tags.map(function(t){return '<span class="ntag" style="--tc:'+t[1]+'">'+esc(t[0])+'</span>'}).join('')+'</span>'}
-    $('v-news').innerHTML='<div class="vhead"><div><h2>Info &amp; News</h2><div class="sub">Actualités, events, mises à jour et annonces de l\'équipe</div></div><button class="btn sm" data-act="readAll">Tout marquer comme lu</button></div>'+
-      '<article class="nhero" data-a="news-hero">'+sc2(cur.sc)+(cur.video?'<button class="vplay big" data-act="watchLive" aria-label="Lire la vidéo">'+IC.play+'</button>':'')+
-        (CAR.auto&&lst.length>1?'<div class="nhnav"><span class="ccount">'+(lst.indexOf(cur)+1)+' / '+lst.length+'</span><span class="cprog" id="nprog" style="--spd:'+CAR.speed+'s"><i></i></span><button class="ib" data-act="newsStep" data-d="-1" aria-label="Actualité précédente">‹</button><button class="ib" data-act="newsStep" data-d="1" aria-label="Actualité suivante">›</button></div>':'')+
-        '<div class="nhbody">'+tags(cur)+'<h3>'+esc(cur.t)+'</h3><span class="ndate">'+esc(cur.d)+'</span><p>'+esc(cur.body)+'</p>'+
-        '<span class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn pri" data-act="newsGo" data-id="'+cur.id+'">'+esc(cur.cta)+' →</button><button class="btn" data-act="shareNews">Partager</button></span></div></article>'+
-      '<div class="tabs" id="newsTabs">'+cats.map(function(c){return '<button class="chip" aria-pressed="'+(S.newsF===c)+'">'+c+'</button>'}).join('')+'</div>'+
-      '<div class="ngrid">'+(lst.length?lst.map(function(n){return '<button class="ncard big'+(n.id===cur.id?' cur':'')+'" data-news="'+n.id+'" data-a="ng-'+n.id+'">'+sc2(n.sc)+(n.video?'<span class="vplay">'+IC.play+'</span>':'')+(n.unread?'<span class="unread" aria-label="Non lu"></span>':'')+tags(n)+'<b>'+esc(n.t)+'</b><small>'+esc(n.d)+'</small></button>'}).join(''):'<div class="empty">Aucune actualité dans cette catégorie.</div>')+'</div>';
-    $('newsTabs').addEventListener('click',function(e){var b=e.target.closest('.chip');if(!b)return;S.newsF=b.textContent;RENDER.news();refresh()});
-    renderBars(); startNews();
-  };
+  RENDER.news=function(){ soon('v-news','Info &amp; News','Actualités et annonces','Aucune actualité pour l\'instant.'); };
 
   /* ================= FAVORIS ================= */
   RENDER.favorites=function(){
@@ -979,45 +792,9 @@
     $('v-favorites').innerHTML='<div class="vhead"><div><h2>Favoris</h2><div class="sub">'+f.length+' instances et serveurs épinglés</div></div></div>'+
       (f.length?'<div class="favgrid">'+f.map(function(x){return '<div class="favc" data-a="favc-'+x.id+'"><div class="cover" style="--c1:'+x.c[0]+';--c2:'+x.c[1]+'"></div><span class="row"><b>'+esc(x.n)+'</b><button class="star" data-act="fav" data-id="'+x.id+'" aria-pressed="true" aria-label="Retirer des favoris">★</button></span><small>'+esc(detail(x))+'</small><span class="row"><button class="btn sm pri" data-play="'+x.id+'">'+IC.play+(x.k==='rl'?'Rejoindre':'Jouer')+'</button>'+pinBtn(x.id)+'</span></div>'}).join('')+'</div>':'<div class="empty">Aucun favori. Clique sur l\'étoile d\'une instance dans WeCraft pour l\'épingler.</div>');
   };
-  function openShot(i){
-    var s=SH[i];
-    $('shotModal').innerHTML='<header><h3>'+esc(s[1])+'</h3><button class="xbtn" data-act="closeShot" aria-label="Fermer">✕</button></header><div class="mbody"><span class="sc" style="'+scStyle(s[2])+'"></span><span class="faint" style="font-size:12.5px">'+esc(byId(s[0]).n)+' · 2026-10-'+(10+i)+' · 1920 × 1080</span><span class="row" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm" data-act="copyShot">Copier l\'image</button><button class="btn sm" data-act="shareShot">Partager sur WeLive</button><button class="btn sm" data-act="folder">Afficher dans le dossier</button><button class="btn sm danger" data-act="closeShot">Supprimer</button></span></div>';
-    $('shotOv').hidden=false; refresh();
-  }
 
   /* ================= DÉCOUVRIR ================= */
-  var DATA={
-    modpacks:[['Fabuleusement optimisé','Équipe FO','Beaux graphismes, bonnes performances, rien d\'autre à installer.',['Client','Optimisation','Fabric'],'18,9 M','4 977','la semaine dernière',['#e7e5e4','#a8a29e'],'FO'],
-      ['Survie FR+','Les Bâtisseurs du Nord','La survie vanilla, en mieux : 80 mods qualité de vie traduits en français.',['Client et serveur','Survie','Fabric'],'2,4 M','1 204','il y a 3 jours',['#14532d','#4ade80'],'S+'],
-      ['Nordique','Studio Givre','Exploration et survie dans le froid, villages nordiques et quêtes.',['Aventure','NeoForge'],'860 k','932','il y a 2 semaines',['#164e63','#67e8f9'],'N'],
-      ['Create : Usines','Atelier Pixel','Automatisation avec Create et ses extensions, carte de départ incluse.',['Tech','Multijoueur','Forge'],'1,1 M','2 051','le mois dernier',['#1e3a8a','#38bdf8'],'CU'],
-      ['Skyblock RE','ReLaunch','Le modpack officiel du serveur Skyblock RE.',['Client et serveur','Skyblock','Fabric'],'312 k','644','hier',['#0c4a6e','#7dd3fc'],'SB']],
-    mods:[['Sodium','CaffeineMC','Moteur de rendu moderne qui augmente fortement les FPS.',['Client','Optimisation','Fabric'],'78 M','24 k','la semaine dernière',['#334155','#94a3b8'],'Na'],
-      ['Lithium','CaffeineMC','Optimise la physique et la logique du jeu.',['Serveur','Optimisation','Fabric'],'41 M','9 k','il y a 2 semaines',['#064e3b','#34d399'],'Li'],
-      ['Simple Voice Chat','henkelmax','Chat vocal de proximité.',['Client et serveur','Social'],'23 M','6 k','il y a 5 jours',['#831843','#f472b6'],'VC'],
-      ['Xaero\'s Minimap','xaero96','Mini-carte et points de passage.',['Client','Utilitaire'],'35 M','7 k','le mois dernier',['#134e4a','#2dd4bf'],'XM']],
-    resourcepacks:[['Faithful 32x','Faithful Team','Les textures d\'origine en double résolution.',['32x','Vanilla+'],'12 M','5 k','le mois dernier',['#57534e','#d6d3d1'],'F']],
-    datapacks:[['Vanilla Tweaks','VT','Petites améliorations de gameplay au choix.',['Qualité de vie'],'6 M','3 k','il y a 2 mois',['#365314','#bef264'],'VT']],
-    shaders:[['Complementary','EminGT','Shaders réalistes et très configurables.',['Iris','OptiFine'],'15 M','8 k','la semaine dernière',['#1e1b4b','#818cf8'],'C'],['BSL','capttatsu','Rendu lumineux, ombres douces, eau réaliste.',['Iris'],'11 M','6 k','il y a 3 mois',['#78350f','#fbbf24'],'B']],
-    servers:[['CitéCraft','CitéCraft','Ville en économie joueurs, métiers et élections.',['Économie','1.21'],'312 en ligne','1 k','actif',['#581c87','#e879f9'],'CC'],['PvP Arène','Arène FR','Mini-jeux PvP rapides, classements hebdo.',['PvP','Mini-jeux'],'540 en ligne','2 k','actif',['#7f1d1d','#f87171'],'PA']]
-  };
-  var DTABS=[['modpacks','Modpacks'],['mods','Mods'],['resourcepacks','Packs de ressources'],['datapacks','Data packs'],['shaders','Shaders'],['servers','Serveurs']];
-  RENDER.discover=function(){
-    var q=S.dQ.trim().toLowerCase(), list=DATA[S.dTab].filter(function(p){return !q||(p[0]+' '+p[2]).toLowerCase().indexOf(q)>-1});
-    var label=DTABS.find(function(t){return t[0]===S.dTab})[1].toLowerCase();
-    $('v-discover').innerHTML='<div class="vhead"><div><h2>Découvrir</h2><div class="sub">Modpacks, mods, shaders et serveurs</div></div></div>'+
-      '<div class="tabs" id="dTabs">'+DTABS.map(function(t){return '<button class="chip" data-t="'+t[0]+'" aria-pressed="'+(S.dTab===t[0])+'">'+t[1]+'</button>'}).join('')+'</div>'+
-      '<div class="dtools"><input type="search" id="dQ" placeholder="Rechercher des '+label+'…" aria-label="Rechercher" value="'+esc(S.dQ)+'">'+
-        '<select id="dSort" aria-label="Trier par"><option>Pertinence</option><option>Téléchargements</option><option>Récemment mis à jour</option><option>Nouveautés</option></select>'+
-        '<select aria-label="Résultats par page"><option>20 par page</option><option>50 par page</option></select>'+
-        '<span class="pager" id="pager">'+[1,2,'…',944].map(function(p){return '<button'+(p===S.dPage?' aria-current="true"':'')+' data-p="'+p+'">'+p+'</button>'}).join('')+'<button data-p="next" aria-label="Page suivante">›</button></span></div>'+
-      '<div style="display:flex;flex-direction:column;gap:10px">'+(list.length?list.map(function(p){var k=S.dTab+'-'+slug(p[0]), inst=S.installed[k];
-        return '<div class="proj" data-a="proj-'+k+'"><div class="cover" style="--c1:'+p[7][0]+';--c2:'+p[7][1]+'"><span>'+p[8]+'</span></div><div style="min-width:0"><h4>'+esc(p[0])+'<small>par '+esc(p[1])+'</small></h4><p>'+esc(p[2])+'</p><div class="tags">'+p[3].map(function(t){return '<span class="tag">'+esc(t)+'</span>'}).join('')+'</div></div>'+
-          '<div class="side2"><button class="btn sm inst" data-inst="'+k+'" aria-pressed="'+!!inst+'">'+(inst?'✓ Installé':(S.dTab==='servers'?'+ Ajouter':'+ Installer'))+'</button><span>'+IC.dl.replace('<svg','<svg width="13" height="13"')+' <b>'+p[4]+'</b> · ♡ '+p[5]+'</span><span>Mis à jour '+p[6]+'</span></div></div>'}).join(''):'<div class="empty">Aucun résultat pour « '+esc(S.dQ)+' ».</div>')+'</div>';
-    $('dTabs').addEventListener('click',function(e){var b=e.target.closest('[data-t]');if(!b)return;S.dTab=b.dataset.t;S.dPage=1;RENDER.discover();refresh()});
-    $('dQ').addEventListener('input',function(){S.dQ=this.value;var pos=this.selectionStart;RENDER.discover();var i=$('dQ');i.focus();try{i.setSelectionRange(pos,pos)}catch(e){};refresh()});
-    $('pager').addEventListener('click',function(e){var b=e.target.closest('[data-p]');if(!b)return;var p=b.dataset.p;if(p==='…')return;S.dPage=p==='next'?Math.min(944,S.dPage+1):+p;RENDER.discover();refresh()});
-  };
+  RENDER.discover=function(){ soon('v-discover','Découvrir','Modpacks, mods, shaders et serveurs','Le catalogue (Modrinth) arrivera dans une prochaine version.'); };
 
   /* ================= CRÉER UN WEPACK ================= */
   var CR={step:'choose',name:'',loader:'Fabric',ver:'1.21.4',lv:'Stable',c:['#be185d','#fb7185']};
@@ -1063,13 +840,13 @@
     var th=t.closest('[data-theme]'); if(th){ setSkin(th.dataset.theme); RENDER.settings(); return; }
     var ly=t.closest('[data-lay]'); if(ly){ var c=JSON.parse(ly.dataset.lay); var before=snapPos(); Object.keys(c).forEach(function(k){NAV[k]=c[k]}); saveNav(); return; }
     var ins=t.closest('[data-inst]'); if(ins){ var k=ins.dataset.inst; S.installed[k]=!S.installed[k]; RENDER.discover(); toast(S.installed[k]?'Ajouté à une nouvelle instance':'Retiré'); refresh(); return; }
-    var sh=t.closest('[data-shot]'); if(sh){ openShot(+sh.dataset.shot); return; }
     var nw=t.closest('[data-news]'); if(nw){ if(S.drawer==='news'){S.drawer=null;renderDrawer()} openNews(nw.dataset.news); $('main').scrollTop=0; return; }
     var lv=t.closest('[data-live]'); if(lv){ S.liveSel=lv.dataset.live; RENDER.live(); $('main').scrollTop=0; refresh(); return; }
     var a=t.closest('[data-act]'); if(!a) return;
     var act=a.dataset.act, i=+a.dataset.i, x;
     switch(act){
-      case 'create': openCreate(); break;
+      case 'create': toast('Création d\'instance pas encore disponible dans cette version.'); break;
+      case 'noInst': toast('Aucune instance à lancer pour l\'instant.'); break;
       case 'newsStep': var L3=lstOf(), ci=L3.findIndex(function(n){return n.id===S.newsSel}); S.newsSel=L3[(ci+(+a.dataset.d)+L3.length)%L3.length].id; RENDER.news(); refresh(); break;
       case 'reclickPref': PREF.reclick=a.dataset.v; store('proto-pref2',PREF); RENDER.settings(); break;
       case 'openStaff': S.drawer='staff'; renderDrawer(); break;
@@ -1077,7 +854,6 @@
       case 'repOpen': var rp=REPORTS.find(function(r){return r.id===a.dataset.id}); toast('Dossier de '+rp.who+' : historique, preuves, sanctions'); break;
       case 'staffAct': toast({sAnnounce:'Rédaction d\'une annonce en jeu',sNews:'Éditeur d\'actualité : type d\'encart, image, texte, date',sEvent:'Gestion des events',sSanction:'Recherche d\'un joueur à sanctionner',sPack:'Publication d\'une nouvelle version de modpack',sLogs:'Journaux du staff',sSrv:'Console du serveur',sPanel:'Ouverture du panel web dans le navigateur'}[a.dataset.k]); break;
       case 'newsGo': goNews(a.dataset.id); break;
-      case 'shareNews': toast('Lien copié'); break;
       case 'carPrev': carSet(S.car-1); break;
       case 'carNext': carSet(S.car+1); break;
       case 'carGo': carSet(+a.dataset.i); break;
@@ -1097,7 +873,6 @@
       case 'dissolve': var dg=gById(a.dataset.gid), di=NAV.pins.indexOf(dg); NAV.pins.splice.apply(NAV.pins,[di,1].concat(dg.items.map(function(id){return {t:'i',id:id}}))); if(S.pop&&S.pop.gid===dg.id) S.pop=null; savePins(); break;
       case 'bgMode': PREF.bg=a.dataset.v; store('proto-pref2',PREF); applyBg(); RENDER.settings(); break;
       case 'wheelReset': PREF.custom={h:330,s:80,l:60}; setSkin('custom'); RENDER.settings(); break;
-      case 'goPremium': toast('Ouverture de l\'offre Premium dans le shop ReLink'); break;
       case 'style': PREF.style=a.dataset.v; store('proto-pref2',PREF); applyStyle(); RENDER.settings(); toast(PREF.style==='lg'?'Style Liquid Glass activé':'Style standard activé'); break;
       case 'pinMode': NAV.pinMode=a.dataset.m; S.pop=null; saveNav(); renderPop(); break;
       case 'dockSide': NAV.dock.side=a.dataset.s; saveNav(); break;
@@ -1108,31 +883,17 @@
       case 'dlClear': DL=DL.filter(function(d){return d.st!=='done'}); renderDrawer(); break;
       case 'frAccept': var rq=REQS.findIndex(function(r){return r.n===a.dataset.n}); var r0=REQS.splice(rq,1)[0]; FRIENDS.splice(3,0,{n:r0.n,on:'online',st:'En ligne',sk:r0.sk}); renderDrawer(); toast(r0.n+' est maintenant ton ami'); break;
       case 'frDecline': REQS=REQS.filter(function(r){return r.n!==a.dataset.n}); renderDrawer(); break;
-      case 'frMsg': toast('Conversation avec '+a.dataset.n); break;
-      case 'frInvite': toast('Invitation envoyée à '+a.dataset.n); break;
-      case 'frSend': var fa=$('frAdd'); if(fa&&fa.value.trim()){ toast('Demande envoyée à '+fa.value.trim()); fa.value=''; } break;
-      case 'watchLive': toast('Ouverture du direct dans le navigateur'); break;
-      case 'follow': toast('Tu seras prévenu à son prochain live'); break;
       case 'closeCreate': closeCreate(); break;
       case 'crCustom': CR.step='custom'; renderCreate(); break;
       case 'crBack': CR.step='choose'; renderCreate(); break;
       case 'crFrom': closeCreate(); S.dTab='modpacks'; show('discover'); break;
-      case 'crImport': toast('Recherche des instances Prism et CurseForge…'); break;
-      case 'crUploadIcon': toast('Choix d\'une image'); break;
       case 'crRand': CR.c=PALS[(PALS.indexOf(CR.c)+1)%PALS.length]; renderCreate(); break;
       case 'crLoader': CR.loader=a.dataset.v; renderCreate(); break;
       case 'crLv': CR.lv=a.dataset.v; renderCreate(); break;
-      case 'crCreate':
-        var nm=(CR.name||CR.loader+' '+CR.ver).trim(), id='i'+(Date.now()%1e6);
-        INST.push({id:id,k:'wc',n:nm,v:CR.ver,l:CR.loader,lv:CR.lv==='Stable'?'stable':CR.lv.toLowerCase(),m:0,r:PREF.ram,s:'WeCraft',fav:false,last:0,created:Date.now(),c:CR.c});
-        closeCreate(); renderBars(); toast('WePack « '+nm+' » créé'); show('wecraft'); break;
       case 'closeShot': $('shotOv').hidden=true; refresh(); break;
-      case 'copyShot': toast('Image copiée'); break;
-      case 'shareShot': toast('Partage préparé pour WeLive'); break;
       case 'fav': x=byId(a.dataset.id); x.fav=!x.fav; RENDER[S.view](); refresh(); break;
       case 'del': S.delId=a.dataset.id; $('delName').textContent=byId(S.delId).n; $('delBox').hidden=false; refresh(); break;
       case 'delNo': $('delBox').hidden=true; refresh(); break;
-      case 'delYes': INST=INST.filter(function(y){return y.id!==S.delId}); if(S.sel===S.delId) S.sel=INST[0]&&INST[0].id; pullRaw(S.delId); tidy(); store('proto-nav5',NAV); renderBars(); RENDER.wecraft(); refresh(); break;
       case 'navOn': NAV.items[i].on=!NAV.items[i].on; saveNav(); break;
       case 'navUp': moveNav(i,i-1); break;
       case 'navDown': moveNav(i,i+1); break;
@@ -1148,27 +909,12 @@
       case 'preset': applyPreset(a.dataset.p); break;
       case 'navBar': NAV.items[i].bar=a.dataset.b; saveNav(); break;
       case 'navReset': NAV=clone(NAVDEF); saveNav(); break;
+      case 'barSize': if(BARSIZES[a.dataset.v]){ NAV.size=a.dataset.v; saveNav(); } break;
       case 'rlTab': S.rlTab=a.dataset.t; RENDER.relink(); refresh(); break;
-      case 'pwd': toast('Lien de changement envoyé par e-mail'); break;
       case 'resumeTgl': HOME.resume=!HOME.resume; store('proto-home3',HOME); a.setAttribute('aria-checked',String(HOME.resume)); break;
       case 'pref': PREF[a.dataset.k]=!PREF[a.dataset.k]; store('proto-pref2',PREF); a.setAttribute('aria-checked',String(PREF[a.dataset.k])); break;
       case 'tgl': a.setAttribute('aria-checked',String(a.getAttribute('aria-checked')!=='true')); break;
-      case 'notes': toast('ReLaunch 2.0.1 : navigation personnalisable, nouveaux thèmes'); break;
-      case 'social': toast('Liens : Discord, YouTube, TikTok, Twitch'); break;
-      case 'import': toast('Recherche des instances Prism et CurseForge…'); break;
-      case 'official': toast('Ouverture du launcher officiel'); break;
-      case 'folder': toast('Ouverture du dossier'); break;
-      case 'remind': toast('Tu seras prévenu samedi à 20h45'); break;
-      case 'watch': toast('Ouverture du contenu dans le navigateur'); break;
-      case 'mylist': toast('Ajouté à ta liste'); break;
-      case 'why': toast('Parce que tu joues en hardcore et regardes Atelier Pixel'); break;
-      case 'buy': toast('Achat confirmé (démo)'); break;
-      case 'credits': toast('Ouverture du shop ReLink'); break;
-      case 'ms': toast('Connexion Microsoft dans le navigateur'); break;
-      case 'addSkin': toast('Choix d\'un fichier .png'); break;
-      case 'editSkin': toast('Éditeur de skin'); break;
-      case 'cape': toast('Choix de la cape'); break;
-      case 'logout': toast('Déconnecté (démo)'); break;
+      default: toast('Pas encore disponible dans cette version.');
     }
   });
   document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&!dev&&S.pop){ S.pop=null; renderPop(); return; } if(e.key==='Escape'&&!dev&&S.drawer){ S.drawer=null; renderDrawer(); return; } if(e.key==='Escape'&&!dev){ if(!$('createOv').hidden) closeCreate(); if(!$('shotOv').hidden){$('shotOv').hidden=true;refresh()} } });
