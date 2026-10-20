@@ -170,17 +170,19 @@ test("plans de xmcl : passent par nos garde-fous (adresses filtrées, empreintes
 });
 
 let realXmcl: XmclApi | null = null;
+let loadError = "";
 try {
   realXmcl = loadXmcl();
-} catch {
+} catch (e) {
   realXmcl = null;
+  loadError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
 }
 
 // Sur la CI (variable CI définie), ce test n'est jamais ignoré : xmcl absent = échec.
 const skipReal = realXmcl === null && !process.env["CI"] ? "@xmcl/installer non installé ici" : false;
 
 test("intégration avec la vraie bibliothèque xmcl (réseau simulé)", { skip: skipReal }, async () => {
-  assert.ok(realXmcl, "@xmcl/installer doit être installé sur la CI");
+  assert.ok(realXmcl, `@xmcl/installer doit être chargé sur la CI (${loadError})`);
   const { dir, cleanup } = tempDir("vanilla-real");
   try {
     const id = "1.21.4";
