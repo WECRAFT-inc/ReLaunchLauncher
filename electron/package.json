@@ -9,7 +9,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "clean": "node scripts/clean.mjs",
-    "build": "npm run clean && tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
+    "build": "npm run clean && node scripts/fix-dependencies.mjs && tsc -p tsconfig.json && tsc -p tsconfig.renderer.json && node scripts/copy-static.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "npm run build && node --test \"dist/tests/*.test.js\"",
     "start": "npm run build && electron .",

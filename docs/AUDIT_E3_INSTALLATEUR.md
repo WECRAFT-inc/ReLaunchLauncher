@@ -113,6 +113,7 @@ depuis juillet 2026. Relecture de la 6.3.6 (17/10/2026, commit `1b4c985`, versio
 | X7 | **Corrigé** : `undici ^7.29` (7.30.1 verrouillé). |
 | X8 | Les commandes Java passent par `InstallRuntime.java` : pour une version de base, toute commande est refusée. |
 | — | **Provenance npm présente** (attestation SLSA) : le paquet publié est relié à son code source. |
+| X12 (nouveau) | `@xmcl/unzip` 2.2.0 : `main` pointe vers `./index.ts`, absent du paquet (le code publié est dans `dist/`). Corrigé à chaque compilation par `scripts/fix-dependencies.mjs` (seul ce champ change ; arrêt en erreur si la version change). |
 | X11 (nouveau) | `@xmcl/unzip` 2.2.0 publié avec une dépendance interne invalide (`workspace:^*` vers `@xmcl/yauzl`) : imposée à `@xmcl/yauzl` 2.10.0 (`overrides` dans `package.json`). |
 
 `package-lock.json` produit le 20/10/2026 sur le PC du développeur (`--package-lock-only --ignore-scripts`) :
@@ -122,4 +123,3 @@ BSD / ISC / Apache-2.0, aucune version existante modifiée, `npm audit` : 0 fail
 Branchement retenu : xmcl **planifie** (fichier de version lu par `Version.parse`, listes jeu / bibliothèques /
 index / ressources) ; ReLaunch **télécharge et vérifie** (`src/main/install/xmcl.ts`, `vanilla.ts`). Le fichier
 de version lui-même est vérifié par l'empreinte de la liste officielle Mojang (xmcl ne le fait pas).
-
