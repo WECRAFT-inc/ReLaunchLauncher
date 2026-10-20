@@ -1,4 +1,4 @@
-// Correctif d'un paquet mal publié (audit E3, constat X12), appliqué à chaque compilation.
+// Correctifs de paquets @xmcl mal publiés (audit E3, constats X12 et X13), appliqués à chaque compilation.
 //
 // @xmcl/unzip 2.2.0 a été publié sans que son package.json soit réécrit pour la publication : « main »
 // pointe vers ./index.ts (absent du paquet) au lieu de ./dist/index.js (présent). Les fichiers du paquet
@@ -9,6 +9,31 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// X13 : @xmcl/installer 6.3.6 importe « @xmcl/core/utils » (fonction isNotNull), chemin qui n'existe que dans
+// le dépôt source, pas dans le paquet @xmcl/core 2.16.2 publié. On ajoute ce seul fichier, avec la définition
+// d'origine (packages/core/utils.ts) : « v !== undefined ».
+{
+  const coreDir = join(root, "node_modules", "@xmcl", "core");
+  const corePkg = join(coreDir, "package.json");
+  if (existsSync(corePkg)) {
+    const core = JSON.parse(readFileSync(corePkg, "utf8"));
+    if (core.version !== "2.16.2") {
+      console.error(`[correctif] @xmcl/core ${core.version} : version inattendue, vérifier si le correctif est encore nécessaire.`);
+      process.exit(1);
+    }
+    const utils = join(coreDir, "utils.js");
+    if (!existsSync(utils)) {
+      writeFileSync(
+        utils,
+        '"use strict";\n// Ajouté par ReLaunch (scripts/fix-dependencies.mjs) : sous-module absent du paquet publié.\n' +
+          "exports.isNotNull = function isNotNull(v) { return v !== undefined; };\n",
+      );
+      console.log("[correctif] @xmcl/core : utils.js ajouté (isNotNull).");
+    }
+  }
+}
+
 const dir = join(root, "node_modules", "@xmcl", "unzip");
 const file = join(dir, "package.json");
 
