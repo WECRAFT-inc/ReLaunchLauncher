@@ -243,3 +243,35 @@ Vérifié localement : 43 tests ; toutes les pages rendues dans Chromium avec la
 plus aucun texte fictif ; tailles xs et xl appliquées.
 
 Suite : portage de l'interface en React (D4), puis lot E2 (détection des instances).
+
+### Lot E1 : revue indépendante et corrections (20/10/2026)
+
+Revue par un agent séparé (n'ayant pas écrit le code). Verdict : validable après corrections. Corrigé sur
+`electron/e1-reglages` (puis fusionné dans la branche interface) :
+- **C1 (critique)** : un fichier abîmé dont la copie de côté échouait était quand même remplacé au premier
+  changement de thème (perte des autres réglages + faux « enregistré »). Désormais : jamais remplacé sans copie
+  vérifiée (refus « not-backed-up »), copie retentée.
+- **I1** : remplacement d'un fichier abîmé signalé dans le bandeau, avec le nom de la copie.
+- **M2** : la copie contient exactement les octets jugés invalides ; si la version Python écrit pendant une
+  mise à jour, celle-ci recommence sur le nouveau contenu (3 fois, puis abandon sans écrire).
+- **M3 / M4** : date non reprise ≠ copie ratée ; fichier anormalement gros jamais chargé ni réécrit.
+- 7 tests ajoutés (50). Restent notés : **I2** (la version Python réécrit tout son fichier : ne pas faire tourner
+  les deux versions en même temps), M1 (nombres `NaN` / très grands), M5 (liens symboliques), M7 (`.tmp`
+  orphelins).
+
+### Lot E3 : installation des versions, loaders et Java (branche `electron/e3-installation`)
+
+Audit écrit : `docs/AUDIT_E3_INSTALLATEUR.md`. `@xmcl/installer` (MIT, un seul mainteneur actif) a quatre
+défauts critiques pour nous : empreintes jamais vérifiées après téléchargement, vérification du manifeste Java
+retirée en février 2026, Forge en HTTP, installeur NeoForge sans empreinte (alors qu'il est exécuté).
+Recommandation (**D9, à décider**) : l'utiliser encadré par nos propres garde-fous.
+
+Étape 1 faite (utile quelle que soit la décision, sans dépendance) :
+- `src/main/net/download.ts` : HTTPS seulement vers une liste fermée de serveurs officiels, redirections
+  revérifiées, tailles limitées, téléchargement en fichier temporaire **vérifié avant installation**.
+- `src/main/install/javaRuntime.ts` : Java de Mojang, même emplacement que la version Python, chaîne
+  d'empreintes vérifiée (liste → manifeste → chaque fichier), chemins du manifeste confinés au dossier Java.
+- 19 tests avec un réseau simulé (69 au total) : falsifications, redirections, chemins piégés, reprise.
+
+Rien n'est encore branché à l'interface ; aucun téléchargement réel n'a été fait ici (réseau du poste de travail
+limité). Suite : ajout de xmcl selon D9, Vanilla avec vérification finale, loaders, essai en bac à sable.

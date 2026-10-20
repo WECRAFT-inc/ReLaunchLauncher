@@ -181,6 +181,7 @@ E0, E1 et l'audit de E3 peuvent avancer en parallèle. Rien n'est publié avant 
 | D5 | Certificat Authenticode | Optionnel, à budgéter |
 | D6 | Périmètre ReLaunch (comptes, auth Microsoft, skins) | Hors périmètre de cette migration |
 | D7 | Rôle du dossier `Wecraft-test-new` | **Décidé : bac à sable de test** (19/10/2026) |
+| D9 | Installation (E3) : `@xmcl/installer` encadré (A), tout écrire (B) ou code copié (C) — voir `docs/AUDIT_E3_INSTALLATEUR.md` | A |
 | D8 | Référence visuelle (§10.1) | **Décidé : maquette ReLaunch × WeCraft + capture de l'accueil** (19/10/2026) |
 
 ---
