@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { JsonStore, SettingsUnreadable, stamp } from "../src/main/storage/jsonStore";
+import { JsonStore, SettingsBusy, SettingsNotBackedUp, SettingsUnreadable, stamp } from "../src/main/storage/jsonStore";
 import { faultyFs, noSleep, sysError, tempDir } from "./helpers";
 
 const copiesOf = (dir: string, name: string) => readdirSync(dir).filter((n) => n.startsWith(`${name}.invalide-`));
@@ -257,14 +257,140 @@ test("une écriture échouée n'empêche pas les suivantes", async () => {
   }
 });
 
-test("fichier anormalement gros : traité comme invalide, jamais chargé", async () => {
+test("fichier anormalement gros : jamais chargé, jamais réécrit (revue E1, M4)", async () => {
   const { dir, cleanup } = tempDir("big");
   try {
     const f = path.join(dir, "big.json");
-    writeFileSync(f, JSON.stringify({ x: "a".repeat(2000) }), "utf8");
-    const s = new JsonStore({ maxBytes: 1000 });
+    const content = JSON.stringify({ x: "a".repeat(2000) });
+    writeFileSync(f, content, "utf8");
+    let reads = 0;
+    const fs = faultyFs({
+      readFile: async (p) => {
+        if (p === f) reads++;
+        const { readFile } = await import("node:fs/promises");
+        return readFile(p);
+      },
+    });
+    const s = new JsonStore({ fs, maxBytes: 1000 });
     assert.equal(await s.read(f), null);
-    assert.equal(copiesOf(dir, "big.json").length, 1);
+    assert.equal(reads, 0);
+    assert.ok(s.unreadable.has(f));
+    await assert.rejects(s.update(f, (d) => ({ ...d, theme: "glace" })), SettingsUnreadable);
+    assert.equal(readFileSync(f, "utf8"), content);
+  } finally {
+    cleanup();
+  }
+});
+
+test("fichier invalide dont la copie échoue : jamais remplacé (revue E1, C1)", async () => {
+  const { dir, cleanup } = tempDir("c1");
+  try {
+    const f = path.join(dir, "launcher_config.json");
+    writeFileSync(f, '{"ram": 6, "version": "1.20', "utf8");
+    let failCopy = true;
+    const fs = faultyFs({
+      writeNew: async (p, d) => {
+        if (failCopy) throw sysError("ENOSPC");
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(p, d, { flag: "wx" });
+      },
+    });
+    const s = new JsonStore({ fs });
+    assert.equal(await s.read(f), null);
+    assert.deepEqual(s.takeInvalidFiles(), [{ file: f, copy: null }]);
+    await assert.rejects(s.update(f, (d) => ({ ...d, theme: "glace" })), SettingsNotBackedUp);
+    await assert.rejects(s.update(f, (d) => ({ ...d, theme: "glace" })), SettingsNotBackedUp);
+    assert.equal(readFileSync(f, "utf8"), '{"ram": 6, "version": "1.20');
+    // La copie redevient possible : elle est retentée, puis seulement le fichier est remplacé
+    failCopy = false;
+    const r = await s.update(f, (d) => ({ ...d, theme: "glace" }));
+    const copies = copiesOf(dir, "launcher_config.json");
+    assert.equal(copies.length, 1);
+    assert.equal(readFileSync(path.join(dir, copies[0]!), "utf8"), '{"ram": 6, "version": "1.20');
+    assert.equal(r.reset?.copy, path.join(dir, copies[0]!));
+    assert.deepEqual(JSON.parse(readFileSync(f, "utf8")), { theme: "glace" });
+  } finally {
+    cleanup();
+  }
+});
+
+test("mise à jour d'un fichier valide : reset = null", async () => {
+  const { dir, cleanup } = tempDir("noreset");
+  try {
+    const f = path.join(dir, "a.json");
+    writeFileSync(f, '{"ram": 6}', "utf8");
+    const r = await new JsonStore().update(f, (d) => ({ ...d, theme: "glace" }));
+    assert.equal(r.reset, null);
+    assert.deepEqual(r.data, { ram: 6, theme: "glace" });
+  } finally {
+    cleanup();
+  }
+});
+
+test("copie de côté = exactement les octets jugés invalides (revue E1, M2)", async () => {
+  const { dir, cleanup } = tempDir("m2");
+  try {
+    const f = path.join(dir, "c.json");
+    writeFileSync(f, "{abîmé", "utf8");
+    // Un autre programme réécrit le fichier juste après la lecture : la copie garde l'ancien contenu
+    const fs = faultyFs({
+      readdir: async (p) => {
+        writeFileSync(f, '{"nouveau": true}', "utf8");
+        const { readdir } = await import("node:fs/promises");
+        return readdir(p);
+      },
+    });
+    const s = new JsonStore({ fs });
+    assert.equal(await s.read(f), null);
+    const copies = copiesOf(dir, "c.json");
+    assert.equal(copies.length, 1);
+    assert.equal(readFileSync(path.join(dir, copies[0]!), "utf8"), "{abîmé");
+  } finally {
+    cleanup();
+  }
+});
+
+test("fichier modifié par un autre programme pendant la mise à jour : recommencée (revue E1, M2)", async () => {
+  const { dir, cleanup } = tempDir("race");
+  try {
+    const f = path.join(dir, "launcher_config.json");
+    writeFileSync(f, '{"ram": 6}', "utf8");
+    let once = true;
+    const fs = faultyFs({
+      writeFileSynced: async (p, d) => {
+        if (once) {
+          once = false;
+          writeFileSync(f, '{"ram": 8, "python": true}', "utf8"); // écriture par la version Python
+        }
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(p, d, { flag: "wx" });
+      },
+    });
+    const r = await new JsonStore({ fs }).update(f, (d) => ({ ...d, theme: "glace" }));
+    assert.deepEqual(r.data, { ram: 8, python: true, theme: "glace" });
+    assert.deepEqual(JSON.parse(readFileSync(f, "utf8")), { ram: 8, python: true, theme: "glace" });
+    assert.deepEqual(readdirSync(dir), ["launcher_config.json"]);
+  } finally {
+    cleanup();
+  }
+});
+
+test("fichier modifié sans cesse : abandon sans rien écrire", async () => {
+  const { dir, cleanup } = tempDir("busy");
+  try {
+    const f = path.join(dir, "b.json");
+    writeFileSync(f, '{"n": 0}', "utf8");
+    let n = 0;
+    const fs = faultyFs({
+      writeFileSynced: async (p, d) => {
+        writeFileSync(f, JSON.stringify({ n: ++n, pad: "x".repeat(n) }), "utf8");
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(p, d, { flag: "wx" });
+      },
+    });
+    await assert.rejects(new JsonStore({ fs }).update(f, (d) => ({ ...d, theme: "glace" })), SettingsBusy);
+    assert.equal(JSON.parse(readFileSync(f, "utf8")).theme, undefined);
+    assert.deepEqual(readdirSync(dir), ["b.json"]);
   } finally {
     cleanup();
   }

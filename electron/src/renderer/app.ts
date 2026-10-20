@@ -27,6 +27,8 @@ type FailureReason = Extract<SettingResult, { ok: false }>["reason"];
 const SAVE_ERRORS: Record<FailureReason, string> = {
   invalid: "Thème inconnu : rien n'a été enregistré.",
   unreadable: "Thème appliqué pour cette session : le fichier de réglages est utilisé par un autre programme. Il n'a pas été modifié.",
+  "not-backed-up":
+    "Thème appliqué pour cette session : le fichier de réglages est abîmé et n'a pas pu être copié de côté, il n'a donc pas été modifié.",
   "write-failed": "Thème appliqué pour cette session : l'enregistrement a échoué.",
 };
 
@@ -52,6 +54,12 @@ function setupThemeBridge(): void {
       .catch((): SettingResult => ({ ok: false, reason: "write-failed" }))
       .then((r) => {
         if (!r.ok) toast(SAVE_ERRORS[r.reason]);
+        else if (r.reset) {
+          showNoticeLines([
+            `Thème enregistré, mais ${r.reset.name} était abîmé : il a été copié dans ${r.reset.copyName} puis ` +
+              "remplacé. Vos autres réglages sont revenus aux valeurs par défaut (ils restent dans la copie).",
+          ]);
+        }
       });
   });
 }
@@ -68,6 +76,10 @@ function showNotices(info: AppInfo): void {
     }
   }
   if (info.migrated.length > 0) lines.push(`Réglages repris d'un ancien dossier WeCraft (copie) : ${info.migrated.join(", ")}.`);
+  showNoticeLines(lines);
+}
+
+function showNoticeLines(lines: string[]): void {
   if (lines.length === 0) return;
   el("wc-notice-text").replaceChildren(...lines.flatMap((l, i) => (i === 0 ? [l] : [document.createElement("br"), l])));
   el("wc-notice").hidden = false;

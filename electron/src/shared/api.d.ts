@@ -40,10 +40,14 @@ export interface InvalidFileNotice {
   copyName: string | null;
 }
 
-/** Résultat d'un enregistrement de réglage. */
+/**
+ * Résultat d'un enregistrement de réglage. `reset` : le fichier était invalide ; il a été copié de côté
+ * (copyName) puis remplacé, les autres réglages sont donc revenus aux valeurs par défaut.
+ * « not-backed-up » : fichier invalide dont la copie a échoué, laissé tel quel.
+ */
 export type SettingResult =
-  | { ok: true }
-  | { ok: false; reason: "invalid" | "unreadable" | "write-failed" };
+  | { ok: true; reset?: { name: string; copyName: string } }
+  | { ok: false; reason: "invalid" | "unreadable" | "not-backed-up" | "write-failed" };
 
 export interface WeCraftApi {
   app: {
