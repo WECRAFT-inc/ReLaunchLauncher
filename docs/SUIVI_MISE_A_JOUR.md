@@ -275,3 +275,17 @@ Recommandation (**D9, à décider**) : l'utiliser encadré par nos propres garde
 
 Rien n'est encore branché à l'interface ; aucun téléchargement réel n'a été fait ici (réseau du poste de travail
 limité). Suite : ajout de xmcl selon D9, Vanilla avec vérification finale, loaders, essai en bac à sable.
+
+**Étape 2 (D9 = A, 20/10/2026 soir)** :
+- `package-lock.json` produit sur le PC du développeur (le registre npm n'est pas joignable depuis le poste de
+  Claude) : `@xmcl/installer` 6.3.6 + `undici` 7.30.1, 34 paquets, 0 faille connue, aucune version existante
+  changée ; `@xmcl/unzip` 2.2.0 mal publié, corrigé par `overrides`.
+- Relecture de la 6.3.6 : la plupart des défauts critiques sont corrigés en amont (audit E3, §7).
+- `src/main/install/xmcl.ts` : xmcl planifie, ReLaunch télécharge (HTTPS, serveurs officiels, SHA-1 obligatoire,
+  `.sha1` Maven sinon refus, aucune confiance sur la taille ou la date).
+- `src/main/install/vanilla.ts` : installation d'une version de base (liste Mojang → fichier de version vérifié →
+  jeu, bibliothèques, index, ressources vérifiés).
+- 13 tests de plus ; le test d'intégration avec la vraie bibliothèque tourne sur la CI Windows.
+
+Toujours pas branché à l'interface. Suite : Fabric / Quilt, puis Forge / NeoForge, puis essai en bac à sable.
+

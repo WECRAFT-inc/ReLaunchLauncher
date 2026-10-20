@@ -92,6 +92,34 @@ Alternatives écartées pour l'instant :
 
 Le branchement au bouton Jouer, la fermeture du launcher officiel et l'écriture du profil restent au lot E4.
 
-## 6. Décision demandée
+## 6. Décision
 
-**D9 : option A (xmcl encadré), B (tout écrire) ou C (code copié) ?** Recommandation : A.
+**D9 = A** (xmcl encadré), décidée par le développeur le 20/10/2026.
+
+## 7. Mise à jour : version publiée 6.3.6 (20/10/2026, soir)
+
+Le code relu aux §2–3 (dépôt `minecraft-launcher-core-node`, avril 2026) **n'est plus celui publié** : la
+bibliothèque a déménagé dans `Voxelum/x-minecraft-launcher` (dossier `packages/`) et six versions sont sorties
+depuis juillet 2026. Relecture de la 6.3.6 (17/10/2026, commit `1b4c985`, versions identiques à npm) :
+
+| # | État en 6.3.6 |
+|---|---|
+| X1 | **Corrigé en amont** : nouveau moteur « plan → exécution » (`installManifest.ts`) qui revérifie chaque fichier après téléchargement et supprime les fichiers faux. Il garde des raccourcis de confiance (date `validatedAt`, `trustExistingSize` pour les ressources) : **désactivés chez nous** (`hardenFiles`). |
+| X2 | **Corrigé** : le manifeste Java est de nouveau vérifié (`javaWorkflow.ts`). Notre `javaRuntime.ts` reste utilisé. |
+| X3 | **Corrigé** : Forge en `https://maven.minecraftforge.net`. |
+| X4 | **Amélioré** : l'installeur NeoForge est vérifié par le `.sha1` publié, mais **sans vérification si ce fichier manque** ; chez nous, refus. |
+| X5 | Sans objet : xmcl ne télécharge plus rien lui-même, le téléchargement est fourni par l'appelant (`InstallRuntime.download`) : c'est **notre** couche réseau. |
+| X6 | Traité chez nous : `.sha1` Maven obligatoire pour tout fichier sans empreinte. |
+| X7 | **Corrigé** : `undici ^7.29` (7.30.1 verrouillé). |
+| X8 | Les commandes Java passent par `InstallRuntime.java` : pour une version de base, toute commande est refusée. |
+| — | **Provenance npm présente** (attestation SLSA) : le paquet publié est relié à son code source. |
+| X11 (nouveau) | `@xmcl/unzip` 2.2.0 publié avec une dépendance interne invalide (`workspace:^*` vers `@xmcl/yauzl`) : imposée à `@xmcl/yauzl` 2.10.0 (`overrides` dans `package.json`). |
+
+`package-lock.json` produit le 20/10/2026 sur le PC du développeur (`--package-lock-only --ignore-scripts`) :
+34 paquets d'exécution ajoutés, tous depuis `registry.npmjs.org` avec empreinte d'intégrité, licences MIT /
+BSD / ISC / Apache-2.0, aucune version existante modifiée, `npm audit` : 0 faille.
+
+Branchement retenu : xmcl **planifie** (fichier de version lu par `Version.parse`, listes jeu / bibliothèques /
+index / ressources) ; ReLaunch **télécharge et vérifie** (`src/main/install/xmcl.ts`, `vanilla.ts`). Le fichier
+de version lui-même est vérifié par l'empreinte de la liste officielle Mojang (xmcl ne le fait pas).
+
