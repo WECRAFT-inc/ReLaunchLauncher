@@ -1,6 +1,6 @@
 // Compatibilité croisée avec la VRAIE version Python (wecraft_launcher.py, chargé par tests/_harness.py
 // dans un bac à sable) : chaque version doit lire ce que l'autre écrit, et reconnaître ses copies.
-// Ignoré si Python n'est pas installé (la CI Windows l'a).
+// Ignoré si Python n'est pas installé, sauf en CI où son absence fait échouer les tests.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -24,6 +24,8 @@ function py(code: string, ...args: string[]): string {
   return r.stdout.trim();
 }
 
+// En CI, Python est obligatoire : ces tests ne doivent jamais être ignorés en silence.
+if (!PY && process.env["CI"]) throw new Error("Python est introuvable : tests de compatibilité impossibles en CI");
 const skip = PY ? false : "Python absent";
 
 test("Python lit les réglages écrits par Electron (accents, objets imbriqués)", { skip }, async () => {
