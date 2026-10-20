@@ -164,6 +164,18 @@ réinstaller ; désinstallation sans toucher aux réglages. CI Windows (run 3933
 installation silencieuse, raccourcis présents, appli installée démarrée, installeur relancé = appli lancée
 sans réinstallation, désinstallation complète, `launcher_config.json` témoin intact.
 
-Reste pour E0 : essai de l'installeur dans le bac à sable (avertissement, durée de démarrage, raccourci,
-désinstallation) ; versionner `package-lock.json` produit par la CI puis passer
+Essai de l'installeur par le développeur (20/10/2026, bac à sable) : **tout fonctionne**. Défaut signalé :
+infobulles de la barre latérale masquées par les panneaux de la page -> corrigé (barre latérale au premier
+plan), vérifié après réinstallation (`/reinstall`).
+
+`package-lock.json` produit par la CI, relu puis versionné (20/10/2026) : 285 paquets, tous de
+développement (aucun embarqué dans l'appli), tous depuis registry.npmjs.org avec empreinte d'intégrité ;
+electron 44.7.2, electron-builder 26.15.3, typescript 6.0.3, @types/node 24.19.2. Seul script
+d'installation : `electron-winstaller` (dépendance d'electron-builder). La CI utilise désormais `npm ci`.
+
+**Statut E0 : réalisé, testé (CI + PC du développeur) ; à fusionner après relecture de la PR.**
+Points ouverts hors E0 : actions GitHub à passer en version Node 24 et à épingler par SHA (avertissement
+de dépréciation de Node 20 sur `checkout@v4` / `setup-node@v4`) ; signature Authenticode (D5).
+
+Ancienne note (avant le versionnement) : versionner `package-lock.json` produit par la CI puis passer
 à `npm ci` ; essai de l'exe dans le bac à sable (démarrage sous Smart App Control / Defender, durée).

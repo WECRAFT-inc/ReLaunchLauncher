@@ -29,10 +29,9 @@ jobs:
         with:
           node-version: "24"
 
-      # Pas encore de package-lock.json : il est produit ici et joint au run, pour être relu puis
-      # versionné. Ensuite, cette étape passera à « npm ci » (versions exactes et empreintes).
-      - name: Dépendances
-        run: npm install --no-audit --no-fund
+      # Versions exactes et empreintes d'intégrité de package-lock.json (relu le 20/10/2026).
+      - name: Dépendances (versions verrouillées)
+        run: npm ci --no-audit --no-fund
 
       - name: Vérification des types (TypeScript strict)
         run: npm run typecheck
@@ -127,4 +126,3 @@ jobs:
           path: |
             electron/release/WeCraft-Setup.exe
             electron/release/WeCraft-Setup.exe.sha256
-            electron/package-lock.json
