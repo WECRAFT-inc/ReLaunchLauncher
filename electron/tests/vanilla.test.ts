@@ -176,7 +176,11 @@ try {
   realXmcl = null;
 }
 
-test("intégration avec la vraie bibliothèque xmcl (réseau simulé)", { skip: realXmcl === null ? "@xmcl/installer non installé ici" : false }, async () => {
+// Sur la CI (variable CI définie), ce test n'est jamais ignoré : xmcl absent = échec.
+const skipReal = realXmcl === null && !process.env["CI"] ? "@xmcl/installer non installé ici" : false;
+
+test("intégration avec la vraie bibliothèque xmcl (réseau simulé)", { skip: skipReal }, async () => {
+  assert.ok(realXmcl, "@xmcl/installer doit être installé sur la CI");
   const { dir, cleanup } = tempDir("vanilla-real");
   try {
     const id = "1.21.4";
