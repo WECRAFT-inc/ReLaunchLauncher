@@ -289,3 +289,10 @@ limité). Suite : ajout de xmcl selon D9, Vanilla avec vérification finale, loa
 
 Toujours pas branché à l'interface. Suite : Fabric / Quilt, puis Forge / NeoForge, puis essai en bac à sable.
 
+**Étape 2, suite (21/10/2026)** : deux autres paquets `@xmcl` sont mal publiés (X12 : `@xmcl/unzip` pointe vers
+un `index.ts` absent ; X13 : `@xmcl/installer` importe `@xmcl/core/utils`, absent du paquet publié). Corrigés à
+chaque compilation par `scripts/fix-dependencies.mjs` (arrêt en erreur si une version change). Le test
+d'intégration avec la vraie bibliothèque ne peut plus être ignoré sur la CI ; **CI Windows verte avec ce test**
+(installation d'une version simulée, seconde passe sans téléchargement, fichier abîmé réparé, contenu piégé
+refusé).
+
