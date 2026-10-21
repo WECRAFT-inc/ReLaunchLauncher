@@ -296,6 +296,19 @@ d'intégration avec la vraie bibliothèque ne peut plus être ignoré sur la CI 
 (installation d'une version simulée, seconde passe sans téléchargement, fichier abîmé réparé, contenu piégé
 refusé).
 
+**Étapes 3 et 4 (21/10/2026)** :
+- `src/main/install/loaders.ts` : Fabric et Quilt depuis leurs serveurs officiels (profil vérifié dans sa forme ;
+  empreintes du profil utilisées, sinon `.sha1` Maven) ; identifiants officiels `fabric-loader-x-mc` /
+  `quilt-loader-x-mc` ; choix hors ligne `installed_loader_ids` porté et comparé à la version Python.
+- `src/main/install/forge.ts` : Forge et NeoForge (Minecraft 1.13 et plus) avec l'installeur officiel ; chaque
+  commande Java des « processeurs » est contrôlée avant exécution (seulement notre Java, classpath dans
+  `libraries`, aucune option d'agent, dossier de travail dans `.minecraft`), sans shell, 15 min maximum.
+  Forge avant 1.13 : non pris en charge pour l'instant (message clair).
+- **Essai réel sur la CI Windows** (`scripts/e2e-install.mjs`, job `installation-reelle`) : Fabric, Quilt,
+  Forge 1.20.1, NeoForge 1.21.1 et une seconde passe Forge, téléchargés depuis les vrais serveurs : vert.
+
+Restent pour E3 : essai dans le dossier bac à sable du développeur, revue indépendante (lot critique).
+
 ### Lot E2 : détection des instances (branche `electron/e2-instances`, à partir d'E3)
 
 Port de `launcher_dirs`, `detect_instances`, `scan_instances`, `read_local_instance`, `apply_meta`
@@ -314,3 +327,33 @@ Modrinth avec chemin piégé, réglages abîmés) et compare la liste de ReLaunc
 Python** : identiques. 7 tests de plus (88). Rendu vérifié dans Chromium avec la CSP (noms piégés affichés
 comme texte, aucune erreur).
 
+
+### Lot E4 : lancement (branche `electron/e4-lancement`, à partir d'E2)
+
+Port de `set_profile`, `backup_profiles_file`, `close_official_launcher`, `open_official_launcher`,
+`play_worker` et `ensure_loader` (`src/main/launch/`). Le launcher officiel reste seul à gérer le compte
+Microsoft et à démarrer le jeu (§6) : ReLaunch ne lit ni ne copie aucun jeton.
+- Ordre identique à Python : fermeture du launcher officiel (normale ; arrêt forcé **seulement si l'utilisateur
+  le choisit**, sinon annulation sans rien modifier) → installation de ce qui manque (« Réparer » : tout
+  réinstaller ; hors ligne, loader déjà installé pour exactement cette version) → profil « WECRAFT - <instance> »
+  → ouverture du launcher officiel.
+- Profil : sauvegarde horodatée avant chaque écriture (15 gardées, sans jetons ; `.bak_wecraft` conservée),
+  écriture atomique, relecture de contrôle, profil retrouvé par son identifiant mémorisé
+  (`managed_profiles.json`), profils de l'utilisateur jamais modifiés, fichier illisible jamais réécrit.
+  Arguments Java changés seulement s'ils sont vides ou de la forme `-XmxNG`.
+- Commandes Windows par chemin absolu (`System32`), sans shell ni fenêtre.
+- Interface : bouton Jouer → choix de la RAM (1 à 16 Go, valeur de l'instance sinon celle de
+  `launcher_config.json`, mémorisée comme en Python) et case « Réparer » ; suivi de l'état **réel** (la barre
+  n'avance que sur des fichiers réellement téléchargés) ; question « forcer la fermeture ? » posée dans l'encart.
+- L'interface envoie seulement l'identifiant opaque de l'instance ; dossier, version et loader sont relus côté
+  processus principal.
+
+**Validation** : le profil écrit par ReLaunch est **identique à celui de la vraie version Python** sur 3 jeux de
+fichiers (anciens profils WeCraft, profil de l'utilisateur à ne pas toucher, jetons, BOM, deux fichiers, fichier
+du Store sans `profiles`, arguments Java en liste) et sur 4 fichiers illisibles (même refus, rien d'écrit).
+Seule différence connue : une clé purement numérique et courte est remise en tête de son objet (contenu
+identique). 20 tests de plus (118 en local). Rendu vérifié dans Chromium avec la CSP (RAM, question, progression,
+fin, noms piégés affichés comme texte).
+
+Restent pour E4 : essai réel dans le bac à sable (le profil apparaît dans le launcher officiel et le jeu démarre),
+revue indépendante (lot critique : écrit dans les fichiers du launcher officiel).

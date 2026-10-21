@@ -60,6 +60,34 @@ export class InstanceService {
     };
   }
 
+  /**
+   * Ce qu'il faut pour lancer l'instance `id` (lot E4) : dossier de jeu, nom, version, loader. Reste dans le
+   * processus principal ; null si l'identifiant est inconnu (liste pas encore lue, instance disparue).
+   */
+  target(id: unknown): ListedInstance | null {
+    return typeof id === "string" ? (this.byId.get(id) ?? null) : null;
+  }
+
+  /**
+   * RAM propre à l'instance mise à jour, seulement si l'instance en avait déjà une (start_instance en
+   * Python). Un échec n'empêche pas de jouer.
+   */
+  async rememberRam(id: unknown, ram: number): Promise<void> {
+    const inst = this.target(id);
+    if (!inst || !inst.ram || inst.ram === ram) return;
+    const key = metaKey(inst.folder, this.env.platform);
+    try {
+      await this.store.update(this.metaFile, (meta) => {
+        const prev = meta[key];
+        const entry = typeof prev === "object" && prev !== null && !Array.isArray(prev) ? { ...(prev as object) } : {};
+        return { ...meta, [key]: { ...entry, ram } };
+      });
+      inst.ram = ram;
+    } catch {
+      // réglage non enregistré : le lancement continue
+    }
+  }
+
   /** Favori (même clé « fav » que la version Python). Seule cette clé de l'instance change. */
   async setFavorite(id: unknown, fav: unknown): Promise<SettingResult> {
     if (typeof id !== "string" || typeof fav !== "boolean") return { ok: false, reason: "invalid" };

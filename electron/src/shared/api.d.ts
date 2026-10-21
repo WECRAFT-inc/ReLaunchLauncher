@@ -29,6 +29,8 @@ export interface AppInfo {
   portable: boolean;
   /** Fichiers de réglages illisibles mis de côté depuis la dernière demande (à signaler une fois). */
   invalidFiles: InvalidFileNotice[];
+  /** RAM proposée par défaut au lancement (Go), lue dans launcher_config.json. */
+  ram: number;
   /** Réglages repris d'un ancien dossier au démarrage (copie). */
   migrated: string[];
 }
@@ -68,6 +70,26 @@ export interface InstanceList {
   hidden: number;
 }
 
+/** Étapes d'un lancement (lot E4), dans l'ordre ; « accord » : réponse de l'utilisateur attendue. */
+export type LaunchPhase = "fermeture" | "accord" | "installation" | "profil" | "ouverture" | "termine" | "erreur";
+
+/** État réel d'un lancement : rien n'est estimé ni simulé. */
+export interface LaunchStatus {
+  job: string;
+  phase: LaunchPhase;
+  /** Étape en cours, ou message d'erreur. */
+  message: string;
+  /** Fichiers réellement téléchargés / à télécharger dans l'étape en cours ; null si inconnu. */
+  progress: { done: number; total: number } | null;
+  notes: string[];
+  /** Nom du profil préparé (une fois le profil écrit et vérifié). */
+  profile: string | null;
+  /** Launcher officiel ouvert ? null tant que ce n'est pas fait. */
+  opened: boolean | null;
+}
+
+export type LaunchStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "no-version" };
+
 export interface WeCraftApi {
   app: {
     getInfo(): Promise<AppInfo>;
@@ -79,6 +101,13 @@ export interface WeCraftApi {
     /** `rescan` : relire aussi les autres launchers tout de suite (sinon au plus toutes les 60 s). */
     list(rescan?: boolean): Promise<InstanceList>;
     setFavorite(id: string, fav: boolean): Promise<SettingResult>;
+  };
+  launch: {
+    /** Prépare l'instance puis ouvre le launcher officiel. `ram` en Go (1 à 16) ; `repair` : tout réinstaller. */
+    start(id: string, opts: { ram: number; repair?: boolean }): Promise<LaunchStartResult>;
+    status(job: string): Promise<LaunchStatus | null>;
+    /** Réponse à « forcer la fermeture du launcher officiel ? » (phase « accord »). */
+    answer(job: string, force: boolean): Promise<boolean>;
   };
   links: {
     open(id: ExternalLinkId): Promise<boolean>;

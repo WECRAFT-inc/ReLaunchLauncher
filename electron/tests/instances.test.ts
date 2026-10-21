@@ -244,6 +244,17 @@ test("service : liste sans chemins, favori enregistré seul dans instances_meta.
     assert.deepEqual(await svc.setFavorite("i0000000000000000", true), { ok: false, reason: "invalid" });
     assert.deepEqual(await svc.setFavorite(perso.id, "oui"), { ok: false, reason: "invalid" });
     assert.deepEqual(await svc.setFavorite("../../etc", true), { ok: false, reason: "invalid" });
+
+    // Lot E4 : RAM de l'instance mise à jour seulement si elle en avait une (start_instance en Python)
+    assert.equal(perso.ram, 8);
+    await svc.rememberRam(perso.id, 6);
+    assert.deepEqual(JSON.parse(readFileSync(svc.metaFile, "utf8"))[key], { name: "  Renommé  ", ram: 6 });
+    assert.equal(svc.target(perso.id)?.ram, 6);
+    const metaBefore = readFileSync(svc.metaFile, "utf8");
+    await svc.rememberRam(create.id, 6); // pas de RAM propre : rien n'est écrit
+    await svc.rememberRam("../../etc", 6);
+    assert.equal(readFileSync(svc.metaFile, "utf8"), metaBefore);
+    assert.equal(svc.target(42), null);
   } finally {
     cleanup();
   }

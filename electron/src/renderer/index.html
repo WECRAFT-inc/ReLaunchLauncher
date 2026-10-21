@@ -39,7 +39,19 @@
         <div class="launch" id="launchBox" hidden data-a="launch">
           <div class="row"><b id="lName">Lancement</b><button class="xbtn" id="lClose" aria-label="Fermer" style="width:28px;height:28px;font-size:13px">✕</button></div>
           <div class="lbar"><i id="lBar"></i></div>
-          <small id="lMsg">Préparation…</small>
+          <small id="lMsg" style="white-space:pre-line">Préparation…</small>
+          <div class="row" id="lAsk" hidden style="justify-content:flex-end;gap:8px"><button class="btn sm" id="lNo">Annuler le lancement</button><button class="btn sm danger" id="lForce">Forcer la fermeture</button></div>
+        </div>
+        <div class="overlay" id="ramOv" hidden data-a="m-ram" data-name="Lancer">
+          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ramTitle" style="width:min(420px,100%)">
+            <header><h3 id="ramTitle">Mémoire (RAM)</h3><button class="xbtn" id="ramClose" aria-label="Fermer" style="width:28px;height:28px;font-size:13px">✕</button></header>
+            <div style="padding:18px 22px;display:flex;flex-direction:column;gap:14px">
+              <small class="muted" id="ramName"></small>
+              <div style="display:flex;align-items:center;gap:12px"><input type="range" id="ramRange" min="1" max="16" step="1" value="4" aria-label="Mémoire en Go" style="flex:1"><b id="ramVal" style="min-width:52px;text-align:right">4 Go</b></div>
+              <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="ramRepair"><span>Réparer : tout réinstaller avant de lancer</span></label>
+            </div>
+            <div class="mfoot"><button class="btn" id="ramCancel">Annuler</button><button class="btn pri" id="ramGo">Lancer</button></div>
+          </div>
         </div>
         <aside class="drawer" id="drawer" hidden aria-label="Panneau latéral" data-name="Panneau"></aside>
         <div class="pop" id="pop" hidden data-a="pin-pop" data-name="Épingles" role="dialog" aria-label="Instances épinglées"></div>

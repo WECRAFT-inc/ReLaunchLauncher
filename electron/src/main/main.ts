@@ -6,11 +6,14 @@ import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AppInfo, InstanceList, InvalidFileNotice, SettingResult } from "../shared/api";
+import type { AppInfo, InstanceList, InvalidFileNotice, LaunchStartResult, LaunchStatus, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
 import { Settings } from "./config";
+import { loadXmcl } from "./install/xmcl";
 import { InstanceService } from "./instances/service";
-import { configFile, legacyDataDirs, wecraftDataDir, type PathEnv } from "./paths";
+import { LaunchService } from "./launch/launch";
+import { defaultInstanceName, profileNameFor } from "./launch/profiles";
+import { configFile, legacyDataDirs, minecraftDir, wecraftDataDir, type PathEnv } from "./paths";
 import { JsonStore } from "./storage/jsonStore";
 import { migrateOldSettings } from "./storage/migrate";
 import {
@@ -34,6 +37,7 @@ let startupMs: number | undefined;
 const store = new JsonStore();
 let settings: Settings | null = null;
 let instances: InstanceService | null = null;
+let launcher: LaunchService | null = null;
 let migrated: string[] = [];
 
 // ---------------------------------------------------------------- avant « ready »
@@ -122,6 +126,15 @@ async function start(): Promise<void> {
   }
   settings = new Settings(store, configFile(env));
   instances = new InstanceService(store, env);
+  launcher = new LaunchService({
+    mcDir: minecraftDir(env),
+    profile: {
+      store,
+      idsFile: path.join(wecraftDataDir(env), "managed_profiles.json"),
+      backupDir: path.join(wecraftDataDir(env), "backups", "launcher_profiles"),
+    },
+    xmcl: loadXmcl,
+  });
   lockDownSession();
   protocol.handle(APP_SCHEME, serveAsset);
   registerIpc();
@@ -176,6 +189,7 @@ function registerIpc(): void {
       dataDir,
       dataDirExists,
       savedTheme: settings ? await settings.theme() : null,
+      ram: settings ? await settings.ram() : 4,
       startupMs: startupMs ??= Math.round(process.uptime() * 1000),
       portable: Boolean(process.env["PORTABLE_EXECUTABLE_FILE"]),
       invalidFiles: store.takeInvalidFiles().map(
@@ -201,6 +215,41 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     if (!instances) return { ok: false, reason: "write-failed" };
     return instances.setFavorite(id, fav); // identifiant opaque + booléen vérifiés dans le service
+  });
+
+  ipcMain.handle(CHANNELS.launchStart, async (event, id: unknown, opts: unknown): Promise<LaunchStartResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    const inst = instances?.target(id); // identifiant opaque : le dossier n'est jamais fourni par l'interface
+    if (!inst || !launcher) return { ok: false, reason: "invalid" };
+    if (!inst.version) return { ok: false, reason: "no-version" };
+    const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
+    const ram = typeof o.ram === "number" ? o.ram : NaN;
+    const started = launcher.start(
+      {
+        gameDir: inst.path,
+        profileName: profileNameFor(inst.display || defaultInstanceName(inst.path)),
+        mc: inst.version,
+        loader: inst.loader,
+        loaderVersion: inst.loaderVersion,
+      },
+      { ram, repair: o.repair === true },
+    );
+    if (started.ok) {
+      // comme la version Python : la RAM choisie devient celle proposée la prochaine fois
+      await settings?.setRam(ram);
+      await instances?.rememberRam(id, ram);
+    }
+    return started;
+  });
+
+  ipcMain.handle(CHANNELS.launchStatus, async (event, job: unknown): Promise<LaunchStatus | null> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return launcher?.status(job) ?? null;
+  });
+
+  ipcMain.handle(CHANNELS.launchAnswer, async (event, job: unknown, force: unknown): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return launcher?.answer(job, force) ?? false;
   });
 
   ipcMain.handle(CHANNELS.openLink, async (event, id: unknown): Promise<boolean> => {

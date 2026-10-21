@@ -3,7 +3,7 @@
 // - Thème : celui de launcher_config.json est appliqué au démarrage ; un thème choisi dans
 //   Réglages > Apparence y est enregistré (les 4 thèmes de base ; la couleur personnalisée reste locale).
 // - Fichiers de réglages mis de côté et réglages repris : signalés une fois.
-import type { AppInfo, SettingResult, ThemeKey, WeCraftApi } from "../shared/api";
+import type { AppInfo, LaunchStatus, SettingResult, ThemeKey, WeCraftApi } from "../shared/api";
 
 declare global {
   interface Window {
@@ -129,12 +129,132 @@ function setupInstances(): void {
   });
 }
 
+// ---------------------------------------------------------------- lancement (lot E4)
+let defaultRam = 4;
+let pending: { id: string; name: string } | null = null;
+let polling: number | null = null;
+let currentJob: string | null = null;
+
+const START_ERRORS = {
+  busy: "Un lancement est déjà en cours.",
+  invalid: "Instance introuvable : la liste a peut-être changé. Réessayez.",
+  "no-version": "Version de Minecraft inconnue pour cette instance : réglez-la d'abord.",
+} as const;
+
+function setRamLabel(): void {
+  el("ramVal").textContent = `${(el("ramRange") as HTMLInputElement).value} Go`;
+}
+
+function closeRamDialog(): void {
+  el("ramOv").hidden = true;
+  pending = null;
+}
+
+/** Affiche l'état RÉEL du lancement : la barre n'avance que sur des fichiers réellement téléchargés. */
+function showStatus(s: LaunchStatus): void {
+  el("launchBox").hidden = false;
+  const bar = el("lBar");
+  if (s.phase === "termine") bar.style.width = "100%";
+  else if (s.progress && s.progress.total > 0) bar.style.width = `${Math.round((100 * s.progress.done) / s.progress.total)}%`;
+  else bar.style.width = "0";
+  const lines = [s.progress && s.phase === "installation" ? `${s.message} (${s.progress.done}/${s.progress.total})` : s.message, ...s.notes];
+  el("lMsg").textContent = lines.join("\n");
+  el("lAsk").hidden = s.phase !== "accord";
+  if (s.phase === "accord") {
+    el("lMsg").textContent =
+      `${s.message}\nLe forcer à se fermer ? Une partie en cours n'est pas concernée ; s'il était en train d'enregistrer, ` +
+      "cet enregistrement pourrait être perdu.";
+  }
+}
+
+function poll(job: string): void {
+  if (polling !== null) window.clearInterval(polling);
+  currentJob = job;
+  const tick = (): void => {
+    void window.wecraft.launch
+      .status(job)
+      .then((s) => {
+        if (!s) throw new Error("perdu");
+        showStatus(s);
+        if ((s.phase === "termine" || s.phase === "erreur") && polling !== null) {
+          window.clearInterval(polling);
+          polling = null;
+          void loadInstances(true);
+        }
+      })
+      .catch(() => {
+        if (polling !== null) window.clearInterval(polling);
+        polling = null;
+        el("lMsg").textContent = "Suivi du lancement interrompu.";
+      });
+  };
+  polling = window.setInterval(tick, 400);
+  tick();
+}
+
+function setupLaunch(): void {
+  const range = el("ramRange") as HTMLInputElement;
+  range.addEventListener("input", setRamLabel);
+  el("ramCancel").addEventListener("click", closeRamDialog);
+  el("ramClose").addEventListener("click", closeRamDialog);
+  el("ramOv").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeRamDialog();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el("ramOv").hidden) closeRamDialog();
+  });
+  document.addEventListener("relaunch:launch", (e) => {
+    const d = (e as CustomEvent<{ id?: unknown; name?: unknown; ram?: unknown }>).detail;
+    if (typeof d?.id !== "string") return;
+    if (polling !== null) {
+      el("launchBox").hidden = false;
+      toast(START_ERRORS.busy);
+      return;
+    }
+    pending = { id: d.id, name: typeof d.name === "string" ? d.name : "" };
+    const ram = typeof d.ram === "number" && d.ram >= 1 && d.ram <= 16 ? d.ram : defaultRam;
+    range.value = String(Math.round(ram));
+    setRamLabel();
+    (el("ramRepair") as HTMLInputElement).checked = false;
+    el("ramName").textContent = pending.name;
+    el("ramOv").hidden = false;
+    el("ramGo").focus();
+  });
+  el("ramGo").addEventListener("click", () => {
+    if (!pending) return;
+    const { id, name } = pending;
+    const ram = Number(range.value);
+    const repair = (el("ramRepair") as HTMLInputElement).checked;
+    closeRamDialog();
+    void window.wecraft.launch
+      .start(id, { ram, repair })
+      .then((r) => {
+        if (!r.ok) {
+          toast(START_ERRORS[r.reason]);
+          return;
+        }
+        defaultRam = ram;
+        el("lName").textContent = name || "Lancement";
+        poll(r.job);
+      })
+      .catch(() => toast("Le lancement n'a pas pu démarrer."));
+  });
+  const answer = (force: boolean): void => {
+    el("lAsk").hidden = true;
+    const job = currentJob;
+    if (job) void window.wecraft.launch.answer(job, force);
+  };
+  el("lForce").addEventListener("click", () => answer(true));
+  el("lNo").addEventListener("click", () => answer(false));
+}
+
 async function main(): Promise<void> {
   el("wc-notice-close").addEventListener("click", () => {
     el("wc-notice").hidden = true;
   });
   setupThemeBridge();
   setupInstances();
+  setupLaunch();
   await loadInstances(); // avant getInfo : un instances_meta.json abîmé est ainsi signalé dans le bandeau
   let info: AppInfo;
   try {
@@ -144,6 +264,7 @@ async function main(): Promise<void> {
     return;
   }
   document.dispatchEvent(new CustomEvent("relaunch:info", { detail: { version: info.version } }));
+  defaultRam = info.ram;
   if (info.savedTheme) {
     applyingSaved = true; // le thème vient des réglages : inutile de le réécrire
     document.dispatchEvent(new CustomEvent("wecraft:apply-skin", { detail: info.savedTheme }));

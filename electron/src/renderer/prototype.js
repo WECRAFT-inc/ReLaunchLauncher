@@ -450,12 +450,13 @@
   /* ---------- Notifications et lancement ---------- */
   var toastT;
   function toast(m){var t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},2400)}
-  var LSTEPS=["Vérification des fichiers","Installation de la version et du loader","Préparation du profil","Ouverture du jeu"];
   var lt=null;
-  /* [WeCraft] Pas de progression simulée (prompt maître §10.4) : le lancement réel arrive au lot E4. */
+  /* [ReLaunch] Lot E4 : le lancement réel est conduit par app.ts (processus principal), sans progression simulée. */
   function launch(id){
     var x=byId(id); if(!x) return;
-    toast('Lancement pas encore disponible dans cette version. Pour jouer, utilise WeCraft habituel.');
+    if(x.k!=='wc'){ toast('Les serveurs ReLaunch arriveront avec les comptes ReLink.'); return; }
+    if(!x.v){ toast('Version de Minecraft inconnue pour cette instance : réglez-la d\'abord.'); return; }
+    document.dispatchEvent(new CustomEvent('relaunch:launch',{detail:{id:x.id,name:x.n,ram:x.r||null}}));
   }
   $('lClose').addEventListener('click',function(){clearTimeout(lt);$('launchBox').hidden=true;refresh()});
 

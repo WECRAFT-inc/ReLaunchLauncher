@@ -24,6 +24,22 @@ export class Settings {
     return isThemeKey(theme) ? theme : null;
   }
 
+  /** RAM proposée au lancement (clé « ram » de la version Python, 4 Go par défaut comme elle). */
+  async ram(): Promise<number> {
+    const r = (await this.store.read(this.file))?.["ram"];
+    return typeof r === "number" && Number.isInteger(r) && r >= 1 && r <= 16 ? r : 4;
+  }
+
+  /** Mémorise la RAM choisie (devient la valeur proposée la prochaine fois). Un échec n'empêche pas de jouer. */
+  async setRam(ram: number): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, ram }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Enregistre le thème. N'écrit jamais dans un fichier qui ne peut pas être lu. */
   async setTheme(theme: unknown): Promise<SettingResult> {
     if (!isThemeKey(theme)) return { ok: false, reason: "invalid" };

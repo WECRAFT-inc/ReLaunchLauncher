@@ -6,6 +6,9 @@ export const CHANNELS = {
   setTheme: "settings:set-theme",
   listInstances: "instances:list",
   setFavorite: "instances:set-favorite",
+  launchStart: "launch:start",
+  launchStatus: "launch:status",
+  launchAnswer: "launch:answer",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];
