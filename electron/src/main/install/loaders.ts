@@ -73,6 +73,30 @@ export async function fetchLoaderProfile(loader: SimpleLoader, mc: string, versi
   return p;
 }
 
+/** Chemin Maven d'une bibliothèque « groupe:artefact:version[:classifieur][@ext] ». */
+export function mavenPath(name: string): string | null {
+  const m = /^([\w.+-]+):([\w.+-]+):([\w.+-]+)(?::([\w.+-]+))?(?:@(\w+))?$/.exec(name);
+  if (!m) return null;
+  const [, group, artifact, version, classifier, ext] = m;
+  if ([group, artifact, version, classifier].some((p) => p !== undefined && (p === "." || p === ".." || p.includes("..")))) return null;
+  return `${group!.replace(/\./g, "/")}/${artifact}/${version}/${artifact}-${version}${classifier ? "-" + classifier : ""}.${ext ?? "jar"}`;
+}
+
+/** Empreintes données par le profil (format Fabric/Quilt : { name, url, sha1, size }), par adresse. */
+export function profileHashes(profile: Record<string, unknown>): Map<string, { sha1: string; size?: number }> {
+  const out = new Map<string, { sha1: string; size?: number }>();
+  for (const lib of (profile["libraries"] as Record<string, unknown>[]) ?? []) {
+    const p = typeof lib["name"] === "string" ? mavenPath(lib["name"]) : null;
+    const sha1 = lib["sha1"];
+    if (!p || typeof sha1 !== "string" || !/^[0-9a-f]{40}$/i.test(sha1)) continue;
+    const base = typeof lib["url"] === "string" && lib["url"] ? (lib["url"] as string) : "https://libraries.minecraft.net/";
+    const entry: { sha1: string; size?: number } = { sha1 };
+    if (typeof lib["size"] === "number") entry.size = lib["size"];
+    out.set(base + p, entry);
+  }
+  return out;
+}
+
 /** Écrit le fichier de version de façon atomique, seulement s'il a changé. */
 async function writeVersionJson(mcDir: string, id: string, content: string): Promise<void> {
   const dir = path.join(mcDir, "versions", id);
@@ -116,7 +140,7 @@ export async function installSimpleLoader(
   const profile = await fetchLoaderProfile(loader, mc, choice.version, n);
   const id = profile["id"] as string;
   await writeVersionJson(mcDir, id, JSON.stringify(profile, null, 2));
-  return installVersionFiles(mcDir, id, opts);
+  return installVersionFiles(mcDir, id, { ...opts, knownHashes: profileHashes(profile) });
 }
 
 // ---------------------------------------------------------------- hors ligne
