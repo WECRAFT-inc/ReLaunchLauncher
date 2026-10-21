@@ -74,21 +74,12 @@ function net(opts: NetOptions): NetOptions {
   return n;
 }
 
-/** Installe (ou répare) la version `id` dans `mcDir`. Ne rend la main qu'une fois tout vérifié. */
-export async function installVanilla(mcDir: string, id: string, opts: InstallVanillaOptions): Promise<InstalledVersion> {
-  if (!isSafeVersionId(id)) throw new Error(`Identifiant de version invalide : ${id}`);
+/**
+ * Télécharge et vérifie les fichiers d'une version DÉJÀ décrite dans versions/<id>/<id>.json (vanilla ou
+ * loader qui en hérite) : jeu, bibliothèques, index des ressources, puis ressources.
+ */
+export async function installVersionFiles(mcDir: string, id: string, opts: InstallVanillaOptions): Promise<InstalledVersion> {
   const n = net(opts);
-  opts.onStep?.({ phase: "liste" });
-  const versions = opts.versions ?? (await fetchVersionList(n));
-  const entry = versions.find((v) => v.id === id);
-  if (!entry) throw new Error(`Version ${id} introuvable dans la liste officielle de Mojang.`);
-
-  opts.onStep?.({ phase: "version" });
-  const jsonPath = path.join(mcDir, "versions", id, `${id}.json`);
-  if ((await fileSha1(jsonPath)) !== entry.sha1) {
-    await downloadVerified(entry.url, jsonPath, { sha1: entry.sha1 }, { ...n, maxBytes: 4 * 1024 * 1024 });
-  }
-
   const { xmcl } = opts;
   const version = await xmcl.parseVersion(mcDir, id);
   const folder = xmcl.folder(mcDir);
@@ -119,3 +110,26 @@ export async function installVanilla(mcDir: string, id: string, opts: InstallVan
   const major = version.javaVersion?.majorVersion;
   return { id, javaComponent: javaComponentOf(version), javaMajor: typeof major === "number" ? major : null };
 }
+
+/** Fichier de version Mojang vérifié par l'empreinte de la liste officielle. */
+export async function ensureVanillaJson(mcDir: string, id: string, opts: InstallVanillaOptions): Promise<void> {
+  if (!isSafeVersionId(id)) throw new Error(`Identifiant de version invalide : ${id}`);
+  const n = net(opts);
+  opts.onStep?.({ phase: "liste" });
+  const versions = opts.versions ?? (await fetchVersionList(n));
+  const entry = versions.find((v) => v.id === id);
+  if (!entry) throw new Error(`Version ${id} introuvable dans la liste officielle de Mojang.`);
+  opts.onStep?.({ phase: "version" });
+  const jsonPath = path.join(mcDir, "versions", id, `${id}.json`);
+  if ((await fileSha1(jsonPath)) !== entry.sha1) {
+    await downloadVerified(entry.url, jsonPath, { sha1: entry.sha1 }, { ...n, maxBytes: 4 * 1024 * 1024 });
+  }
+}
+
+/** Installe (ou répare) la version `id` dans `mcDir`. Ne rend la main qu'une fois tout vérifié. */
+export async function installVanilla(mcDir: string, id: string, opts: InstallVanillaOptions): Promise<InstalledVersion> {
+  await ensureVanillaJson(mcDir, id, opts);
+  return installVersionFiles(mcDir, id, opts);
+}
+
+export { net };
