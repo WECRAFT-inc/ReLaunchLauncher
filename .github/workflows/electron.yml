@@ -148,3 +148,25 @@ jobs:
           path: |
             electron/release/ReLaunch-Setup.exe
             electron/release/ReLaunch-Setup.exe.sha256
+
+  # Lot E3 : installation RÉELLE depuis les serveurs officiels (Mojang, Fabric, Quilt, Forge, NeoForge),
+  # avec le Java de Mojang, dans un dossier jetable de la machine de CI. Aucune publication, aucun secret.
+  installation-reelle:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Dépendances (versions verrouillées)
+        run: npm ci --no-audit --no-fund
+      - name: Compilation
+        run: npm run build
+      - name: Installation réelle (dossier jetable)
+        run: node scripts/e2e-install.mjs

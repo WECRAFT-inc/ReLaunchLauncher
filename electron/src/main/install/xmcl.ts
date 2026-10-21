@@ -43,6 +43,21 @@ export interface InstallManifest {
   tasks: FilesTask[];
 }
 
+/** Étape d'un « workflow » xmcl : un plan à exécuter, ou le résultat final. */
+export type WorkflowStep<T> = { done: false; plan: { schemaVersion: 1; tasks: unknown[] } } | { done: true; result: T };
+export interface Workflow<T> {
+  next(): Promise<WorkflowStep<T>>;
+}
+
+export interface ModernForgeWorkflowOptions {
+  id: string;
+  minecraftDir: string;
+  minecraftVersion: string;
+  installer: InstallFile;
+  artifactVersion: string;
+  java: string;
+}
+
 export interface ResolvedLibraryLike {
   name: string;
   download: { path: string; url: string; sha1: string; size: number };
@@ -81,6 +96,7 @@ export interface XmclApi {
     signal?: AbortSignal;
   }): unknown;
   execute(plan: InstallManifest, runtime: unknown, options: { attempts: number; signal?: AbortSignal }): Promise<unknown>;
+  createModernForgeWorkflow(options: ModernForgeWorkflowOptions): Workflow<{ version: string }>;
 }
 
 /** Charge la vraie bibliothèque (processus principal uniquement). */
@@ -97,6 +113,7 @@ export function loadXmcl(): XmclApi {
     resolveAssetObjectInstallFiles(v: ResolvedVersionLike, f: unknown): Promise<InstallFile[]>;
     createNodeInstallRuntime(o: unknown): unknown;
     executeInstallManifest(p: InstallManifest, r: unknown, o: unknown): Promise<unknown>;
+    createModernForgeInstallWorkflow(o: unknown): Workflow<{ version: string }>;
   };
   return {
     parseVersion: (mc, id) => core.Version.parse(mc, id),
@@ -107,6 +124,17 @@ export function loadXmcl(): XmclApi {
     resolveAssetObjectInstallFiles: (v, f) => inst.resolveAssetObjectInstallFiles(v, f),
     createRuntime: (o) => inst.createNodeInstallRuntime(o),
     execute: (p, r, o) => inst.executeInstallManifest(p, r, o),
+    createModernForgeWorkflow: (o) =>
+      inst.createModernForgeInstallWorkflow({
+        id: o.id,
+        minecraft: core.MinecraftFolder.from(o.minecraftDir),
+        minecraftVersion: o.minecraftVersion,
+        installer: o.installer,
+        artifactVersion: o.artifactVersion,
+        java: o.java,
+        installOptions: {},
+        side: "client",
+      }),
   };
 }
 

@@ -32,6 +32,9 @@ function fakeXmcl(files: InstallFile[], assets: InstallFile[]): XmclApi & { plan
       download = o.download;
       return o;
     },
+    createModernForgeWorkflow: () => {
+      throw new Error("non utilisé");
+    },
     execute: async (plan) => {
       const fs = plan.tasks.flatMap((t) => t.files);
       plans.push(fs);
