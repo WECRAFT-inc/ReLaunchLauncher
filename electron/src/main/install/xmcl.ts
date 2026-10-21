@@ -129,7 +129,11 @@ export function allowedUrls(urls: readonly string[], opts: NetOptions = {}): str
  * - aucune confiance « sur la taille » ou « sur la date » : chaque fichier existant est revérifié par empreinte ;
  * - fichier sans empreinte : empreinte « .sha1 » publiée par le dépôt Maven, sinon refus.
  */
-export async function hardenFiles(files: readonly InstallFile[], opts: NetOptions = {}): Promise<InstallFile[]> {
+export async function hardenFiles(
+  files: readonly InstallFile[],
+  opts: NetOptions = {},
+  known: ReadonlyMap<string, { sha1: string; size?: number }> = new Map(),
+): Promise<InstallFile[]> {
   const out: InstallFile[] = [];
   for (const f of files) {
     const urls = allowedUrls(f.urls, opts);
@@ -139,8 +143,13 @@ export async function hardenFiles(files: readonly InstallFile[], opts: NetOption
     if (f.validator) copy.validator = f.validator;
     if (f.replace) copy.replace = true;
     const sha1 = f.checksum?.algorithm.toLowerCase() === "sha1" ? f.checksum.value.toLowerCase() : null;
+    const fromProfile = urls.map((u) => known.get(u)).find((k) => k && /^[0-9a-f]{40}$/i.test(k.sha1));
     if (sha1 && /^[0-9a-f]{40}$/.test(sha1)) {
       copy.checksum = { algorithm: "sha1", value: sha1 };
+    } else if (fromProfile) {
+      // empreinte donnée par le profil du loader (format { name, url, sha1 } que xmcl ne lit pas)
+      copy.checksum = { algorithm: "sha1", value: fromProfile.sha1.toLowerCase() };
+      if (copy.size === undefined && fromProfile.size !== undefined && fromProfile.size >= 0) copy.size = fromProfile.size;
     } else {
       copy.checksum = { algorithm: "sha1", value: await publishedSha1(urls, opts) };
     }

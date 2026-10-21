@@ -55,6 +55,8 @@ export type VanillaStep =
 
 export interface InstallVanillaOptions extends NetOptions {
   xmcl: XmclApi;
+  /** Empreintes connues par adresse (bibliothèques des profils Fabric/Quilt). */
+  knownHashes?: ReadonlyMap<string, { sha1: string; size?: number }>;
   onStep?: (step: VanillaStep) => void;
   /** Liste déjà récupérée (évite un second téléchargement). */
   versions?: VersionEntry[];
@@ -101,7 +103,7 @@ export async function installVersionFiles(mcDir: string, id: string, opts: Insta
     ...xmcl.resolveLibraryInstallFiles(version.libraries, folder, { libraryHost }),
     ...xmcl.resolveAssetMetadataInstallFiles(version, folder),
   ];
-  const files = await hardenFiles(planned, n);
+  const files = await hardenFiles(planned, n, opts.knownHashes);
   await xmcl.execute({ schemaVersion: 1, tasks: [{ id: "version-files", type: "files", files }] }, runtimeFor("fichiers"), execOpts);
 
   const assets = await hardenFiles(await xmcl.resolveAssetObjectInstallFiles(version, folder), n);

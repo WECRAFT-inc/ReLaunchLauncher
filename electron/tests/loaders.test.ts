@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { chooseLoaderVersion, fetchLoaderProfile, installedLoaderIds, installedVersionIds, installSimpleLoader } from "../src/main/install/loaders";
+import { chooseLoaderVersion, fetchLoaderProfile, installedLoaderIds, installedVersionIds, installSimpleLoader, mavenPath, profileHashes } from "../src/main/install/loaders";
 import { IntegrityError } from "../src/main/net/download";
 import { loadXmcl, type XmclApi } from "../src/main/install/xmcl";
 import { fakeFetch, type Route } from "./fakeNet";
@@ -55,6 +55,15 @@ test("choix de version : exacte si elle existe, sinon la plus récente stable av
   assert.deepEqual(chooseLoaderVersion("Fabric", av, null, "1.20.1"), { version: "0.16.9", note: null });
   assert.equal(chooseLoaderVersion("Fabric", av, "9.9.9", "1.20.1").note, "Fabric 9.9.9 introuvable : dernière version utilisée.");
   assert.throws(() => chooseLoaderVersion("Quilt", [], null, "1.2.5"), /ne supporte pas Minecraft 1\.2\.5/);
+});
+
+test("chemins Maven et empreintes du profil", () => {
+  assert.equal(mavenPath("net.fabricmc:fabric-loader:0.16.9"), "net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar");
+  assert.equal(mavenPath("org.lwjgl:lwjgl:3.3.3:natives-windows"), "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows.jar");
+  assert.equal(mavenPath("a.b:c:1@zip"), "a/b/c/1/c-1.zip");
+  for (const bad of ["a:b", "a:..:1", "a:b:..", "a/b:c:1", "a:b:1:../x"]) assert.equal(mavenPath(bad), null, bad);
+  const h = profileHashes({ libraries: [{ name: "org.ow2.asm:asm:9.7", url: FMAVEN, sha1: "a".repeat(40), size: 3 }, { name: "x:y:1", url: FMAVEN }] });
+  assert.deepEqual([...h.entries()], [[`${FMAVEN}org/ow2/asm/asm/9.7/asm-9.7.jar`, { sha1: "a".repeat(40), size: 3 }]]);
 });
 
 test("profil du loader : forme vérifiée (identifiant, version de base, noms de bibliothèques)", async () => {
