@@ -4,6 +4,8 @@ export const CHANNELS = {
   getInfo: "app:get-info",
   openLink: "link:open",
   setTheme: "settings:set-theme",
+  listInstances: "instances:list",
+  setFavorite: "instances:set-favorite",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];

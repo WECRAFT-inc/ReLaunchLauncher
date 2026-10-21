@@ -296,3 +296,21 @@ d'intégration avec la vraie bibliothèque ne peut plus être ignoré sur la CI 
 (installation d'une version simulée, seconde passe sans téléchargement, fichier abîmé réparé, contenu piégé
 refusé).
 
+### Lot E2 : détection des instances (branche `electron/e2-instances`, à partir d'E3)
+
+Port de `launcher_dirs`, `detect_instances`, `scan_instances`, `read_local_instance`, `apply_meta`
+(`src/main/instances/`). Lecture seule des dossiers d'instances ; base Modrinth `app.db` ouverte en lecture
+seule (`node:sqlite`), un profil dont le chemin sort de `profiles/` est ignoré (comme en Python).
+- Sources : dossier `instances` de WeCraft (cache par date de modification), CurseForge (2 emplacements),
+  Modrinth, Prism ; formats `wecraft.json` (prioritaire), `mmc-pack.json`, `minecraftinstance.json`,
+  `manifest.json`, `modrinth.index.json`.
+- Réglages par instance lus dans `instances_meta.json` (même clé que Python) ; seul le **favori** peut être
+  modifié depuis ReLaunch (seule la clé `fav` change, écriture sûre E1). Les instances masquées sont comptées.
+- L'interface ne reçoit aucun chemin (identifiants opaques) ; valeurs lues dans les fichiers toujours échappées.
+- Interface : liste réelle dans l'accueil et la page WeCraft (Jouer = lot E4 ; suppression = lot E8, bouton retiré).
+
+**Validation (critère du plan)** : test qui construit un jeu d'instances (4 sources, fichiers abîmés, base
+Modrinth avec chemin piégé, réglages abîmés) et compare la liste de ReLaunch à celle de la **vraie version
+Python** : identiques. 7 tests de plus (88). Rendu vérifié dans Chromium avec la CSP (noms piégés affichés
+comme texte, aucune erreur).
+

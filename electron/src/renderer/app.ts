@@ -85,11 +85,57 @@ function showNoticeLines(lines: string[]): void {
   el("wc-notice").hidden = false;
 }
 
+// ---------------------------------------------------------------- instances (lot E2)
+let lastLoad = 0;
+let loading: Promise<void> | null = null;
+
+/** Relit les instances (lecture seule) et les transmet à l'interface du prototype. */
+function loadInstances(rescan = false): Promise<void> {
+  if (loading) return loading;
+  lastLoad = Date.now();
+  loading = window.wecraft.instances
+    .list(rescan)
+    .then((list) => {
+      document.dispatchEvent(new CustomEvent("relaunch:instances", { detail: list }));
+    })
+    .catch(() => toast("Impossible de lire la liste des instances."))
+    .finally(() => {
+      loading = null;
+    });
+  return loading;
+}
+
+function setupInstances(): void {
+  // Comme la version Python : dossier WeCraft relu souvent (seuls les dossiers modifiés), autres launchers
+  // au plus toutes les 60 s (géré par le processus principal).
+  window.setInterval(() => {
+    if (document.visibilityState === "visible" && Date.now() - lastLoad > 5000) void loadInstances();
+  }, 5000);
+  window.addEventListener("focus", () => {
+    if (Date.now() - lastLoad > 2000) void loadInstances();
+  });
+  document.addEventListener("relaunch:set-fav", (e) => {
+    const d = (e as CustomEvent<{ id?: unknown; fav?: unknown }>).detail;
+    if (typeof d?.id !== "string" || typeof d.fav !== "boolean") return;
+    void window.wecraft.instances
+      .setFavorite(d.id, d.fav)
+      .catch((): SettingResult => ({ ok: false, reason: "write-failed" }))
+      .then((r) => {
+        if (!r.ok) {
+          toast("Favori non enregistré : " + SAVE_ERRORS[r.reason].replace(/^Thème[^:]*: /, ""));
+          void loadInstances(); // remet l'affichage d'accord avec le fichier
+        }
+      });
+  });
+}
+
 async function main(): Promise<void> {
   el("wc-notice-close").addEventListener("click", () => {
     el("wc-notice").hidden = true;
   });
   setupThemeBridge();
+  setupInstances();
+  await loadInstances(); // avant getInfo : un instances_meta.json abîmé est ainsi signalé dans le bandeau
   let info: AppInfo;
   try {
     info = await window.wecraft.app.getInfo();

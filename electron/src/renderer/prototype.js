@@ -69,7 +69,17 @@
   var SC={WeCraft:"var(--acc)",CurseForge:"#f16436",Prism:"#5eead4",Modrinth:"#1bd96a"};
   function ago(t){if(!t)return 'jamais';var d=NOW-t;if(d<36e5)return 'il y a quelques minutes';if(d<DAY)return 'il y a '+Math.round(d/36e5)+' h';var j=Math.round(d/DAY);return j===1?'hier':'il y a '+j+' jours'}
   function initials(n){return n.split(/\s+/).filter(function(w){return /^[A-Za-zÀ-ÿ0-9]/.test(w)}).slice(0,2).map(function(w){return w[0]}).join('').toUpperCase()}
-  function detail(x){return x.k==='wc'?(x.l+' '+x.lv+' · '+x.v+' · '+x.r+' Go'):(x.d+' · '+(x.p?x.p+' joueurs':x.status))}
+  function detail(x){return x.k==='wc'?([x.l,x.lv].filter(Boolean).join(' ')+' · '+(x.v||'version inconnue')+(x.r?' · '+x.r+' Go':'')+' · '+x.s):(x.d+' · '+(x.p?x.p+' joueurs':x.status))}
+  /* [ReLaunch] Lot E2 : instances réelles fournies par le processus principal (app.ts), lecture seule. */
+  var SRCCOL={WeCraft:['#ff8a3d','#c2410c'],CurseForge:['#f16436','#7c2d12'],Modrinth:['#1bd96a','#065f46'],Prism:['#5eead4','#155e75']};
+  var HIDDEN=0;
+  document.addEventListener('relaunch:instances',function(e){
+    var d=e.detail||{};HIDDEN=d.hidden||0;INSTLOADED=true;
+    INST=(d.instances||[]).map(function(i){return {id:i.id,k:'wc',n:i.name,s:i.source,v:i.version||'',l:i.loader||'Vanilla',lv:i.loaderVersion||'',r:i.ram,m:'',fav:!!i.fav,c:SRCCOL[i.source]||SRCCOL.WeCraft}});
+    if(!byId(S.sel)&&INST[0])S.sel=INST[0].id;
+    normPins();renderBars();
+    if(S.view==='home'||S.view==='wecraft')RENDER[S.view]();
+  });
 
   /* ---------- État ---------- */
   var S={fold:{orga:true,pins:true},newsSel:'n1',newsF:'Tout',drawer:null,liveF:'Tous',liveSel:'l1',view:'home',sel:'i1',wcSrc:'all',wcQ:'',delId:null,rlTab:'profil',skin:0,setTab:'nav',dTab:'modpacks',dQ:'',dSort:'pertinence',dPage:1,installed:{},shotF:'all',welTab:'Tout'};
@@ -265,7 +275,10 @@
   }
 
   /* ---------- Épingles : éléments seuls ou groupes nommés ---------- */
-  function normPins(){NAV.pins=(NAV.pins||[]).map(function(p){return typeof p==='string'?{t:'i',id:p}:p}).map(function(p){if(p.t==='g')p.items=(p.items||[]).filter(byId);return p}).filter(function(p){return p.t==='g'?p.items.length>0:byId(p.id)});NAV.pinMode=NAV.pinMode||'inline';NAV.dock=NAV.dock||{side:'bottom',align:'center'}}
+  /* [ReLaunch] les épingles d'instances ne sont nettoyées qu'une fois la liste réelle reçue (INSTLOADED) */
+  var INSTLOADED=false;
+  function known(id){return !INSTLOADED||!!byId(id)}
+  function normPins(){NAV.pins=(NAV.pins||[]).map(function(p){return typeof p==='string'?{t:'i',id:p}:p}).map(function(p){if(p.t==='g')p.items=(p.items||[]).filter(known);return p}).filter(function(p){return p.t==='g'?p.items.length>0:known(p.id)});NAV.pinMode=NAV.pinMode||'inline';NAV.dock=NAV.dock||{side:'bottom',align:'center'}}
   function pinCount(){return NAV.pins.reduce(function(a,p){return a+(p.t==='i'?1:p.items.length)},0)}
   function gById(id){return NAV.pins.find(function(p){return p.t==='g'&&p.id===id})}
   function groupOf(id){return NAV.pins.find(function(p){return p.t==='g'&&p.items.indexOf(id)>-1})}
@@ -493,7 +506,7 @@
       $('v-home').innerHTML='<div class="home nocar"><div class="hmain">'+
         '<h2 class="huge" aria-label="ReLaunch">RELAUNCH</h2>'+
         '<div class="playrow"><select id="homeSel" aria-label="Instance ou serveur" disabled><option>Aucune instance pour l\'instant</option></select><button class="btn play" id="homePlay" data-act="noInst">Jouer</button></div>'+
-        '<span class="seldet" id="homeDet">La détection de tes instances (WeCraft, CurseForge, Modrinth, Prism) arrive dans une prochaine version.</span>'+
+        '<span class="seldet" id="homeDet">Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).</span>'+
       '</div></div>';
       return;
     }
@@ -540,9 +553,12 @@
   function rowsWc(){
     var q=S.wcQ.trim().toLowerCase();
     var rows=INST.filter(function(i){return (S.wcSrc==='all'||i.s===S.wcSrc)&&i.n.toLowerCase().indexOf(q)>-1});
+    rows.sort(function(a,b){return (b.fav?1:0)-(a.fav?1:0)});
+    /* [ReLaunch] valeurs lues dans des fichiers d'instances : toujours échappées ; suppression = lot E8 */
     $('wcRows').innerHTML=rows.map(function(i){
-      return '<tr data-a="inst-'+i.id+'"><td><button class="star" data-act="fav" data-id="'+i.id+'" aria-pressed="'+i.fav+'" aria-label="Favori">★</button></td><td><b>'+esc(i.n)+'</b></td><td class="num">'+i.v+'</td><td>'+i.l+' '+i.lv+'</td><td class="num">'+i.m+'</td><td class="num">'+i.r+' Go</td><td><span class="src" style="--sc:'+SC[i.s]+'">'+i.s+'</span></td><td><span class="row" style="justify-content:flex-end">'+pinBtn(i.id)+'<button class="btn sm pri" data-play="'+i.id+'">Jouer</button><button class="btn sm danger" data-act="del" data-id="'+i.id+'">Supprimer</button></span></td></tr>';
-    }).join('')||'<tr><td colspan="8" class="faint">'+(INST.length?'Aucune instance ne correspond.':'Aucune instance pour l\'instant : la détection arrive dans une prochaine version.')+'</td></tr>';
+      return '<tr data-a="inst-'+esc(i.id)+'"><td><button class="star" data-act="fav" data-id="'+esc(i.id)+'" aria-pressed="'+i.fav+'" aria-label="Favori">★</button></td><td><b>'+esc(i.n)+'</b></td><td class="num">'+esc(i.v||'?')+'</td><td>'+esc(i.l+' '+i.lv)+'</td><td class="num">'+esc(i.m||'—')+'</td><td class="num">'+(i.r?esc(i.r)+' Go':'—')+'</td><td><span class="src" style="--sc:'+(SC[i.s]||'var(--acc)')+'">'+esc(i.s)+'</span></td><td><span class="row" style="justify-content:flex-end">'+pinBtn(i.id)+'<button class="btn sm pri" data-play="'+esc(i.id)+'">Jouer</button></span></td></tr>';
+    }).join('')||'<tr><td colspan="8" class="faint">'+(INST.length?'Aucune instance ne correspond.':'Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).')+'</td></tr>';
+    if(HIDDEN)$('wcRows').insertAdjacentHTML('beforeend','<tr><td colspan="8" class="faint">'+HIDDEN+' instance'+(HIDDEN>1?'s masquées':' masquée')+' (réglage de WeCraft).</td></tr>');
   }
 
   /* ================= RELAUNCH ================= */
@@ -891,7 +907,8 @@
       case 'crLoader': CR.loader=a.dataset.v; renderCreate(); break;
       case 'crLv': CR.lv=a.dataset.v; renderCreate(); break;
       case 'closeShot': $('shotOv').hidden=true; refresh(); break;
-      case 'fav': x=byId(a.dataset.id); x.fav=!x.fav; RENDER[S.view](); refresh(); break;
+      case 'fav': x=byId(a.dataset.id); if(!x)break; x.fav=!x.fav; RENDER[S.view](); refresh();
+        if(x.k==='wc')document.dispatchEvent(new CustomEvent('relaunch:set-fav',{detail:{id:x.id,fav:x.fav}})); break;
       case 'del': S.delId=a.dataset.id; $('delName').textContent=byId(S.delId).n; $('delBox').hidden=false; refresh(); break;
       case 'delNo': $('delBox').hidden=true; refresh(); break;
       case 'navOn': NAV.items[i].on=!NAV.items[i].on; saveNav(); break;

@@ -6,9 +6,10 @@ import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AppInfo, InvalidFileNotice, SettingResult } from "../shared/api";
+import type { AppInfo, InstanceList, InvalidFileNotice, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
 import { Settings } from "./config";
+import { InstanceService } from "./instances/service";
 import { configFile, legacyDataDirs, wecraftDataDir, type PathEnv } from "./paths";
 import { JsonStore } from "./storage/jsonStore";
 import { migrateOldSettings } from "./storage/migrate";
@@ -32,6 +33,7 @@ let mainWindow: BrowserWindow | null = null;
 let startupMs: number | undefined;
 const store = new JsonStore();
 let settings: Settings | null = null;
+let instances: InstanceService | null = null;
 let migrated: string[] = [];
 
 // ---------------------------------------------------------------- avant « ready »
@@ -119,6 +121,7 @@ async function start(): Promise<void> {
     migrated = []; // une reprise impossible ne doit jamais empêcher WeCraft de démarrer
   }
   settings = new Settings(store, configFile(env));
+  instances = new InstanceService(store, env);
   lockDownSession();
   protocol.handle(APP_SCHEME, serveAsset);
   registerIpc();
@@ -186,6 +189,18 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     if (!settings) return { ok: false, reason: "write-failed" };
     return settings.setTheme(theme); // valeur vérifiée dans setTheme (liste fermée de thèmes)
+  });
+
+  ipcMain.handle(CHANNELS.listInstances, async (event, rescan: unknown): Promise<InstanceList> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!instances) return { instances: [], hidden: 0 };
+    return instances.list(rescan === true); // lecture seule des dossiers d'instances
+  });
+
+  ipcMain.handle(CHANNELS.setFavorite, async (event, id: unknown, fav: unknown): Promise<SettingResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!instances) return { ok: false, reason: "write-failed" };
+    return instances.setFavorite(id, fav); // identifiant opaque + booléen vérifiés dans le service
   });
 
   ipcMain.handle(CHANNELS.openLink, async (event, id: unknown): Promise<boolean> => {

@@ -49,12 +49,36 @@ export type SettingResult =
   | { ok: true; reset?: { name: string; copyName: string } }
   | { ok: false; reason: "invalid" | "unreadable" | "not-backed-up" | "write-failed" };
 
+/** Instance affichée par l'interface (lot E2). Aucun chemin : `id` est opaque. */
+export interface InstanceView {
+  id: string;
+  /** Nom affiché (réglage par instance, sinon nom lu dans l'instance). */
+  name: string;
+  source: "WeCraft" | "CurseForge" | "Modrinth" | "Prism";
+  version: string | null;
+  loader: "Fabric" | "Forge" | "NeoForge" | "Quilt" | null;
+  loaderVersion: string | null;
+  ram: number | null;
+  fav: boolean;
+}
+
+export interface InstanceList {
+  instances: InstanceView[];
+  /** Instances masquées (réglage de la version Python), seulement comptées. */
+  hidden: number;
+}
+
 export interface WeCraftApi {
   app: {
     getInfo(): Promise<AppInfo>;
   };
   settings: {
     setTheme(theme: ThemeKey): Promise<SettingResult>;
+  };
+  instances: {
+    /** `rescan` : relire aussi les autres launchers tout de suite (sinon au plus toutes les 60 s). */
+    list(rescan?: boolean): Promise<InstanceList>;
+    setFavorite(id: string, fav: boolean): Promise<SettingResult>;
   };
   links: {
     open(id: ExternalLinkId): Promise<boolean>;
