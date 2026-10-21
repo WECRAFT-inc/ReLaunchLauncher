@@ -55,6 +55,8 @@ export type VanillaStep =
 
 export interface InstallVanillaOptions extends NetOptions {
   xmcl: XmclApi;
+  /** Ressources (sons, textures) : installées par défaut ; false seulement pour l'essai réseau de la CI. */
+  withAssets?: boolean;
   /** Empreintes connues par adresse (bibliothèques des profils Fabric/Quilt). */
   knownHashes?: ReadonlyMap<string, { sha1: string; size?: number }>;
   onStep?: (step: VanillaStep) => void;
@@ -106,8 +108,10 @@ export async function installVersionFiles(mcDir: string, id: string, opts: Insta
   const files = await hardenFiles(planned, n, opts.knownHashes);
   await xmcl.execute({ schemaVersion: 1, tasks: [{ id: "version-files", type: "files", files }] }, runtimeFor("fichiers"), execOpts);
 
-  const assets = await hardenFiles(await xmcl.resolveAssetObjectInstallFiles(version, folder), n);
-  await xmcl.execute({ schemaVersion: 1, tasks: [{ id: "asset-objects", type: "files", files: assets }] }, runtimeFor("ressources"), execOpts);
+  if (opts.withAssets !== false) {
+    const assets = await hardenFiles(await xmcl.resolveAssetObjectInstallFiles(version, folder), n);
+    await xmcl.execute({ schemaVersion: 1, tasks: [{ id: "asset-objects", type: "files", files: assets }] }, runtimeFor("ressources"), execOpts);
+  }
 
   const major = version.javaVersion?.majorVersion;
   return { id, javaComponent: javaComponentOf(version), javaMajor: typeof major === "number" ? major : null };
