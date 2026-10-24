@@ -62,6 +62,8 @@ export interface InstanceView {
   loaderVersion: string | null;
   ram: number | null;
   fav: boolean;
+  /** WePack créé par WeCraft (wecraft_modpack.json) : modifiable dans Découvrir (lot E7). */
+  modpack: boolean;
 }
 
 export interface InstanceList {
@@ -109,6 +111,56 @@ export interface UpdateStatus {
   message: string;
 }
 
+/** Lot E7 : modpacks Modrinth. */
+export interface ModpackRoot {
+  project_id: string;
+  title: string;
+}
+export interface ModpackHit {
+  id: string;
+  title: string;
+  author: string;
+  description: string;
+  downloads: number;
+  categories: string[];
+  slug: string | null;
+}
+export type ModpackSearch = { ok: true; total: number; hits: ModpackHit[] } | { ok: false; message: string };
+export interface ModpackJob {
+  id: string;
+  phase: "en-cours" | "termine" | "erreur";
+  message: string;
+  done: number;
+  total: number;
+  warnings: string[];
+}
+export type ModpackStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "empty" | "exists" | "unchanged"; name?: string };
+export interface ModpackEditInfo {
+  id: string;
+  name: string;
+  mc: string;
+  loader: string;
+  selected: ModpackRoot[];
+  old: { project_id: string; title: string; dependency: boolean; required_by: string[] }[];
+}
+export interface PackRowView {
+  id: string;
+  title: string;
+  kind: "root" | "missing" | "dep" | "orphan";
+  parents: string[];
+  note: string;
+  tone: "warn" | "orphan" | "dep" | "muted";
+}
+export interface ModpackQuery {
+  query: string;
+  mc: string;
+  loader: string;
+  offset?: number;
+  categories?: string[];
+  envs?: string[];
+  sort?: string | null;
+}
+
 export interface WeCraftApi {
   app: {
     getInfo(): Promise<AppInfo>;
@@ -135,6 +187,18 @@ export interface WeCraftApi {
     status(job: string): Promise<LaunchStatus | null>;
     /** Réponse à « forcer la fermeture du launcher officiel ? » (phase « accord »). */
     answer(job: string, force: boolean): Promise<boolean>;
+  };
+  modpacks: {
+    /** Versions de Minecraft (releases), la plus récente d'abord ; null si la liste est inaccessible. */
+    versions(): Promise<string[] | null>;
+    search(q: ModpackQuery): Promise<ModpackSearch>;
+    create(p: { name: string; mc: string; loader: string; roots: ModpackRoot[] }): Promise<ModpackStartResult>;
+    editInfo(id: string): Promise<ModpackEditInfo | null>;
+    rows(id: string | null, selected: ModpackRoot[]): Promise<PackRowView[]>;
+    edit(id: string, selected: ModpackRoot[]): Promise<ModpackStartResult>;
+    status(job: string): Promise<ModpackJob | null>;
+    /** Page Modrinth d'un mod (adresse construite par le processus principal). */
+    openPage(slug: string): Promise<boolean>;
   };
   update: {
     check(manual: boolean): Promise<UpdateCheck>;

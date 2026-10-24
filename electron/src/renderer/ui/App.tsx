@@ -34,7 +34,9 @@ import {
 } from "./model";
 import { Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
 import { moveNav, playFlip, Settings, snapPos } from "./Settings";
+import { Discover, emptyDraft } from "./Discover";
 import { Favorites, Home, Soon, SOON, Wecraft } from "./Views";
+import type { MpDraft } from "./ctx";
 
 const SECTION_NAMES: Record<View, string> = {
   home: "Accueil",
@@ -110,6 +112,8 @@ export function App() {
   const [notice, setNotice] = useState<string[]>([]);
   const [launchUi, setLaunchUi] = useState<LaunchUi>({ box: false, name: "", status: null, error: null });
   const [ram, setRam] = useState<{ id: string; name: string; ram: number } | null>(null);
+  const [mp, setMpState] = useState<MpDraft>(emptyDraft);
+  const setMp = useCallback((fn: (d: MpDraft) => MpDraft) => setMpState(fn), []);
   const [upd, setUpd] = useState<Extract<UpdateCheck, { state: "available" }> | null>(null);
   const hist = useRef<string[]>([]);
   const back = useRef(false);
@@ -436,6 +440,20 @@ export function App() {
     });
   }, [toast]);
 
+  const editModpack = useCallback(
+    (id: string) => {
+      void window.wecraft.modpacks.editInfo(id).then((info) => {
+        if (!info) {
+          toast("Les informations de ce modpack sont illisibles (wecraft_modpack.json) : il ne peut pas être modifié ici.", 4000);
+          return;
+        }
+        setMpState({ name: info.name, mc: info.mc, loader: info.loader, selected: info.selected, edit: info });
+        show("discover");
+      });
+    },
+    [toast, show],
+  );
+
   const toggleDrawer = useCallback((k: string) => setUiState((u) => ({ ...u, drawer: u.drawer === k ? null : k })), []);
 
   // ------------------------------------------------------------ démarrage
@@ -521,7 +539,10 @@ export function App() {
     const i = Number(a.dataset["i"]);
     switch (act) {
       case "create":
-        toast("Création d'instance pas encore disponible dans cette version.");
+        show("discover");
+        break;
+      case "mpEdit":
+        editModpack(a.dataset["id"]!);
         break;
       case "noInst":
         toast("Aucune instance à lancer pour l'instant.");
@@ -773,6 +794,10 @@ export function App() {
     checkUpdates,
     setDefaultRam,
     openDataDir,
+    mp,
+    setMp,
+    editModpack,
+    refreshInstances: () => void loadInstances(true),
   };
 
   const extras: ExtrasProps = { toastMsg, tip, launchUi, setLaunchUi, ram, setRam, startLaunch, upd, setUpd, job };
@@ -923,6 +948,7 @@ function ViewBody({ v }: { v: View }) {
   if (v === "wecraft") return <Wecraft />;
   if (v === "favorites") return <Favorites />;
   if (v === "settings") return <Settings />;
+  if (v === "discover") return <Discover />;
   const s = SOON[v]!;
   return <Soon title={s.title} sub={s.sub} text={s.text} />;
 }

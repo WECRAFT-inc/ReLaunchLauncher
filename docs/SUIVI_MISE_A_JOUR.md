@@ -427,3 +427,24 @@ En bac à sable : Fabric, Forge 47.4.28 + Java installés, suppression vers la c
   une erreur de suivi du lancement est affichée au lieu de rester invisible.
 - Restent : revue UX, tailles de fenêtre, accessibilité (critère du plan), et les réglages du prototype encore
   sans effet (Java automatique, Discord, rouvrir à la fermeture : lots E9).
+
+**E6 : CI Windows verte** (compilation, tests, installeur, installation réelle).
+
+### Lot E7 : modpacks Modrinth (branche `electron/e7-modpacks`, à partir d'E6)
+
+Port de la bibliothèque de mods de la version Python (`src/main/modpacks/`) : recherche, résolution des versions
+et dépendances, création d'un WePack, modification (ajout / retrait, dépendances devenues inutiles retirées),
+liste des mods d'un modpack (noms lus dans les `.jar`).
+- Sécurité : API et CDN Modrinth seulement, en HTTPS ; empreinte **SHA-512 obligatoire**, vérifiée avant de garder
+  un fichier ; noms de fichiers contrôlés (aucun dossier, aucun caractère interdit, aucun nom réservé Windows) ;
+  création annulée sans reste si un téléchargement échoue ; modification : rien n'est supprimé si un
+  téléchargement échoue, et seuls les fichiers notés dans `wecraft_modpack.json` peuvent être retirés.
+- Lecture des `.jar` sans dépendance (petit lecteur ZIP limité en taille, rien n'est extrait sur le disque).
+- Interface : page **Découvrir** (recherche, tri, catégories, « Mon modpack » avec les dépendances et leur
+  raison, avertissement « À savoir » avant de télécharger, progression réelle) ; « Créer un WePack » y mène ;
+  bouton ✎ « Modifier les mods » sur les WePacks de la page WeCraft.
+- **Validation** : résolution des versions et dépendances, graphe « qui a besoin de qui », lignes et notes de
+  « Mon modpack », **fichiers créés puis modifiés sur le disque**, liste des mods et lecture de `.jar` compressés
+  par Python : **identiques à la vraie version Python** sur les mêmes données. Test Python porté (échec = rien
+  ne change). Essai réel ajouté à la CI (recherche, création Sodium + dépendances, modification).
+- Restent : essai sur le PC du développeur, revue indépendante.

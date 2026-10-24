@@ -214,6 +214,11 @@ export function Wecraft() {
                   <td>
                     <span className="row" style={{ justifyContent: "flex-end" }}>
                       <PinBtn id={i.id} />
+                      {i.mp ? (
+                        <button className="ib" data-act="mpEdit" data-id={i.id} aria-label={`Modifier les mods de ${i.n}`} title="Modifier les mods (Découvrir)">
+                          ✎
+                        </button>
+                      ) : null}
                       <button className="ib" data-act="del" data-id={i.id} aria-label={`Supprimer ${i.n}`} title="Supprimer (corbeille)">
                         🗑
                       </button>

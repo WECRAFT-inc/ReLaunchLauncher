@@ -6,12 +6,14 @@ import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { UpdateCheck, UpdateStatus } from "../shared/api";
+import type { ModpackEditInfo, ModpackJob, ModpackSearch, ModpackStartResult, PackRowView, UpdateCheck, UpdateStatus } from "../shared/api";
 import type { AppInfo, DeleteResult, InstanceList, InvalidFileNotice, LaunchStartResult, LaunchStatus, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
 import { Settings } from "./config";
 import { loadXmcl } from "./install/xmcl";
+import { instancesDir } from "./instances/detect";
 import { InstanceService } from "./instances/service";
+import { ModpackService } from "./modpacks/service";
 import { LaunchService } from "./launch/launch";
 import { fileLogger } from "./launch/log";
 import { closeOfficialLauncher, nodeRunner, openOfficialLauncher } from "./launch/officialLauncher";
@@ -44,6 +46,7 @@ let settings: Settings | null = null;
 let instances: InstanceService | null = null;
 let launcher: LaunchService | null = null;
 let updater: UpdateService | null = null;
+let modpacks: ModpackService | null = null;
 let updateEnv: UpdateEnv | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
@@ -170,6 +173,7 @@ async function start(): Promise<void> {
   updater = new UpdateService({ env: updateEnv, quit: () => app.quit() });
   settings = new Settings(store, configFile(env));
   instances = new InstanceService(store, env);
+  modpacks = new ModpackService({ instancesDir: instancesDir(env), instances, userAgent: `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)` });
   const launchLog = fileLogger(path.join(wecraftDataDir(env), "logs", "lancement.log"));
   launcher = new LaunchService({
     mcDir: minecraftDir(env),
@@ -315,6 +319,47 @@ function registerIpc(): void {
     if (launcher?.busy()) return { ok: false, reason: "busy" };
     // corbeille de Windows uniquement : jamais d'effacement définitif
     return instances.remove(id, (folder) => shell.trashItem(folder));
+  });
+
+  // ---------------------------------------------------------------- modpacks (lot E7)
+  ipcMain.handle(CHANNELS.mpVersions, async (event): Promise<string[] | null> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    try {
+      return (await modpacks?.mcVersions()) ?? null;
+    } catch {
+      return null;
+    }
+  });
+  ipcMain.handle(CHANNELS.mpSearch, async (event, q: unknown): Promise<ModpackSearch> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return modpacks ? modpacks.search(q) : { ok: false, message: "Indisponible." };
+  });
+  ipcMain.handle(CHANNELS.mpCreate, async (event, p: unknown): Promise<ModpackStartResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return modpacks ? modpacks.create(p) : { ok: false, reason: "invalid" };
+  });
+  ipcMain.handle(CHANNELS.mpEditInfo, async (event, id: unknown): Promise<ModpackEditInfo | null> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return modpacks ? modpacks.editInfo(id) : null;
+  });
+  ipcMain.handle(CHANNELS.mpRows, async (event, id: unknown, selected: unknown): Promise<PackRowView[]> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return modpacks ? modpacks.rows(id, selected) : [];
+  });
+  ipcMain.handle(CHANNELS.mpEdit, async (event, id: unknown, selected: unknown): Promise<ModpackStartResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (launcher?.busy()) return { ok: false, reason: "busy" };
+    return modpacks ? modpacks.edit(id, selected) : { ok: false, reason: "invalid" };
+  });
+  ipcMain.handle(CHANNELS.mpStatus, async (event, job: unknown): Promise<ModpackJob | null> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return modpacks?.status(job) ?? null;
+  });
+  ipcMain.handle(CHANNELS.mpPage, async (event, slug: unknown): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (typeof slug !== "string" || !/^[\w-]{1,100}$/.test(slug)) return false; // adresse construite ici
+    await shell.openExternal(`https://modrinth.com/mod/${slug}`);
+    return true;
   });
 
   ipcMain.handle(CHANNELS.launchStart, async (event, id: unknown, opts: unknown): Promise<LaunchStartResult> => {

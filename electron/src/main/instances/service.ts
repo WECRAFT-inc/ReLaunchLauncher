@@ -2,6 +2,7 @@
 // L'interface ne reçoit jamais de chemin : chaque instance a un identifiant opaque, que seul ce service
 // sait relier à un dossier. Rien n'est écrit dans les dossiers d'instances.
 import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import type { DeleteResult, InstanceView, SettingResult } from "../../shared/api";
 import type { PathEnv } from "../paths";
@@ -46,9 +47,19 @@ export class InstanceService {
     const all = sortInstances(applyMeta([...local, ...this.external.list], meta, this.env.platform));
     this.byId = new Map(all.map((i) => [InstanceService.idOf(i.folder, this.env.platform), i]));
     const visible = all.filter((i) => !i.hidden);
+    const packs = await Promise.all(
+      visible.map((i) =>
+        i.source === "WeCraft"
+          ? stat(path.join(i.folder, "wecraft_modpack.json")).then(
+              (s) => s.isFile(),
+              () => false,
+            )
+          : false,
+      ),
+    );
     return {
       hidden: all.length - visible.length,
-      instances: visible.map((i) => ({
+      instances: visible.map((i, k) => ({
         id: InstanceService.idOf(i.folder, this.env.platform),
         name: i.display,
         source: i.source,
@@ -57,6 +68,7 @@ export class InstanceService {
         loaderVersion: i.loaderVersion,
         ram: i.ram,
         fav: i.fav,
+        modpack: packs[k]!,
       })),
     };
   }

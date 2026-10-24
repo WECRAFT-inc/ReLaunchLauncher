@@ -55,13 +55,15 @@ export class TooLargeError extends Error {
 }
 
 /** Fonction fetch (remplaçable dans les tests). */
-export type FetchFn = (url: string, init: { redirect: "manual"; signal?: AbortSignal }) => Promise<Response>;
+export type FetchFn = (url: string, init: { redirect: "manual"; signal?: AbortSignal; headers?: Record<string, string> }) => Promise<Response>;
 
 export interface NetOptions {
   fetch?: FetchFn;
   allowedHosts?: ReadonlySet<string>;
   signal?: AbortSignal;
   maxRedirects?: number;
+  /** En-têtes ajoutés à chaque requête (ex. User-Agent demandé par Modrinth). */
+  headers?: Record<string, string>;
 }
 
 /** Vérifie qu'une adresse est en HTTPS, vers un serveur autorisé, sans identifiants ni port exotique. */
@@ -88,8 +90,9 @@ export async function getChecked(url: string, opts: NetOptions = {}): Promise<Re
   const max = opts.maxRedirects ?? 5;
   let current = checkUrl(url, hosts).href;
   for (let hop = 0; ; hop++) {
-    const init: { redirect: "manual"; signal?: AbortSignal } = { redirect: "manual" };
+    const init: { redirect: "manual"; signal?: AbortSignal; headers?: Record<string, string> } = { redirect: "manual" };
     if (opts.signal) init.signal = opts.signal;
+    if (opts.headers) init.headers = opts.headers;
     const res = await doFetch(current, init);
     if (REDIRECTS.has(res.status)) {
       const loc = res.headers.get("location");
@@ -110,6 +113,7 @@ export async function getChecked(url: string, opts: NetOptions = {}): Promise<Re
 export interface Expected {
   sha1?: string;
   sha256?: string;
+  sha512?: string;
   size?: number;
 }
 
@@ -153,6 +157,9 @@ export function verifyBuffer(buf: Uint8Array, url: string, expected: Expected): 
   }
   if (expected.sha256 && !hexEq(createHash("sha256").update(buf).digest("hex"), expected.sha256)) {
     throw new IntegrityError(url, "empreinte SHA-256 différente");
+  }
+  if (expected.sha512 && !hexEq(createHash("sha512").update(buf).digest("hex"), expected.sha512)) {
+    throw new IntegrityError(url, "empreinte SHA-512 différente");
   }
 }
 
@@ -200,7 +207,7 @@ let tmpCounter = 0;
  * remplacé qu'une fois la taille et l'empreinte vérifiées ; sinon le temporaire est supprimé et rien ne change.
  */
 export async function downloadVerified(url: string, dest: string, expected: Expected, opts: DownloadOptions = {}): Promise<void> {
-  if (!expected.sha1 && !expected.sha256) throw new IntegrityError(url, "aucune empreinte connue");
+  if (!expected.sha1 && !expected.sha256 && !expected.sha512) throw new IntegrityError(url, "aucune empreinte connue");
   const maxBytes = expected.size !== undefined && expected.size >= 0 ? expected.size : (opts.maxBytes ?? 512 * 1024 * 1024);
   const res = await getChecked(url, opts);
   const declared = Number(res.headers.get("content-length") ?? "NaN");
@@ -212,6 +219,7 @@ export async function downloadVerified(url: string, dest: string, expected: Expe
   const tmp = path.join(path.dirname(dest), `.${path.basename(dest)}.${process.pid}.${++tmpCounter}.part`);
   const sha1 = createHash("sha1");
   const sha256 = createHash("sha256");
+  const sha512 = createHash("sha512");
   let total = 0;
   let renamed = false;
   const fh = await fsp.open(tmp, "wx");
@@ -229,6 +237,7 @@ export async function downloadVerified(url: string, dest: string, expected: Expe
           }
           sha1.update(value);
           sha256.update(value);
+          sha512.update(value);
           await fh.write(value);
           opts.onBytes?.(value.byteLength);
         }
@@ -242,6 +251,7 @@ export async function downloadVerified(url: string, dest: string, expected: Expe
     }
     if (expected.sha1 && !hexEq(sha1.digest("hex"), expected.sha1)) throw new IntegrityError(url, "empreinte SHA-1 différente");
     if (expected.sha256 && !hexEq(sha256.digest("hex"), expected.sha256)) throw new IntegrityError(url, "empreinte SHA-256 différente");
+    if (expected.sha512 && !hexEq(sha512.digest("hex"), expected.sha512)) throw new IntegrityError(url, "empreinte SHA-512 différente");
     await fsp.rename(tmp, dest);
     renamed = true;
   } finally {

@@ -17,6 +17,14 @@ const SET_THEME = "settings:set-theme";
 const LIST_INSTANCES = "instances:list";
 const SET_FAVORITE = "instances:set-favorite";
 const REMOVE_INSTANCE = "instances:remove";
+const MP_VERSIONS = "modpacks:versions";
+const MP_SEARCH = "modpacks:search";
+const MP_CREATE = "modpacks:create";
+const MP_EDIT_INFO = "modpacks:edit-info";
+const MP_ROWS = "modpacks:rows";
+const MP_EDIT = "modpacks:edit";
+const MP_STATUS = "modpacks:status";
+const MP_PAGE = "modpacks:page";
 const LAUNCH_START = "launch:start";
 const LAUNCH_STATUS = "launch:status";
 const LAUNCH_ANSWER = "launch:answer";
@@ -41,6 +49,16 @@ const api: WeCraftApi = Object.freeze({
       ipcRenderer.invoke(LAUNCH_START, id, { ram: opts?.ram, repair: opts?.repair === true }),
     status: (job: string) => ipcRenderer.invoke(LAUNCH_STATUS, job),
     answer: (job: string, force: boolean) => ipcRenderer.invoke(LAUNCH_ANSWER, job, force === true),
+  }),
+  modpacks: Object.freeze({
+    versions: () => ipcRenderer.invoke(MP_VERSIONS),
+    search: (q: unknown) => ipcRenderer.invoke(MP_SEARCH, q),
+    create: (p: unknown) => ipcRenderer.invoke(MP_CREATE, p),
+    editInfo: (id: string) => ipcRenderer.invoke(MP_EDIT_INFO, id),
+    rows: (id: string | null, selected: unknown) => ipcRenderer.invoke(MP_ROWS, id, selected),
+    edit: (id: string, selected: unknown) => ipcRenderer.invoke(MP_EDIT, id, selected),
+    status: (job: string) => ipcRenderer.invoke(MP_STATUS, job),
+    openPage: (slug: string) => ipcRenderer.invoke(MP_PAGE, slug),
   }),
   update: Object.freeze({
     check: (manual: boolean) => ipcRenderer.invoke(UPDATE_CHECK, manual === true),

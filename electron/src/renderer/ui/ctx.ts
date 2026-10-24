@@ -1,6 +1,16 @@
 // État partagé de l'interface (lot E6).
 import { createContext, useContext } from "react";
+import type { ModpackEditInfo, ModpackRoot } from "../../shared/api";
 import type { Car, HomePref, Inst, NavConfig, Pref, View } from "./model";
+
+/** Modpack en préparation dans Découvrir (lot E7) : création, ou modification d'un WePack existant. */
+export interface MpDraft {
+  name: string;
+  mc: string;
+  loader: string;
+  selected: ModpackRoot[];
+  edit: ModpackEditInfo | null;
+}
 
 export interface PopState {
   kind: "group" | "section";
@@ -56,6 +66,10 @@ export interface AppCtx {
   checkUpdates: (manual: boolean) => void;
   setDefaultRam: (r: number) => void;
   openDataDir: () => void;
+  mp: MpDraft;
+  setMp: (fn: (d: MpDraft) => MpDraft) => void;
+  editModpack: (id: string) => void;
+  refreshInstances: () => void;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);

@@ -18,6 +18,8 @@ export interface Inst {
   fav: boolean;
   c: [string, string];
   last?: number;
+  /** WePack créé par WeCraft : modifiable dans Découvrir (lot E7). */
+  mp?: boolean;
 }
 
 export const SC: Record<string, string> = { WeCraft: "var(--acc)", CurseForge: "#f16436", Prism: "#5eead4", Modrinth: "#1bd96a" };
@@ -41,6 +43,7 @@ export function toInst(i: InstanceView): Inst {
     m: "",
     fav: !!i.fav,
     c: SRCCOL[i.source] ?? SRCCOL["WeCraft"]!,
+    ...(i.modpack ? { mp: true } : {}),
   };
 }
 

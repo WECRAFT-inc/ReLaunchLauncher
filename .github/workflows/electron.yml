@@ -170,3 +170,5 @@ jobs:
         run: npm run build
       - name: Installation réelle (dossier jetable)
         run: node scripts/e2e-install.mjs
+      - name: Modpack Modrinth réel (dossier jetable)
+        run: node scripts/e2e-modrinth.mjs

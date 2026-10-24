@@ -20,3 +20,27 @@ body { margin: 0; padding: 0 !important; overflow: hidden; background: var(--nig
 /* Pages pas encore disponibles */
 .rl-empty { max-width: 560px; display: flex; flex-direction: column; gap: 6px; padding: 20px 22px; }
 .rl-empty b { font-size: 15px; }
+
+/* Découvrir : modpacks Modrinth (lot E7) */
+.mp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .mp-grid { grid-template-columns: minmax(0, 1fr); } }
+.mp-edit { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mp-edit span { display: flex; flex-direction: column; gap: 2px; }
+.mp-results { display: flex; flex-direction: column; gap: 8px; }
+.mp-hit { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.mp-ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 800; color: var(--night); background: linear-gradient(135deg, var(--acc-2), var(--acc)); }
+.mp-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mp-txt small.muted { font-size: 12.5px; overflow-wrap: anywhere; }
+.mp-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.mp-acts { display: flex; gap: 6px; align-items: center; }
+.mp-pack { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 0; }
+.mp-pack h3 { font-size: 15px; }
+.mp-rows { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.mp-row { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-size: 13px; }
+.mp-row small { font-size: 11.5px; }
+.mp-notice { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--acc) 45%, transparent); background: color-mix(in srgb, var(--acc) 10%, transparent); }
+.mp-notice p { margin: 0; }
+.mp-job { display: flex; flex-direction: column; gap: 6px; }
+.mp-job .lbar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.mp-job .lbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--acc), var(--acc-2)); transition: width .3s; }
+.mp-acts .ib svg { width: 15px; height: 15px; }
