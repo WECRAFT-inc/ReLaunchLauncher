@@ -92,7 +92,7 @@ export class LaunchService {
     const status: LaunchStatus = { job: randomUUID(), phase: "fermeture", message: "Fermeture du launcher officiel...", progress: null, notes: [], profile: null, opened: null };
     const job: Job = { status, answer: null, promise: Promise.resolve() };
     const log = this.deps.log ?? (() => undefined);
-    log(`Lancement : ${target.profileName} (Minecraft ${target.mc}, ${target.loader ?? "Vanilla"} ${target.loaderVersion ?? ""}, ${opts.ram} Go${opts.repair ? ", réparer" : ""})`);
+    log(`Lancement : ${target.profileName} (Minecraft ${target.mc}, ${[target.loader ?? "Vanilla", target.loaderVersion].filter(Boolean).join(" ")}, ${opts.ram} Go${opts.repair ? ", réparer" : ""})`);
     job.promise = this.run(job, target, opts).catch((e: unknown) => {
       log(`Erreur (${status.phase}) : ${e instanceof Error ? e.message : String(e)}`);
       status.phase = "erreur";
