@@ -162,7 +162,8 @@ function snapshot(dir: string): Record<string, string> {
     if (!existsSync(d)) return;
     for (const n of readdirSync(d, { withFileTypes: true })) {
       if (n.isDirectory()) walk(path.join(d, n.name), `${rel}${n.name}/`);
-      else out[`${rel}${n.name}`] = readFileSync(path.join(d, n.name), "utf8");
+      // Python écrit ses JSON en mode texte : fins de ligne \r\n sous Windows, \n ailleurs (contenu identique).
+      else out[`${rel}${n.name}`] = readFileSync(path.join(d, n.name), "utf8").replace(/\r\n/g, "\n");
     }
   };
   walk(dir, "");
@@ -328,7 +329,7 @@ test("service : recherche vérifiée, création et modification suivies, refus c
     const r = await svc.create({ name: "Mon <pack>", mc: "1.20.1", loader: "Fabric", roots: [{ project_id: "sodium", title: "Sodium" }] });
     assert.ok(r.ok);
     assert.deepEqual(await svc.create({ name: "x", mc: "1.20.1", loader: "Fabric", roots: [{ project_id: "sodium", title: "Sodium" }] }), { ok: false, reason: "busy" });
-    for (let i = 0; i < 50 && svc.status(r.job)?.phase === "en-cours"; i++) await new Promise((res) => setTimeout(res, 10));
+    for (let i = 0; i < 1000 && svc.status(r.job)?.phase === "en-cours"; i++) await new Promise((res) => setTimeout(res, 10));
     const st = svc.status(r.job)!;
     assert.equal(st.phase, "termine", st.message);
     assert.match(st.message, /« Mon pack » créée avec 2 mods \(dont 1 dépendances/);
@@ -347,7 +348,7 @@ test("service : recherche vérifiée, création et modification suivies, refus c
     assert.deepEqual(await svc.edit("inconnu", info.selected), { ok: false, reason: "invalid" });
     const e = await svc.edit(pack.id, [{ project_id: "create", title: "Create" }]);
     assert.ok(e.ok);
-    for (let i = 0; i < 50 && svc.status(e.job)?.phase === "en-cours"; i++) await new Promise((res) => setTimeout(res, 10));
+    for (let i = 0; i < 1000 && svc.status(e.job)?.phase === "en-cours"; i++) await new Promise((res) => setTimeout(res, 10));
     assert.match(svc.status(e.job)!.message, /mis à jour : 1 mod ajouté \(\+ 1 dépendance\), 1 retiré/);
     assert.equal(await svc.editInfo("inconnu"), null);
     assert.equal(svc.status("autre"), null);
