@@ -51,6 +51,8 @@ export interface LaunchDeps {
   open?: () => Promise<boolean>;
   mkdir?: (dir: string) => Promise<unknown>;
   install?: Partial<Installers>;
+  /** Journal de diagnostic. */
+  log?: (line: string) => void;
 }
 
 export interface Installers {
@@ -89,7 +91,10 @@ export class LaunchService {
     if (!Number.isInteger(opts.ram) || opts.ram < RAM_MIN || opts.ram > RAM_MAX) return { ok: false, reason: "invalid" };
     const status: LaunchStatus = { job: randomUUID(), phase: "fermeture", message: "Fermeture du launcher officiel...", progress: null, notes: [], profile: null, opened: null };
     const job: Job = { status, answer: null, promise: Promise.resolve() };
+    const log = this.deps.log ?? (() => undefined);
+    log(`Lancement : ${target.profileName} (Minecraft ${target.mc}, ${target.loader ?? "Vanilla"} ${target.loaderVersion ?? ""}, ${opts.ram} Go${opts.repair ? ", réparer" : ""})`);
     job.promise = this.run(job, target, opts).catch((e: unknown) => {
+      log(`Erreur (${status.phase}) : ${e instanceof Error ? e.message : String(e)}`);
       status.phase = "erreur";
       status.progress = null;
       status.message = e instanceof Error ? e.message : String(e);
@@ -139,6 +144,7 @@ export class LaunchService {
       }
     }
     s.message = closed.message;
+    this.deps.log?.(`Fermeture : ${closed.message}`);
     if (!closed.ok) {
       throw new Cancelled(`${closed.message}\nFermez le launcher officiel puis cliquez à nouveau sur LANCER.\nAucun fichier n'a été modifié.`);
     }
@@ -166,11 +172,13 @@ export class LaunchService {
     s.message = `Mise à jour du profil « ${t.profileName} »...`;
     await setProfile(d.mcDir, t.profileName, launchId, t.gameDir, opts.ram, d.profile);
     s.profile = t.profileName;
+    this.deps.log?.(`Profil écrit : ${t.profileName} → ${launchId}`);
 
     // 4) ouvrir le launcher officiel
     s.phase = "ouverture";
     s.message = "Ouverture du launcher officiel...";
     s.opened = await (d.open ?? (() => openOfficialLauncher()))();
+    this.deps.log?.(s.opened ? "Terminé : launcher officiel ouvert." : "Terminé : launcher officiel NON ouvert.");
     s.phase = "termine";
     s.message = s.opened
       ? `Profil « ${t.profileName} » prêt : cliquez sur Jouer dans le launcher officiel.`

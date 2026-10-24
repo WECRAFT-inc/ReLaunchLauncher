@@ -12,6 +12,7 @@ import {
   type LauncherEnv,
 } from "../src/main/launch/officialLauncher";
 import { backupProfilesFile, defaultInstanceName, launcherDate, ProfileError, profileNameFor, setProfile, type ProfileDeps } from "../src/main/launch/profiles";
+import { fileLogger, LOG_MAX_BYTES } from "../src/main/launch/log";
 import { LaunchService, type LaunchStatus, type LaunchTarget } from "../src/main/launch/launch";
 import { Settings } from "../src/main/config";
 import { JsonStore } from "../src/main/storage/jsonStore";
@@ -243,7 +244,7 @@ test("le profil retrouvé par son identifiant mémorisé, même renommé par l'u
 
 // --------------------------------------------------------------- launcher officiel
 
-function fakeRunner(script: { running: Set<string>; stubborn?: boolean; files?: string[] }) {
+function fakeRunner(script: { running: Set<string>; stubborn?: boolean; files?: string[]; appx?: string; noProcess?: boolean }) {
   const calls: string[] = [];
   let clock = 0;
   const r: CommandRunner = {
@@ -257,9 +258,13 @@ function fakeRunner(script: { running: Set<string>; stubborn?: boolean; files?: 
         if (!script.stubborn || args.includes("/F")) script.running.delete(args[args.length - 1]!);
         return { code: 0, stdout: "" };
       }
+      if (file.endsWith("powershell.exe")) return { code: 0, stdout: script.appx ?? "" };
       return { code: 0, stdout: "" };
     },
-    start: async (file, args) => void calls.push(["start", file, ...args].join(" ")),
+    start: async (file, args) => {
+      calls.push(["start", file, ...args].join(" "));
+      if (!script.noProcess) script.running.add(file.endsWith("explorer.exe") ? "Minecraft.exe" : "MinecraftLauncher.exe");
+    },
     exists: async (file) => (script.files ?? []).includes(file),
     sleep: async (ms) => void (clock += ms),
     now: () => clock,
@@ -299,18 +304,54 @@ test("fermeture : commande impossible → message clair, pas de faux succès", a
   assert.match(r.message, /fermez-le à la main/);
 });
 
-test("ouverture : version classique si présente, sinon Microsoft Store", async () => {
+test("ouverture : version classique si présente, sinon Store/Xbox (identifiant lu dans le paquet), vérifiée", async () => {
+  const starts = (calls: string[]) => calls.filter((c) => c.startsWith("start"));
   let f = fakeRunner({ running: new Set(), files: ["C:\\Program Files\\Minecraft Launcher\\MinecraftLauncher.exe"] });
   assert.equal(await openOfficialLauncher(winEnv(f.r)), true);
-  assert.deepEqual(f.calls, ["start C:\\Program Files\\Minecraft Launcher\\MinecraftLauncher.exe"]);
-  f = fakeRunner({ running: new Set() });
+  assert.deepEqual(starts(f.calls), ["start C:\\Program Files\\Minecraft Launcher\\MinecraftLauncher.exe"]);
+
+  // paquet Xbox trouvé : son identifiant réel est utilisé
+  f = fakeRunner({ running: new Set(), appx: "Microsoft.4297127D64EC6_8wekyb3d8bbwe!Launcher\r\n" });
   assert.equal(await openOfficialLauncher(winEnv(f.r)), true);
-  assert.deepEqual(f.calls, [`start C:\\Windows\\explorer.exe ${STORE_APP}`]);
+  assert.deepEqual(starts(f.calls), ["start C:\\Windows\\explorer.exe shell:AppsFolder\\Microsoft.4297127D64EC6_8wekyb3d8bbwe!Launcher"]);
+
+  // sortie inattendue (autre paquet, texte piégé) : identifiant connu utilisé, jamais la sortie
+  for (const appx of ["", "Evil_123!x & calc", "Microsoft.4297127D64EC6_8wekyb3d8bbwe!Mine craft"]) {
+    f = fakeRunner({ running: new Set(), appx });
+    assert.equal(await openOfficialLauncher(winEnv(f.r)), true);
+    assert.deepEqual(starts(f.calls), [`start C:\\Windows\\explorer.exe ${STORE_APP}`], appx);
+  }
+
+  // rien ne démarre : échec annoncé honnêtement (pas de « prêt » non vérifié)
+  const lines: string[] = [];
+  f = fakeRunner({ running: new Set(), noProcess: true });
+  assert.equal(await openOfficialLauncher({ ...winEnv(f.r), log: (l) => lines.push(l) }), false);
+  assert.ok(lines.some((l) => l.startsWith("Aucun processus")));
+
   f = fakeRunner({ running: new Set() });
   f.r.start = async () => {
     throw new Error("échec");
   };
   assert.equal(await openOfficialLauncher(winEnv(f.r)), false);
+});
+
+test("journal du lancement : une ligne par message, taille limitée", async () => {
+  const { dir, cleanup } = tempDir("journal");
+  try {
+    const f = path.join(dir, "logs", "lancement.log");
+    const log = fileLogger(f, () => new Date("2026-10-24T20:00:00.000Z"));
+    log("Fermeture : ok");
+    log("Erreur : ligne 1\nligne 2");
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(readFileSync(f, "utf8"), "2026-10-24T20:00:00.000Z Fermeture : ok\n2026-10-24T20:00:00.000Z Erreur : ligne 1 | ligne 2\n");
+    writeFileSync(f, "x".repeat(LOG_MAX_BYTES + 1));
+    log("après");
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok(existsSync(`${f}.1`));
+    assert.equal(readFileSync(f, "utf8"), "2026-10-24T20:00:00.000Z après\n");
+  } finally {
+    cleanup();
+  }
 });
 
 // --------------------------------------------------------------- orchestration (play_worker)

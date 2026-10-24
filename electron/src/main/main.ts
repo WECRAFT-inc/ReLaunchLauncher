@@ -12,6 +12,8 @@ import { Settings } from "./config";
 import { loadXmcl } from "./install/xmcl";
 import { InstanceService } from "./instances/service";
 import { LaunchService } from "./launch/launch";
+import { fileLogger } from "./launch/log";
+import { closeOfficialLauncher, nodeRunner, openOfficialLauncher } from "./launch/officialLauncher";
 import { defaultInstanceName, profileNameFor } from "./launch/profiles";
 import { configFile, legacyDataDirs, minecraftDir, wecraftDataDir, type PathEnv } from "./paths";
 import { JsonStore } from "./storage/jsonStore";
@@ -126,6 +128,7 @@ async function start(): Promise<void> {
   }
   settings = new Settings(store, configFile(env));
   instances = new InstanceService(store, env);
+  const launchLog = fileLogger(path.join(wecraftDataDir(env), "logs", "lancement.log"));
   launcher = new LaunchService({
     mcDir: minecraftDir(env),
     profile: {
@@ -134,6 +137,9 @@ async function start(): Promise<void> {
       backupDir: path.join(wecraftDataDir(env), "backups", "launcher_profiles"),
     },
     xmcl: loadXmcl,
+    log: launchLog,
+    close: (o) => closeOfficialLauncher(o, { platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
+    open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
   });
   lockDownSession();
   protocol.handle(APP_SCHEME, serveAsset);

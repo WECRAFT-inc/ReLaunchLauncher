@@ -55,9 +55,17 @@ export interface LauncherEnv {
   platform: NodeJS.Platform;
   env: NodeJS.ProcessEnv;
   runner: CommandRunner;
+  /** Journal de diagnostic (aucune donnée de compte). */
+  log?: (line: string) => void;
 }
 
 const defaultEnv = (): LauncherEnv => ({ platform: process.platform, env: process.env, runner: nodeRunner });
+
+/** Nom du paquet Microsoft Store / Xbox du launcher officiel. */
+export const STORE_PACKAGE = "Microsoft.4297127D64EC6";
+const AUMID = /^Microsoft\.4297127D64EC6_[a-z0-9]{13}![A-Za-z][A-Za-z0-9._-]{0,63}$/;
+/** Délai pour constater que le launcher officiel a réellement démarré. */
+export const OPEN_CHECK_MS = 20_000;
 
 function system32(env: NodeJS.ProcessEnv, exe: string): string {
   return path.win32.join(env["SystemRoot"] ?? env["windir"] ?? "C:\\Windows", "System32", exe);
@@ -108,19 +116,64 @@ export async function closeOfficialLauncher(opts: { timeoutMs?: number; force?: 
   }
 }
 
-/** Ouvre le launcher officiel (version classique, sinon Microsoft Store). False si échec. */
+/**
+ * Identifiant d'application (AUMID) du launcher officiel installé par le Microsoft Store ou l'application Xbox,
+ * lu dans le paquet installé ; null s'il n'est pas installé ou illisible. Commande fixe, sans donnée externe.
+ */
+export async function storeAppId(e: LauncherEnv): Promise<string | null> {
+  const ps = path.win32.join(e.env["SystemRoot"] ?? e.env["windir"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const script =
+    `$p = Get-AppxPackage -Name '${STORE_PACKAGE}' | Select-Object -First 1; ` +
+    "if ($p) { $a = (Get-AppxPackageManifest $p).Package.Applications.Application | Select-Object -First 1; " +
+    "Write-Output ($p.PackageFamilyName + '!' + $a.Id) }";
+  try {
+    const out = (await e.runner.run(ps, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script])).stdout.trim();
+    const id = out.split(/\r?\n/).pop()?.trim() ?? "";
+    e.log?.(`Paquet Store/Xbox : ${id || "absent"}`);
+    return AUMID.test(id) ? id : null;
+  } catch (err) {
+    e.log?.(`Paquet Store/Xbox : lecture impossible (${(err as Error).message})`);
+    return null;
+  }
+}
+
+async function anyLauncherRunning(e: LauncherEnv): Promise<boolean> {
+  for (const n of OFFICIAL_LAUNCHER_PROCESSES) if (await winRunning(e, n)) return true;
+  return false;
+}
+
+/**
+ * Ouvre le launcher officiel (version classique, sinon Microsoft Store / Xbox). Sous Windows, le succès n'est
+ * annoncé que si son processus est réellement apparu (jamais de réussite non vérifiée, §10.4).
+ */
 export async function openOfficialLauncher(e: LauncherEnv = defaultEnv()): Promise<boolean> {
   try {
     if (e.platform === "win32") {
+      let started = false;
       for (const [name, def] of [["ProgramFiles(x86)", "C:\\Program Files (x86)"], ["ProgramFiles", "C:\\Program Files"]] as const) {
         const exe = path.win32.join(e.env[name] ?? def, "Minecraft Launcher", "MinecraftLauncher.exe");
         if (await e.runner.exists(exe)) {
+          e.log?.(`Ouverture : ${exe}`);
           await e.runner.start(exe, []);
-          return true;
+          started = true;
+          break;
         }
       }
-      await e.runner.start(path.win32.join(e.env["SystemRoot"] ?? e.env["windir"] ?? "C:\\Windows", "explorer.exe"), [STORE_APP]);
-      return true;
+      if (!started) {
+        const id = (await storeAppId(e)) ?? STORE_APP.slice("shell:AppsFolder\\".length);
+        e.log?.(`Ouverture : explorer.exe shell:AppsFolder\\${id}`);
+        await e.runner.start(path.win32.join(e.env["SystemRoot"] ?? e.env["windir"] ?? "C:\\Windows", "explorer.exe"), [`shell:AppsFolder\\${id}`]);
+      }
+      const deadline = e.runner.now() + OPEN_CHECK_MS;
+      while (e.runner.now() < deadline) {
+        if (await anyLauncherRunning(e)) {
+          e.log?.("Launcher officiel démarré.");
+          return true;
+        }
+        await e.runner.sleep(1000);
+      }
+      e.log?.(`Aucun processus ${OFFICIAL_LAUNCHER_PROCESSES.join(" / ")} après ${OPEN_CHECK_MS / 1000} s.`);
+      return false;
     }
     if (e.platform === "darwin") {
       return (await e.runner.run("/usr/bin/open", ["-a", "Minecraft"])).code === 0;
@@ -133,8 +186,8 @@ export async function openOfficialLauncher(e: LauncherEnv = defaultEnv()): Promi
         // essai suivant
       }
     }
-  } catch {
-    // échec
+  } catch (err) {
+    e.log?.(`Ouverture impossible : ${(err as Error).message}`);
   }
   return false;
 }
