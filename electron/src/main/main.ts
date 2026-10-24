@@ -14,6 +14,7 @@ import { loadXmcl } from "./install/xmcl";
 import { instancesDir } from "./instances/detect";
 import { InstanceService } from "./instances/service";
 import { ModpackService } from "./modpacks/service";
+import { DiscordPresence, discordClientId } from "./discord/presence";
 import { LaunchService } from "./launch/launch";
 import { fileLogger } from "./launch/log";
 import { closeOfficialLauncher, nodeRunner, openOfficialLauncher } from "./launch/officialLauncher";
@@ -47,6 +48,7 @@ let instances: InstanceService | null = null;
 let launcher: LaunchService | null = null;
 let updater: UpdateService | null = null;
 let modpacks: ModpackService | null = null;
+let presence: DiscordPresence | null = null;
 let updateEnv: UpdateEnv | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
@@ -184,9 +186,14 @@ async function start(): Promise<void> {
     },
     xmcl: loadXmcl,
     log: launchLog,
+    onOpened: (t) => void presence?.launching(t.profileName.replace(/^WECRAFT - /, ""), t.mc, t.loader),
     close: (o) => closeOfficialLauncher(o, { platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
     open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
   });
+  // Statut Discord (lot E9) : désactivé par défaut, comme la version Python
+  const dc = await settings.discord(app.getVersion());
+  presence = new DiscordPresence({ clientId: discordClientId(dc.config), enabled: dc.enabled, version: app.getVersion() });
+  if (dc.enabled) void presence.idle();
   lockDownSession();
   protocol.handle(APP_SCHEME, serveAsset);
   registerIpc();
@@ -322,6 +329,23 @@ function registerIpc(): void {
   });
 
   // ---------------------------------------------------------------- modpacks (lot E7)
+  ipcMain.handle(CHANNELS.discordState, async (event): Promise<{ enabled: boolean; askNow: boolean }> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!settings) return { enabled: false, askNow: false };
+    const s = await settings.discord(app.getVersion());
+    return { enabled: s.enabled, askNow: s.askNow && !!presence?.usable };
+  });
+  ipcMain.handle(CHANNELS.discordSet, async (event, on: unknown, answer: unknown): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!settings || typeof on !== "boolean") return false;
+    const ok = await settings.setDiscord(on, answer === true ? app.getVersion() : undefined);
+    if (ok) {
+      await presence?.setEnabled(on);
+      if (on) void presence?.idle();
+    }
+    return ok;
+  });
+
   ipcMain.handle(CHANNELS.mpVersions, async (event): Promise<string[] | null> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     try {

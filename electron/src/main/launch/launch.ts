@@ -53,6 +53,8 @@ export interface LaunchDeps {
   install?: Partial<Installers>;
   /** Journal de diagnostic. */
   log?: (line: string) => void;
+  /** Launcher officiel ouvert avec le profil prêt (statut Discord « Prépare… », lot E9). */
+  onOpened?: (t: LaunchTarget) => void;
 }
 
 export interface Installers {
@@ -183,6 +185,7 @@ export class LaunchService {
     s.phase = "ouverture";
     s.message = "Ouverture du launcher officiel...";
     s.opened = await (d.open ?? (() => openOfficialLauncher()))();
+    if (s.opened) d.onOpened?.(t);
     this.deps.log?.(s.opened ? "Terminé : launcher officiel ouvert." : "Terminé : launcher officiel NON ouvert.");
     s.phase = "termine";
     s.message = s.opened

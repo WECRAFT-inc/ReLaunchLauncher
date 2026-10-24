@@ -70,6 +70,8 @@ export interface AppCtx {
   setMp: (fn: (d: MpDraft) => MpDraft) => void;
   editModpack: (id: string) => void;
   refreshInstances: () => void;
+  /** Statut Discord activé (réglage partagé avec la version Python). */
+  discordOn: boolean;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);

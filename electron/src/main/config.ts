@@ -40,6 +40,22 @@ export class Settings {
     }
   }
 
+  /** Statut Discord (clés « discord » et « discord_asked_version » de la version Python ; désactivé par défaut). */
+  async discord(version: string): Promise<{ enabled: boolean; askNow: boolean; config: Record<string, unknown> | null }> {
+    const d = await this.store.read(this.file);
+    return { enabled: d?.["discord"] === true, askNow: d?.["discord_asked_version"] !== version, config: d };
+  }
+
+  /** Active ou coupe le statut Discord ; `asked` : la question du premier démarrage a reçu sa réponse. */
+  async setDiscord(on: boolean, askedVersion?: string): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, discord: on, ...(askedVersion ? { discord_asked_version: askedVersion } : {}) }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Enregistre le thème. N'écrit jamais dans un fichier qui ne peut pas être lu. */
   async setTheme(theme: unknown): Promise<SettingResult> {
     if (!isThemeKey(theme)) return { ok: false, reason: "invalid" };

@@ -200,6 +200,12 @@ export interface WeCraftApi {
     /** Page Modrinth d'un mod (adresse construite par le processus principal). */
     openPage(slug: string): Promise<boolean>;
   };
+  discord: {
+    /** askNow : demander l'accord (premier démarrage de cette version). */
+    state(): Promise<{ enabled: boolean; askNow: boolean }>;
+    /** `answer` : réponse à la question du premier démarrage (sinon simple réglage). */
+    set(on: boolean, answer?: boolean): Promise<boolean>;
+  };
   update: {
     check(manual: boolean): Promise<UpdateCheck>;
     install(): Promise<boolean>;

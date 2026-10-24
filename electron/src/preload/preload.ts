@@ -17,6 +17,8 @@ const SET_THEME = "settings:set-theme";
 const LIST_INSTANCES = "instances:list";
 const SET_FAVORITE = "instances:set-favorite";
 const REMOVE_INSTANCE = "instances:remove";
+const DISCORD_STATE = "discord:state";
+const DISCORD_SET = "discord:set";
 const MP_VERSIONS = "modpacks:versions";
 const MP_SEARCH = "modpacks:search";
 const MP_CREATE = "modpacks:create";
@@ -49,6 +51,10 @@ const api: WeCraftApi = Object.freeze({
       ipcRenderer.invoke(LAUNCH_START, id, { ram: opts?.ram, repair: opts?.repair === true }),
     status: (job: string) => ipcRenderer.invoke(LAUNCH_STATUS, job),
     answer: (job: string, force: boolean) => ipcRenderer.invoke(LAUNCH_ANSWER, job, force === true),
+  }),
+  discord: Object.freeze({
+    state: () => ipcRenderer.invoke(DISCORD_STATE),
+    set: (on: boolean, answer?: boolean) => ipcRenderer.invoke(DISCORD_SET, on === true, answer === true),
   }),
   modpacks: Object.freeze({
     versions: () => ipcRenderer.invoke(MP_VERSIONS),

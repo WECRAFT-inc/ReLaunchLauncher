@@ -32,7 +32,7 @@ import {
   type Pref,
   type View,
 } from "./model";
-import { Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
+import { DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
 import { moveNav, playFlip, Settings, snapPos } from "./Settings";
 import { Discover, emptyDraft } from "./Discover";
 import { Favorites, Home, Soon, SOON, Wecraft } from "./Views";
@@ -115,6 +115,8 @@ export function App() {
   const [mp, setMpState] = useState<MpDraft>(emptyDraft);
   const setMp = useCallback((fn: (d: MpDraft) => MpDraft) => setMpState(fn), []);
   const [upd, setUpd] = useState<Extract<UpdateCheck, { state: "available" }> | null>(null);
+  const [discordOn, setDiscordOn] = useState(false);
+  const [discordAsk, setDiscordAsk] = useState(false);
   const hist = useRef<string[]>([]);
   const back = useRef(false);
   const flip = useRef<{ before: Record<string, DOMRect>; key?: string } | null>(null);
@@ -454,6 +456,20 @@ export function App() {
     [toast, show],
   );
 
+  /** Statut Discord : `answer` = réponse à la question du premier démarrage de cette version. */
+  const setDiscord = useCallback(
+    (on: boolean, answer = false) => {
+      void window.wecraft.discord.set(on, answer).then(
+        (ok) => {
+          if (ok) setDiscordOn(on);
+          else toast("Réglage Discord non enregistré.", 4000);
+        },
+        () => toast("Réglage Discord non enregistré.", 4000),
+      );
+    },
+    [toast],
+  );
+
   const toggleDrawer = useCallback((k: string) => setUiState((u) => ({ ...u, drawer: u.drawer === k ? null : k })), []);
 
   // ------------------------------------------------------------ démarrage
@@ -469,6 +485,13 @@ export function App() {
       }
       setAppVer(info.version);
       setDefaultRamState(info.ram);
+      void window.wecraft.discord.state().then(
+        (d) => {
+          setDiscordOn(d.enabled);
+          setDiscordAsk(d.askNow);
+        },
+        () => undefined, // statut Discord facultatif
+      );
       if (info.savedTheme) {
         applyingSaved.current = true;
         setSkin(info.savedTheme);
@@ -695,6 +718,9 @@ export function App() {
       case "pref":
         editPref((p) => (p[a.dataset["k"]!] = !p[a.dataset["k"]!]));
         break;
+      case "discord":
+        setDiscord(!discordOn);
+        break;
       default:
         toast("Pas encore disponible dans cette version.");
     }
@@ -798,12 +824,20 @@ export function App() {
     setMp,
     editModpack,
     refreshInstances: () => void loadInstances(true),
+    discordOn,
   };
 
   const extras: ExtrasProps = { toastMsg, tip, launchUi, setLaunchUi, ram, setRam, startLaunch, upd, setUpd, job };
   return (
     <Ctx.Provider value={ctx}>
       <Notice lines={notice} onClose={() => setNotice([])} />
+      <DiscordAsk
+        open={discordAsk && !upd}
+        onAnswer={(on) => {
+          setDiscordAsk(false);
+          setDiscord(on, true);
+        }}
+      />
       <Shell dnd={dnd} onClick={onClick} mainRef={mainRef} setTip={setTip} extras={extras} />
     </Ctx.Provider>
   );

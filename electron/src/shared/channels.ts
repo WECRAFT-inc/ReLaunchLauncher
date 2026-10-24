@@ -14,6 +14,8 @@ export const CHANNELS = {
   listInstances: "instances:list",
   setFavorite: "instances:set-favorite",
   removeInstance: "instances:remove",
+  discordState: "discord:state",
+  discordSet: "discord:set",
   mpVersions: "modpacks:versions",
   mpSearch: "modpacks:search",
   mpCreate: "modpacks:create",

@@ -724,10 +724,9 @@ export function Settings() {
         </div>
         <div className="setrow">
           <span>
-            <b>Java géré automatiquement</b>
-            <small>Télécharge la bonne version pour chaque instance</small>
+            <b>Java</b>
+            <small>Rien à installer : le launcher officiel fournit Java pour jouer, et ReLaunch télécharge le Java de Mojang (vérifié) quand Forge ou NeoForge en a besoin pour s'installer.</small>
           </span>
-          <button className="toggle" role="switch" aria-checked={tf(pref.java)} data-act="pref" data-k="java" aria-label="Java automatique"></button>
         </div>
         <div className="setrow">
           <span>
@@ -765,16 +764,9 @@ export function Settings() {
         <div className="setrow">
           <span>
             <b>Statut Discord</b>
-            <small>Affiche le jeu en cours sur ton profil Discord</small>
+            <small>Affiche le jeu en cours sur ton profil Discord (désactivé par défaut ; l'appli Discord doit être ouverte)</small>
           </span>
-          <button className="toggle" role="switch" aria-checked={tf(pref.discord)} data-act="pref" data-k="discord" aria-label="Statut Discord"></button>
-        </div>
-        <div className="setrow">
-          <span>
-            <b>Rouvrir ReLaunch à la fermeture du jeu</b>
-            <small>Sinon l'appli reste réduite</small>
-          </span>
-          <button className="toggle" role="switch" aria-checked={tf(pref.reopen)} data-act="pref" data-k="reopen" aria-label="Rouvrir à la fermeture"></button>
+          <button className="toggle" role="switch" aria-checked={tf(app.discordOn)} data-act="discord" aria-label="Statut Discord"></button>
         </div>
         <div className="setrow">
           <span>

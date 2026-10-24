@@ -390,3 +390,35 @@ export function Notice({ lines, onClose }: { lines: string[]; onClose: () => voi
     </div>
   );
 }
+
+/** Question du premier démarrage de chaque version (comme la version Python) ; « Non » est le choix par défaut. */
+export function DiscordAsk({ open, onAnswer }: { open: boolean; onAnswer: (on: boolean) => void }) {
+  const noRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open) noRef.current?.focus();
+  }, [open]);
+  return (
+    <div className="overlay" id="discordOv" hidden={!open} data-a="m-discord" data-name="Statut Discord">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="dcTitle" style={{ width: "min(460px,100%)" }}>
+        <header>
+          <h3 id="dcTitle">Statut Discord</h3>
+        </header>
+        <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <p style={{ fontSize: "13.5px" }}>Afficher sur votre profil Discord ce que vous faites dans ReLaunch ?</p>
+          <p className="muted" style={{ fontSize: "13px" }}>
+            Vos amis Discord verraient le nom de l'instance lancée, sa version de Minecraft, son loader et la durée de jeu. Ce réglage se change à tout moment dans Paramètres, Comportement. La question
+            sera reposée après chaque mise à jour.
+          </p>
+        </div>
+        <div className="mfoot">
+          <button className="btn" ref={noRef} onClick={() => onAnswer(false)}>
+            Non
+          </button>
+          <button className="btn pri" onClick={() => onAnswer(true)}>
+            Oui, afficher
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

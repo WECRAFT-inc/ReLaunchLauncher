@@ -426,7 +426,7 @@ En bac à sable : Fabric, Forge 47.4.28 + Java installés, suppression vers la c
   vraiment `%APPDATA%\.wecraft` ; « Mises à jour » (Réglages > Comportement) a un bouton « Rechercher » ;
   une erreur de suivi du lancement est affichée au lieu de rester invisible.
 - Restent : revue UX, tailles de fenêtre, accessibilité (critère du plan), et les réglages du prototype encore
-  sans effet (Java automatique, Discord, rouvrir à la fermeture : lots E9).
+  sans effet (Java automatique, Discord, rouvrir à la fermeture : traités au lot E9).
 
 **E6 : CI Windows verte** (compilation, tests, installeur, installation réelle).
 
@@ -448,3 +448,25 @@ liste des mods d'un modpack (noms lus dans les `.jar`).
   par Python : **identiques à la vraie version Python** sur les mêmes données. Test Python porté (échec = rien
   ne change). Essai réel ajouté à la CI (recherche, création Sodium + dépendances, modification).
 - Restent : essai sur le PC du développeur, revue indépendante.
+- CI Windows : les tests comparaient les JSON écrits par Python octet par octet ; sous Windows, Python écrit
+  `\r\n` en fin de ligne (contenu identique). Comparaison corrigée, délai d'attente des tests élargi.
+
+### Lot E9 : statut Discord et finitions (branche `electron/e9-finitions`, à partir d'E7)
+
+- **Statut Discord** (`src/main/discord/`) : port de `DiscordPresence`, sans dépendance (protocole local de
+  l'appli Discord par canal nommé, même identifiant d'application). **Désactivé par défaut** ; question au premier
+  démarrage de chaque version (« Non » par défaut), mêmes clés `discord` / `discord_asked_version` que la version
+  Python ; interrupteur dans Paramètres > Comportement. Affiche « Dans le launcher », « Prépare … », puis
+  « Joue à … » (version, loader, durée) quand le jeu est détecté, puis retour au launcher.
+- Détection du jeu : **PowerShell ne renvoie qu'un nombre** de processus Java ; les lignes de commande (qui
+  contiennent le jeton de session de Minecraft) ne sont jamais lues par ReLaunch. Discord fermé : rien ne se
+  passe, nouvel essai après 30 s ; jamais bloquant.
+- Finitions : l'interrupteur factice « Java géré automatiquement » devient une ligne d'information (rien à régler) ;
+  « Rouvrir ReLaunch à la fermeture du jeu » retiré (ni ReLaunch ni la version Python ne se réduisent au lancement :
+  le réglage ne faisait rien).
+- **Validation** : textes du statut, commande PowerShell et identifiant **identiques à la vraie version Python** ;
+  protocole testé contre un faux Discord local ; suivi lancement → jeu → fermeture, abandon après 5 min, Discord
+  fermé. Interface vérifiée dans un navigateur (question, interrupteur).
+- **Non fait volontairement** : retrait des dépendances Python (le code Python reste jusqu'à la validation de la
+  migration, prompt maître).
+- Restent : essai réel avec Discord sur le PC du développeur, revue indépendante.
