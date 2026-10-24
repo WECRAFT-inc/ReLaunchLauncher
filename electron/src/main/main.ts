@@ -1,11 +1,12 @@
 // Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
-import { app, BrowserWindow, ipcMain, Menu, protocol, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { UpdateCheck, UpdateStatus } from "../shared/api";
 import type { AppInfo, DeleteResult, InstanceList, InvalidFileNotice, LaunchStartResult, LaunchStatus, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
 import { Settings } from "./config";
@@ -15,6 +16,8 @@ import { LaunchService } from "./launch/launch";
 import { fileLogger } from "./launch/log";
 import { closeOfficialLauncher, nodeRunner, openOfficialLauncher } from "./launch/officialLauncher";
 import { defaultInstanceName, profileNameFor } from "./launch/profiles";
+import { cleanupLeftovers, markHealthy, restorePrevious, startupCheck, type UpdateEnv } from "./update/pending";
+import { UpdateService } from "./update/service";
 import { configFile, legacyDataDirs, minecraftDir, wecraftDataDir, type PathEnv } from "./paths";
 import { JsonStore } from "./storage/jsonStore";
 import { migrateOldSettings } from "./storage/migrate";
@@ -40,6 +43,9 @@ const store = new JsonStore();
 let settings: Settings | null = null;
 let instances: InstanceService | null = null;
 let launcher: LaunchService | null = null;
+let updater: UpdateService | null = null;
+let updateEnv: UpdateEnv | null = null;
+let healthyDone = false;
 let migrated: string[] = [];
 
 // ---------------------------------------------------------------- avant « ready »
@@ -126,6 +132,42 @@ async function start(): Promise<void> {
   } catch {
     migrated = []; // une reprise impossible ne doit jamais empêcher WeCraft de démarrer
   }
+  // Lot E5 : mise à jour en attente (comptage des démarrages, retour arrière au 2ᵉ échec), AVANT la fenêtre
+  updateEnv = {
+    dataDir: wecraftDataDir(env),
+    execPath: process.execPath,
+    version: app.getVersion(),
+    platform: process.platform,
+    packaged: app.isPackaged,
+    store,
+    start: (file, args) => nodeRunner.start(file, args),
+  };
+  const failed = await startupCheck(updateEnv);
+  if (failed) {
+    const answer = await dialog.showMessageBox({
+      type: "warning",
+      title: "ReLaunch",
+      message:
+        `La version v${failed.data.to || "?"} installée par la dernière mise à jour ne semble pas avoir démarré correctement.\n\n` +
+        `Revenir à la version précédente (v${failed.data.from || "?"}) ?`,
+      buttons: ["Revenir à la version précédente", "Continuer avec cette version"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (answer.response === 0) {
+      try {
+        await restorePrevious(updateEnv, failed);
+        app.exit(0);
+        return;
+      } catch (e) {
+        dialog.showErrorBox("ReLaunch", `Retour à la version précédente impossible :\n${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  } else {
+    void cleanupLeftovers(updateEnv);
+  }
+  updater = new UpdateService({ env: updateEnv, quit: () => app.quit() });
   settings = new Settings(store, configFile(env));
   instances = new InstanceService(store, env);
   const launchLog = fileLogger(path.join(wecraftDataDir(env), "logs", "lancement.log"));
@@ -203,6 +245,38 @@ function registerIpc(): void {
       ),
       migrated: migrated.splice(0),
     };
+  });
+
+  ipcMain.handle(CHANNELS.rendered, async (event): Promise<void> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    // fenêtre réellement affichée et premier rendu fait : la mise à jour est validée (une seule fois)
+    if (healthyDone || !updateEnv || !mainWindow?.isVisible()) return;
+    healthyDone = true;
+    await markHealthy(updateEnv, updater?.handedOff ?? false);
+  });
+
+  ipcMain.handle(CHANNELS.updateCheck, async (event, manual: unknown): Promise<UpdateCheck> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!updater) return { state: "error", message: "Mises à jour indisponibles." };
+    return updater.check(manual === true);
+  });
+
+  ipcMain.handle(CHANNELS.updateInstall, async (event): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return updater?.install() ?? false;
+  });
+
+  ipcMain.handle(CHANNELS.updateStatus, async (event): Promise<UpdateStatus> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return updater?.status() ?? { phase: "idle", done: 0, total: 0, message: "" };
+  });
+
+  ipcMain.handle(CHANNELS.updatePage, async (event): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    const url = updater?.page();
+    if (!url) return false; // adresse GitHub vérifiée dans le service
+    await shell.openExternal(url);
+    return true;
   });
 
   ipcMain.handle(CHANNELS.setTheme, async (event, theme: unknown): Promise<SettingResult> => {

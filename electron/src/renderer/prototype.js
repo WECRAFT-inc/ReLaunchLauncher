@@ -738,7 +738,7 @@
     }
     function mb(m){return '<button data-settab="'+m[0]+'" aria-current="'+(S.setTab===m[0])+'">'+m[2]+m[1]+'</button>'}
     $('v-settings').innerHTML='<div class="setwin"><div class="setnav"><h4>Affichage</h4>'+menu.slice(0,3).map(mb).join('')+'<h4>Jeu</h4>'+menu.slice(3,5).map(mb).join('')+
-      '<h4>Compte</h4>'+mb(menu[5])+'<span class="ver">ReLaunch '+esc(APPVER)+'</span></div><div class="setbody">'+body+'</div></div>';
+      '<h4>Compte</h4>'+mb(menu[5])+'<button class="ver" data-act="updCheck" title="Rechercher une mise à jour" style="all:unset;cursor:pointer">ReLaunch '+esc(APPVER)+' · mises à jour</button></div><div class="setbody">'+body+'</div></div>';
     if($('pinAdd')) $('pinAdd').addEventListener('change',function(){if(!this.value)return;NAV.pins.push({t:'i',id:this.value});savePins()});
     $('v-settings').querySelectorAll('[data-gname]').forEach(function(inp){inp.addEventListener('input',function(){var g=gById(inp.dataset.gname);if(!g)return;g.name=inp.value.trim()||'Groupe';store('proto-nav5',NAV);renderBars()})});
     if(S.setTab==='apparence') wireWheel();
@@ -913,6 +913,7 @@
       case 'del': x=byId(a.dataset.id); if(!x)break; S.delId=x.id; $('delName').textContent=x.n;
         $('delSrc').textContent=x.s!=='WeCraft'?' Cette instance vient de '+x.s+' : elle disparaîtra aussi de '+x.s+'.':'';
         $('delBox').hidden=false; var no=$('delBox').querySelector('[data-act="delNo"]'); if(no&&!dev)no.focus(); refresh(); break;
+      case 'updCheck': document.dispatchEvent(new CustomEvent('relaunch:update-check')); break;
       case 'delNo': S.delId=null; $('delBox').hidden=true; refresh(); break;
       case 'delYes': if(!S.delId)break; document.dispatchEvent(new CustomEvent('relaunch:delete',{detail:{id:S.delId,name:$('delName').textContent}})); S.delId=null; $('delBox').hidden=true; refresh(); break;
       case 'navOn': NAV.items[i].on=!NAV.items[i].on; saveNav(); break;

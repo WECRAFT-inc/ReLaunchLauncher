@@ -5,6 +5,11 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
 
 const GET_INFO = "app:get-info";
+const RENDERED = "app:rendered";
+const UPDATE_CHECK = "update:check";
+const UPDATE_INSTALL = "update:install";
+const UPDATE_STATUS = "update:status";
+const UPDATE_PAGE = "update:page";
 const OPEN_LINK = "link:open";
 const SET_THEME = "settings:set-theme";
 const LIST_INSTANCES = "instances:list";
@@ -17,6 +22,7 @@ const LAUNCH_ANSWER = "launch:answer";
 const api: WeCraftApi = Object.freeze({
   app: Object.freeze({
     getInfo: () => ipcRenderer.invoke(GET_INFO),
+    rendered: () => ipcRenderer.invoke(RENDERED),
   }),
   settings: Object.freeze({
     setTheme: (theme: ThemeKey) => ipcRenderer.invoke(SET_THEME, theme),
@@ -31,6 +37,12 @@ const api: WeCraftApi = Object.freeze({
       ipcRenderer.invoke(LAUNCH_START, id, { ram: opts?.ram, repair: opts?.repair === true }),
     status: (job: string) => ipcRenderer.invoke(LAUNCH_STATUS, job),
     answer: (job: string, force: boolean) => ipcRenderer.invoke(LAUNCH_ANSWER, job, force === true),
+  }),
+  update: Object.freeze({
+    check: (manual: boolean) => ipcRenderer.invoke(UPDATE_CHECK, manual === true),
+    install: () => ipcRenderer.invoke(UPDATE_INSTALL),
+    status: () => ipcRenderer.invoke(UPDATE_STATUS),
+    openPage: () => ipcRenderer.invoke(UPDATE_PAGE),
   }),
   links: Object.freeze({
     open: (id: ExternalLinkId) => ipcRenderer.invoke(OPEN_LINK, id),

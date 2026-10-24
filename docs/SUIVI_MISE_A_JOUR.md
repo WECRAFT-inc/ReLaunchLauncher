@@ -357,3 +357,46 @@ fin, noms piégés affichés comme texte).
 
 Restent pour E4 : essai réel dans le bac à sable (le profil apparaît dans le launcher officiel et le jeu démarre),
 revue indépendante (lot critique : écrit dans les fichiers du launcher officiel).
+
+**Essai en bac à sable (24/10/2026)** : profil « WECRAFT - Pack Fabric » créé puis réutilisé (même identifiant,
+6 Go puis 4 Go), Fabric 0.20.1 installé, « WeCraft Survie » intact, sauvegardes présentes. **Défaut trouvé** : le
+launcher officiel (version Xbox, `C:\XboxGames`) ne s'ouvrait pas, et ReLaunch annonçait « prêt » sans le
+vérifier. Corrigé : identifiant de l'application lu dans le paquet installé (`Get-AppxPackage`, sortie
+vérifiée), succès annoncé seulement si le processus du launcher apparaît (20 s), journal
+`.wecraft\logs\lancement.log`. À réessayer.
+
+### Lot E8 : suppression d'instance (branche `electron/e8-suppression`, à partir d'E4)
+
+Port de `safe_to_delete` / `delete_instance`. **Différence voulue** : le dossier part à la **corbeille de
+Windows** (`shell.trashItem`), jamais d'effacement définitif ; si la corbeille refuse, rien n'est supprimé.
+Mêmes garde-fous que Python (dossier réel, à l'intérieur d'un dossier d'instances connu, liens et « .. »
+résolus, jamais le dossier personnel, `.minecraft` ou le dossier WeCraft ni un de leurs parents) ; refus pendant
+un lancement ; confirmation dans l'interface (bouton « Annuler » sélectionné par défaut, source rappelée pour
+CurseForge / Modrinth / Prism) ; réglages de l'instance oubliés ensuite. Tests portés de Python + pièges (lien
+vers l'extérieur, dossier personnel à l'intérieur, racine). Reste : essai réel, revue indépendante (données).
+
+### Lot E5 : mises à jour (branche `electron/e5-mise-a-jour`, à partir d'E8)
+
+Port en TypeScript du mécanisme de la version Python (`src/main/update/`), mêmes fichiers dans `.wecraft` :
+- **Signature** : même clé publique, même message signé, signature Ed25519 obligatoire ; vérifiée **avant** le
+  téléchargement, puis empreinte SHA-256 vérifiée avant de garder le fichier. Une signature produite par Python
+  est acceptée, toute modification (version, fichier, clé) refusée.
+- **Versions** : même ordre que `version_key` (comparé à Python sur 144 couples).
+- **Release** : premier `.exe` de `Rexidelamort/WeCraft-Releases`, empreinte (`digest` ou `.sha256`), `.sig` ;
+  serveurs GitHub en HTTPS uniquement.
+- **Retour arrière**, deux cas reconnus sans rien deviner :
+  - *passage Python → ReLaunch* : `update_pending.json` écrit par la vraie fonction Python `apply_update` est
+    relu (test croisé) ; validation au premier affichage réel de la fenêtre ; au 2ᵉ démarrage raté, retour à
+    `WeCraft.exe.old` (version Python), version abandonnée notée dans `update_skip.json` ;
+  - *ReLaunch → ReLaunch* : installeur vérifié gardé dans `.wecraft\updates`, lancé en silencieux
+    (`/S --force-run`) ; retour arrière = réinstaller la version précédente avec son installeur.
+- Chemins lus dans `update_pending.json` vérifiés (un fichier modifié ne peut pas faire renommer ou lancer
+  n'importe quel programme). Double-clic < 30 s compté une fois. `update.log` au même format.
+- Interface : vérification silencieuse au démarrage, à la main depuis Réglages (numéro de version) ; fenêtre
+  « Mise à jour disponible » avec progression réelle (octets reçus).
+
+**Rien n'est publié.** Restent, avant toute publication (autorisation explicite du développeur, §3.2) :
+workflow de release ReLaunch (installeur signé + `.sha256` + `.sig`, un seul `.exe`), revue indépendante
+(lot critique), et les 3 essais de bout en bout (§4.4) : Python → ReLaunch, Python → ReLaunch défaillant (retour
+à Python), ReLaunch → ReLaunch. Point à vérifier lors de ces essais : réinstallation d'une version plus ancienne
+par l'installeur (retour arrière ReLaunch → ReLaunch).

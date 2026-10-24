@@ -3,7 +3,7 @@
 // - Thème : celui de launcher_config.json est appliqué au démarrage ; un thème choisi dans
 //   Réglages > Apparence y est enregistré (les 4 thèmes de base ; la couleur personnalisée reste locale).
 // - Fichiers de réglages mis de côté et réglages repris : signalés une fois.
-import type { AppInfo, DeleteResult, LaunchStatus, SettingResult, ThemeKey, WeCraftApi } from "../shared/api";
+import type { AppInfo, DeleteResult, LaunchStatus, UpdateCheck, SettingResult, ThemeKey, WeCraftApi } from "../shared/api";
 
 declare global {
   interface Window {
@@ -272,6 +272,72 @@ function setupDelete(): void {
   });
 }
 
+// ---------------------------------------------------------------- mises à jour (lot E5)
+let updPoll: number | null = null;
+
+function showUpdate(c: Extract<UpdateCheck, { state: "available" }>): void {
+  el("updVer").textContent = `v${c.current}  →  v${c.latest}`;
+  el("updNotes").textContent = c.notes || "Nouvelle version du launcher.";
+  el("updMsg").textContent = c.auto ? "" : "Installation automatique indisponible ici : la page de la mise à jour va s'ouvrir.";
+  el("updGo").textContent = c.auto ? "Mettre à jour" : "Voir la mise à jour";
+  el("updGo").dataset["auto"] = c.auto ? "1" : "";
+  el("updBarBox").hidden = true;
+  (el("updGo") as HTMLButtonElement).disabled = false;
+  (el("updLater") as HTMLButtonElement).disabled = false;
+  el("updOv").hidden = false;
+}
+
+function checkUpdates(manual: boolean): void {
+  void window.wecraft.update
+    .check(manual)
+    .catch((): UpdateCheck => ({ state: "error", message: "Vérification impossible." }))
+    .then((c) => {
+      if (c.state === "available") showUpdate(c);
+      else if (manual && c.state === "none") toast(`ReLaunch est à jour (v${c.current}).${c.latest ? ` Dernière version publiée : v${c.latest}.` : ""}`);
+      else if (manual && c.state === "error") toast(c.message);
+    });
+}
+
+function setupUpdates(): void {
+  const close = (): void => {
+    if (updPoll === null) el("updOv").hidden = true;
+  };
+  el("updLater").addEventListener("click", close);
+  el("updClose").addEventListener("click", close);
+  document.addEventListener("relaunch:update-check", () => checkUpdates(true));
+  el("updGo").addEventListener("click", () => {
+    if (!el("updGo").dataset["auto"]) {
+      void window.wecraft.update.openPage();
+      el("updOv").hidden = true;
+      return;
+    }
+    (el("updGo") as HTMLButtonElement).disabled = true;
+    (el("updLater") as HTMLButtonElement).disabled = true;
+    void window.wecraft.update.install().then((started) => {
+      if (!started) {
+        el("updMsg").textContent = "La mise à jour n'a pas pu démarrer.";
+        (el("updGo") as HTMLButtonElement).disabled = false;
+        (el("updLater") as HTMLButtonElement).disabled = false;
+        return;
+      }
+      el("updBarBox").hidden = false;
+      updPoll = window.setInterval(() => {
+        void window.wecraft.update.status().then((s) => {
+          el("updBar").style.width = s.total > 0 ? `${Math.min(100, Math.round((100 * s.done) / s.total))}%` : "0";
+          el("updMsg").textContent =
+            s.phase === "download" && s.total > 0 ? `Téléchargement... ${Math.floor((100 * s.done) / s.total)} %` : s.message;
+          if (s.phase === "error" && updPoll !== null) {
+            window.clearInterval(updPoll);
+            updPoll = null;
+            (el("updGo") as HTMLButtonElement).disabled = false;
+            (el("updLater") as HTMLButtonElement).disabled = false;
+          }
+        });
+      }, 300);
+    });
+  });
+}
+
 async function main(): Promise<void> {
   el("wc-notice-close").addEventListener("click", () => {
     el("wc-notice").hidden = true;
@@ -280,6 +346,7 @@ async function main(): Promise<void> {
   setupInstances();
   setupLaunch();
   setupDelete();
+  setupUpdates();
   await loadInstances(); // avant getInfo : un instances_meta.json abîmé est ainsi signalé dans le bandeau
   let info: AppInfo;
   try {
@@ -296,6 +363,13 @@ async function main(): Promise<void> {
     applyingSaved = false;
   }
   showNotices(info);
+  // premier rendu réellement affiché : la mise à jour en attente peut être validée
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      void window.wecraft.app.rendered().catch(() => undefined);
+      checkUpdates(false);
+    }),
+  );
 }
 
 void main();

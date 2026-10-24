@@ -95,9 +95,25 @@ export type DeleteResult =
   | { ok: true; metaForgotten: boolean }
   | { ok: false; reason: "invalid" | "refused" | "busy" | "trash-failed" };
 
+/** Vérification des mises à jour (lot E5). `auto` : installation automatique possible (sinon page de la release). */
+export type UpdateCheck =
+  | { state: "none"; current: string; latest: string | null }
+  | { state: "available"; current: string; latest: string; notes: string; auto: boolean }
+  | { state: "error"; message: string };
+
+/** Avancement réel du téléchargement de la mise à jour (octets reçus). */
+export interface UpdateStatus {
+  phase: "idle" | "download" | "restart" | "error";
+  done: number;
+  total: number;
+  message: string;
+}
+
 export interface WeCraftApi {
   app: {
     getInfo(): Promise<AppInfo>;
+    /** L'interface est affichée : valide une mise à jour en attente (mark_update_healthy). */
+    rendered(): Promise<void>;
   };
   settings: {
     setTheme(theme: ThemeKey): Promise<SettingResult>;
@@ -115,6 +131,13 @@ export interface WeCraftApi {
     status(job: string): Promise<LaunchStatus | null>;
     /** Réponse à « forcer la fermeture du launcher officiel ? » (phase « accord »). */
     answer(job: string, force: boolean): Promise<boolean>;
+  };
+  update: {
+    check(manual: boolean): Promise<UpdateCheck>;
+    install(): Promise<boolean>;
+    status(): Promise<UpdateStatus>;
+    /** Ouvre la page de la release sur GitHub (installation à la main). */
+    openPage(): Promise<boolean>;
   };
   links: {
     open(id: ExternalLinkId): Promise<boolean>;

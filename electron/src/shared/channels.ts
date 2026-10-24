@@ -2,6 +2,11 @@
 // tests/channels.test.ts vérifie que les deux listes sont identiques.
 export const CHANNELS = {
   getInfo: "app:get-info",
+  rendered: "app:rendered",
+  updateCheck: "update:check",
+  updateInstall: "update:install",
+  updateStatus: "update:status",
+  updatePage: "update:page",
   openLink: "link:open",
   setTheme: "settings:set-theme",
   listInstances: "instances:list",
