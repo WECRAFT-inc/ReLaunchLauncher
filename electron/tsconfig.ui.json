@@ -1,12 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2023",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "jsx": "react-jsx",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": [],
     "rootDir": ".",
-    "outDir": "dist",
+    "outDir": "dist/ui",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
@@ -16,7 +17,8 @@
     "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "ignoreDeprecations": "6.0"
   },
-  "include": ["src/renderer/**/*.ts", "src/shared/api.ts"]
+  "include": ["src/renderer/ui/**/*.ts", "src/renderer/ui/**/*.tsx", "src/shared/api.d.ts"]
 }

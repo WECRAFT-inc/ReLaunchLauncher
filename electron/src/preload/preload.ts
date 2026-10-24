@@ -6,6 +6,8 @@ import type { ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
 
 const GET_INFO = "app:get-info";
 const RENDERED = "app:rendered";
+const OPEN_DATA_DIR = "app:open-data-dir";
+const SET_RAM = "settings:set-ram";
 const UPDATE_CHECK = "update:check";
 const UPDATE_INSTALL = "update:install";
 const UPDATE_STATUS = "update:status";
@@ -23,9 +25,11 @@ const api: WeCraftApi = Object.freeze({
   app: Object.freeze({
     getInfo: () => ipcRenderer.invoke(GET_INFO),
     rendered: () => ipcRenderer.invoke(RENDERED),
+    openDataDir: () => ipcRenderer.invoke(OPEN_DATA_DIR),
   }),
   settings: Object.freeze({
     setTheme: (theme: ThemeKey) => ipcRenderer.invoke(SET_THEME, theme),
+    setRam: (ram: number) => ipcRenderer.invoke(SET_RAM, ram),
   }),
   instances: Object.freeze({
     list: (rescan?: boolean) => ipcRenderer.invoke(LIST_INSTANCES, rescan === true),

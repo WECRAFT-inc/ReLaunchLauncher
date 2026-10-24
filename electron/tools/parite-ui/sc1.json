@@ -1,0 +1,18 @@
+[
+ {"name":"home"},
+ {"name":"home-vide","inst":[]},
+ {"name":"wecraft","steps":[{"click":"[data-a=nav-wecraft]"}]},
+ {"name":"wecraft-vide","inst":[],"steps":[{"click":"[data-a=nav-wecraft]"}]},
+ {"name":"favoris","steps":[{"click":"[data-a=nav-favorites]"}]},
+ {"name":"reglages-nav","steps":[{"click":"[data-a=nav-settings]"}]},
+ {"name":"reglages-apparence","steps":[{"click":"[data-a=nav-settings]"},{"click":"[data-settab=apparence]"}]},
+ {"name":"reglages-accueil","steps":[{"click":"[data-a=nav-settings]"},{"click":"[data-settab=accueil]"}]},
+ {"name":"reglages-compte","steps":[{"click":"[data-a=nav-settings]"},{"click":"[data-settab=compte]"}]},
+ {"name":"soon-relaunch","steps":[{"click":"[data-a=nav-relaunch]"}]},
+ {"name":"soon-welive","steps":[{"click":"[data-a=nav-welive]"}]},
+ {"name":"soon-discover","steps":[{"click":"[data-a=nav-discover]"}]},
+ {"name":"soon-shop","steps":[{"click":"[data-a=nav-shop]"}]},
+ {"name":"soon-live","steps":[{"click":"[data-a=nav-live]"}]},
+ {"name":"drawer-news","steps":[{"click":"[data-a=nav-news]"}]},
+ {"name":"drawer-friends","steps":[{"click":"[data-a=nav-friends]"}]}
+]

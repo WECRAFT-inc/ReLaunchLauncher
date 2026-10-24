@@ -9,66 +9,10 @@
   <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="prototype.css">
   <link rel="stylesheet" href="wecraft.css">
-  <script src="prototype.js" defer></script>
-  <script type="module" src="app.js"></script>
+  <script src="ui.js" defer></script>
 </head>
 <body>
-  <div class="wc-notice" id="wc-notice" role="alert" hidden>
-    <p id="wc-notice-text"></p>
-    <button class="btn sm" type="button" id="wc-notice-close">Compris</button>
-  </div>
-      <div class="app" id="appRoot">
-        <div class="bg" aria-hidden="true"></div>
-        <div id="bars"></div>
-        <main class="main" id="main">
-          <section class="view" id="v-home" data-a="v-home" data-name="Accueil"></section>
-          <section class="view" id="v-wecraft" data-a="v-wecraft" data-name="WeCraft" hidden></section>
-          <section class="view" id="v-relaunch" data-a="v-relaunch" data-name="ReLaunch" hidden></section>
-          <section class="view" id="v-welive" data-a="v-welive" data-name="WeLive" hidden></section>
-          <section class="view" id="v-relink" data-a="v-relink" data-name="ReLink" hidden></section>
-          <section class="view" id="v-settings" data-a="v-settings" data-name="Réglages" hidden></section>
-          <section class="view" id="v-favorites" data-a="v-favorites" data-name="Favoris" hidden></section>
-                    <section class="view" id="v-discover" data-a="v-discover" data-name="Découvrir" hidden></section>
-          <section class="view" id="v-live" data-a="v-live" data-name="Diffusion Partenaires" hidden></section>
-          <section class="view" id="v-news" data-a="v-news" data-name="Info & News" hidden></section>
-        </main>
-
-        <div class="overlay" id="createOv" hidden data-a="m-create" data-name="Créer un WePack"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="cTitle" id="createModal"></div></div>
-        <div class="overlay lightbox" id="shotOv" hidden data-a="m-shot" data-name="Capture"><div class="modal" role="dialog" aria-modal="true" id="shotModal"></div></div>
-
-        <div class="launch" id="launchBox" hidden data-a="launch">
-          <div class="row"><b id="lName">Lancement</b><button class="xbtn" id="lClose" aria-label="Fermer" style="width:28px;height:28px;font-size:13px">✕</button></div>
-          <div class="lbar"><i id="lBar"></i></div>
-          <small id="lMsg" style="white-space:pre-line">Préparation…</small>
-          <div class="row" id="lAsk" hidden style="justify-content:flex-end;gap:8px"><button class="btn sm" id="lNo">Annuler le lancement</button><button class="btn sm danger" id="lForce">Forcer la fermeture</button></div>
-        </div>
-        <div class="overlay" id="updOv" hidden data-a="m-update" data-name="Mise à jour">
-          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="updTitle" style="width:min(460px,100%)">
-            <header><h3 id="updTitle">Mise à jour disponible</h3><button class="xbtn" id="updClose" aria-label="Fermer" style="width:28px;height:28px;font-size:13px">✕</button></header>
-            <div style="padding:18px 22px;display:flex;flex-direction:column;gap:12px">
-              <b id="updVer" style="font-family:var(--f-mono)"></b>
-              <p class="muted" id="updNotes" style="white-space:pre-line;font-size:13px;max-height:180px;overflow:auto"></p>
-              <div class="lbar" id="updBarBox" hidden style="height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden"><i id="updBar" style="display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc-2))"></i></div>
-              <small class="muted" id="updMsg" style="white-space:pre-line"></small>
-            </div>
-            <div class="mfoot"><button class="btn" id="updLater">Plus tard</button><button class="btn pri" id="updGo">Mettre à jour</button></div>
-          </div>
-        </div>
-        <div class="overlay" id="ramOv" hidden data-a="m-ram" data-name="Lancer">
-          <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ramTitle" style="width:min(420px,100%)">
-            <header><h3 id="ramTitle">Mémoire (RAM)</h3><button class="xbtn" id="ramClose" aria-label="Fermer" style="width:28px;height:28px;font-size:13px">✕</button></header>
-            <div style="padding:18px 22px;display:flex;flex-direction:column;gap:14px">
-              <small class="muted" id="ramName"></small>
-              <div style="display:flex;align-items:center;gap:12px"><input type="range" id="ramRange" min="1" max="16" step="1" value="4" aria-label="Mémoire en Go" style="flex:1"><b id="ramVal" style="min-width:52px;text-align:right">4 Go</b></div>
-              <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="ramRepair"><span>Réparer : tout réinstaller avant de lancer</span></label>
-            </div>
-            <div class="mfoot"><button class="btn" id="ramCancel">Annuler</button><button class="btn pri" id="ramGo">Lancer</button></div>
-          </div>
-        </div>
-        <aside class="drawer" id="drawer" hidden aria-label="Panneau latéral" data-name="Panneau"></aside>
-        <div class="pop" id="pop" hidden data-a="pin-pop" data-name="Épingles" role="dialog" aria-label="Instances épinglées"></div>
-        <div class="toast" id="toast" hidden role="status"></div>
-        <div class="tip" id="tip" hidden></div>
-      </div>
+  <!-- Interface React (lot E6) : tout est rendu par ui.js (src/renderer/ui), assemblé par scripts/bundle-ui.mjs -->
+  <div id="root"></div>
 </body>
 </html>

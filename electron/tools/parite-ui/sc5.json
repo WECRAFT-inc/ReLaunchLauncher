@@ -1,0 +1,9 @@
+[
+ {"name":"ram-dialog","steps":[{"click":"[data-a=nav-wecraft]"},{"click":"[data-a=inst-iaaaa] [data-play]"}]},
+ {"name":"ram-defaut","steps":[{"click":"[data-a=nav-wecraft]"},{"click":"[data-a=inst-ibbbb] [data-play]"}]},
+ {"name":"ram-annule","steps":[{"click":"[data-a=nav-wecraft]"},{"click":"[data-a=inst-iaaaa] [data-play]"},{"click":"#ramCancel"}]},
+ {"name":"lancement","steps":[{"click":"[data-a=nav-wecraft]"},{"click":"[data-a=inst-iaaaa] [data-play]"},{"click":"#ramGo","wait":600}]},
+ {"name":"maj-dispo","upd":true,"steps":[{"wait":400}]},
+ {"name":"maj-plus-tard","upd":true,"steps":[{"wait":400},{"click":"#updLater"}]},
+ {"name":"maj-manuelle","steps":[{"click":"[data-a=nav-settings]"},{"click":".setnav .ver","wait":300}]}
+]

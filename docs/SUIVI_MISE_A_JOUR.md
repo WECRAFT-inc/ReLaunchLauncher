@@ -400,3 +400,30 @@ workflow de release ReLaunch (installeur signé + `.sha256` + `.sig`, un seul `.
 (lot critique), et les 3 essais de bout en bout (§4.4) : Python → ReLaunch, Python → ReLaunch défaillant (retour
 à Python), ReLaunch → ReLaunch. Point à vérifier lors de ces essais : réinstallation d'une version plus ancienne
 par l'installeur (retour arrière ReLaunch → ReLaunch).
+
+**E4 : essai réel validé (24/10/2026, 22:55)** sur les vrais fichiers du développeur (copie de sécurité faite
+avant) : ReLaunch a repris **la configuration créée par WeCraft Python** (même identifiant dans
+`managed_profiles.json`), l'a renommée « WECRAFT - All the Mods 10 - ATM10 » avec `neoforge-21.1.219` et le bon
+dossier CurseForge ; les 9 autres configurations du launcher officiel sont identiques au caractère près, aucune
+ajoutée ni retirée ; launcher officiel (version Xbox) ouvert et vérifié. Confirmé visuellement par le développeur.
+En bac à sable : Fabric, Forge 47.4.28 + Java installés, suppression vers la corbeille faite.
+
+### Lot E6 : interface en React (branche `electron/e6-interface`, à partir d'E5 ; décision D4)
+
+- `react` / `react-dom` 19.3.1 (+ types 19.3.0), ajoutés au `package-lock.json` sur le PC du développeur
+  (`preparer-e6.bat`), 0 faille connue, aucune version existante changée.
+- L'interface du prototype (`prototype.js`, 960 lignes) et le pont `app.ts` sont réécrits en React + TypeScript
+  strict (`src/renderer/ui/`) : barres de navigation (toutes les dispositions), épingles et groupes
+  (glisser-déposer), réglages (6 onglets), accueil, WeCraft, favoris, panneau latéral, lancement, RAM,
+  suppression, mises à jour. Aucune donnée lue dans un fichier n'est insérée comme HTML.
+- Assemblage sans outil externe (`scripts/bundle-ui.mjs`) : un seul `ui.js`, versions de production de React
+  uniquement, aucun `eval` (refusé à l'assemblage), mentions de licence gardées ; CSP inchangée.
+- **Parité vérifiée** : 68 scénarios rejoués (`electron/tools/parite-ui/`) dans Chromium sur l'ancienne et la nouvelle interface, DOM comparé
+  élément par élément (balises, classes, attributs, styles, textes, valeurs des champs) : identiques, sauf le
+  contenu laissé dans des éléments **cachés** par l'ancienne version et les changements voulus ci-dessous.
+- Changements voulus : « Mémoire par défaut » (Réglages > Jeu) est maintenant la vraie valeur de
+  `launcher_config.json` (1 à 16 Go, comme la fenêtre de lancement) ; « Dossier de données > Ouvrir » ouvre
+  vraiment `%APPDATA%\.wecraft` ; « Mises à jour » (Réglages > Comportement) a un bouton « Rechercher » ;
+  une erreur de suivi du lancement est affichée au lieu de rester invisible.
+- Restent : revue UX, tailles de fenêtre, accessibilité (critère du plan), et les réglages du prototype encore
+  sans effet (Java automatique, Discord, rouvrir à la fermeture : lots E9).

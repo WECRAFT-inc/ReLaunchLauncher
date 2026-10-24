@@ -279,6 +279,18 @@ function registerIpc(): void {
     return true;
   });
 
+  ipcMain.handle(CHANNELS.setRam, async (event, ram: unknown): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!settings || typeof ram !== "number" || !Number.isInteger(ram) || ram < 1 || ram > 16) return false;
+    return settings.setRam(ram);
+  });
+
+  ipcMain.handle(CHANNELS.openDataDir, async (event): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    // dossier fixe, jamais un chemin fourni par l'interface
+    return (await shell.openPath(wecraftDataDir(pathEnv()))) === "";
+  });
+
   ipcMain.handle(CHANNELS.setTheme, async (event, theme: unknown): Promise<SettingResult> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     if (!settings) return { ok: false, reason: "write-failed" };

@@ -1,0 +1,6 @@
+[
+ {"name":"drag-groupe","steps":[{"click":"[data-a=nav-wecraft]"},{"click":"[data-a=inst-iaaaa] [data-act=pin]"},{"click":"[data-a=inst-ibbbb] [data-act=pin]"},{"click":"[data-a=inst-icccc] [data-act=pin]","wait":300},{"dragjs":["[data-a=pin-ibbbb]","[data-a=pin-iaaaa]"],"wait":300}]},
+ {"name":"drag-dans-groupe","steps":[{"click":"[data-a=nav-wecraft]"},{"click":"[data-a=inst-iaaaa] [data-act=pin]"},{"click":"[data-a=inst-ibbbb] [data-act=pin]"},{"click":"[data-a=inst-icccc] [data-act=pin]","wait":300},{"dragjs":["[data-a=pin-ibbbb]","[data-a=pin-iaaaa]"],"wait":300},{"click":"[data-act=closePop]"},{"dragjs":["[data-a=pin-icccc]","[data-pin-drop^='g:']"],"wait":300}]},
+ {"name":"drag-zone","steps":[{"click":"[data-a=nav-wecraft]"},{"click":"[data-a=inst-iaaaa] [data-act=pin]"},{"click":"[data-a=inst-ibbbb] [data-act=pin]","wait":300},{"dragjs":["[data-a=pin-iaaaa]","nav[data-pin-zone]"],"wait":300}]},
+ {"name":"nav-drag-ligne","steps":[{"click":"[data-a=nav-settings]"},{"click":"[data-a=fold-orga]"},{"dragjs":["[data-a=navrow-favorites]","[data-a=navrow-wecraft]"],"wait":600}]}
+]

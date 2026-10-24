@@ -3,6 +3,8 @@
 export const CHANNELS = {
   getInfo: "app:get-info",
   rendered: "app:rendered",
+  openDataDir: "app:open-data-dir",
+  setRam: "settings:set-ram",
   updateCheck: "update:check",
   updateInstall: "update:install",
   updateStatus: "update:status",

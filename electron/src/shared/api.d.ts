@@ -114,9 +114,13 @@ export interface WeCraftApi {
     getInfo(): Promise<AppInfo>;
     /** L'interface est affichée : valide une mise à jour en attente (mark_update_healthy). */
     rendered(): Promise<void>;
+    /** Ouvre le dossier des réglages (%APPDATA%\.wecraft) dans l'Explorateur. */
+    openDataDir(): Promise<boolean>;
   };
   settings: {
     setTheme(theme: ThemeKey): Promise<SettingResult>;
+    /** RAM proposée par défaut au lancement (1 à 16 Go), clé « ram » de launcher_config.json. */
+    setRam(ram: number): Promise<boolean>;
   };
   instances: {
     /** `rescan` : relire aussi les autres launchers tout de suite (sinon au plus toutes les 60 s). */
