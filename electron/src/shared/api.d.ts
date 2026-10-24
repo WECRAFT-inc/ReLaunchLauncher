@@ -90,6 +90,11 @@ export interface LaunchStatus {
 
 export type LaunchStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "no-version" };
 
+/** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
+export type DeleteResult =
+  | { ok: true; metaForgotten: boolean }
+  | { ok: false; reason: "invalid" | "refused" | "busy" | "trash-failed" };
+
 export interface WeCraftApi {
   app: {
     getInfo(): Promise<AppInfo>;
@@ -101,6 +106,8 @@ export interface WeCraftApi {
     /** `rescan` : relire aussi les autres launchers tout de suite (sinon au plus toutes les 60 s). */
     list(rescan?: boolean): Promise<InstanceList>;
     setFavorite(id: string, fav: boolean): Promise<SettingResult>;
+    /** Envoie l'instance à la corbeille. `confirmed` doit être true (confirmation affichée par l'interface). */
+    remove(id: string, confirmed: true): Promise<DeleteResult>;
   };
   launch: {
     /** Prépare l'instance puis ouvre le launcher officiel. `ram` en Go (1 à 16) ; `repair` : tout réinstaller. */

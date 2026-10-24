@@ -103,6 +103,11 @@ export class LaunchService {
     return { ok: true, job: status.job };
   }
 
+  /** Un lancement est-il en cours ? (la suppression d'instance attend la fin, comme en Python) */
+  busy(): boolean {
+    return !!this.current && !["termine", "erreur"].includes(this.current.status.phase);
+  }
+
   status(job: unknown): LaunchStatus | null {
     if (typeof job !== "string" || !this.current || this.current.status.job !== job) return null;
     const s = this.current.status;

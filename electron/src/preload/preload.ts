@@ -9,6 +9,7 @@ const OPEN_LINK = "link:open";
 const SET_THEME = "settings:set-theme";
 const LIST_INSTANCES = "instances:list";
 const SET_FAVORITE = "instances:set-favorite";
+const REMOVE_INSTANCE = "instances:remove";
 const LAUNCH_START = "launch:start";
 const LAUNCH_STATUS = "launch:status";
 const LAUNCH_ANSWER = "launch:answer";
@@ -23,6 +24,7 @@ const api: WeCraftApi = Object.freeze({
   instances: Object.freeze({
     list: (rescan?: boolean) => ipcRenderer.invoke(LIST_INSTANCES, rescan === true),
     setFavorite: (id: string, fav: boolean) => ipcRenderer.invoke(SET_FAVORITE, id, fav),
+    remove: (id: string, confirmed: true) => ipcRenderer.invoke(REMOVE_INSTANCE, id, confirmed === true),
   }),
   launch: Object.freeze({
     start: (id: string, opts: { ram: number; repair?: boolean }) =>

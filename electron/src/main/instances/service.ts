@@ -3,10 +3,11 @@
 // sait relier à un dossier. Rien n'est écrit dans les dossiers d'instances.
 import { createHash } from "node:crypto";
 import path from "node:path";
-import type { InstanceView, SettingResult } from "../../shared/api";
+import type { DeleteResult, InstanceView, SettingResult } from "../../shared/api";
 import type { PathEnv } from "../paths";
 import { wecraftDataDir } from "../paths";
 import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "../storage/jsonStore";
+import { safeToDelete } from "./delete";
 import { applyMeta, detectExternal, instancesDir, LocalScanner, metaKey, sortInstances, type ListedInstance } from "./detect";
 
 /** Les autres launchers sont relus au plus toutes les 60 s (comme la version Python). */
@@ -86,6 +87,37 @@ export class InstanceService {
     } catch {
       // réglage non enregistré : le lancement continue
     }
+  }
+
+  /**
+   * Envoie le dossier de l'instance à la corbeille (lot E8), puis oublie ses réglages par instance.
+   * `trash` : corbeille du système (shell.trashItem) ; jamais d'effacement définitif.
+   */
+  async remove(id: unknown, trash: (folder: string) => Promise<void>): Promise<DeleteResult> {
+    const inst = this.target(id);
+    if (!inst) return { ok: false, reason: "invalid" };
+    if (!(await safeToDelete(inst.folder, this.env))) return { ok: false, reason: "refused" };
+    try {
+      await trash(inst.folder);
+    } catch {
+      return { ok: false, reason: "trash-failed" };
+    }
+    let metaForgotten = true;
+    const key = metaKey(inst.folder, this.env.platform);
+    try {
+      await this.store.update(this.metaFile, (meta) => {
+        if (!(key in meta)) return meta;
+        const out = { ...meta };
+        delete out[key];
+        return out;
+      });
+    } catch {
+      metaForgotten = false; // dossier déjà à la corbeille : seuls ses réglages restent dans instances_meta.json
+    }
+    this.byId.delete(id as string);
+    this.local.clear();
+    this.external = null;
+    return { ok: true, metaForgotten };
   }
 
   /** Favori (même clé « fav » que la version Python). Seule cette clé de l'instance change. */

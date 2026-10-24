@@ -3,7 +3,7 @@
 // - Thème : celui de launcher_config.json est appliqué au démarrage ; un thème choisi dans
 //   Réglages > Apparence y est enregistré (les 4 thèmes de base ; la couleur personnalisée reste locale).
 // - Fichiers de réglages mis de côté et réglages repris : signalés une fois.
-import type { AppInfo, LaunchStatus, SettingResult, ThemeKey, WeCraftApi } from "../shared/api";
+import type { AppInfo, DeleteResult, LaunchStatus, SettingResult, ThemeKey, WeCraftApi } from "../shared/api";
 
 declare global {
   interface Window {
@@ -248,6 +248,30 @@ function setupLaunch(): void {
   el("lNo").addEventListener("click", () => answer(false));
 }
 
+// ---------------------------------------------------------------- suppression (lot E8)
+const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
+  invalid: "Instance introuvable : la liste a peut-être changé.",
+  refused: "Ce dossier ne peut pas être supprimé ici (il n'est pas dans un dossier d'instances connu).",
+  busy: "Un lancement est en cours : réessayez dans un instant.",
+  "trash-failed": "La corbeille de Windows a refusé ce dossier : rien n'a été supprimé.",
+};
+
+function setupDelete(): void {
+  document.addEventListener("relaunch:delete", (e) => {
+    const d = (e as CustomEvent<{ id?: unknown; name?: unknown }>).detail;
+    if (typeof d?.id !== "string") return;
+    const name = typeof d.name === "string" ? d.name : "l'instance";
+    void window.wecraft.instances
+      .remove(d.id, true)
+      .catch((): DeleteResult => ({ ok: false, reason: "trash-failed" }))
+      .then((r) => {
+        if (r.ok) toast(`« ${name} » est dans la corbeille.${r.metaForgotten ? "" : " Ses réglages n'ont pas pu être oubliés."}`);
+        else toast(DELETE_ERRORS[r.reason]);
+        void loadInstances(true);
+      });
+  });
+}
+
 async function main(): Promise<void> {
   el("wc-notice-close").addEventListener("click", () => {
     el("wc-notice").hidden = true;
@@ -255,6 +279,7 @@ async function main(): Promise<void> {
   setupThemeBridge();
   setupInstances();
   setupLaunch();
+  setupDelete();
   await loadInstances(); // avant getInfo : un instances_meta.json abîmé est ainsi signalé dans le bandeau
   let info: AppInfo;
   try {

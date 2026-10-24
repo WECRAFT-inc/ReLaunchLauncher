@@ -544,7 +544,7 @@
         '<div class="toolbar"><div class="chips" id="wcSrc">'+['all','WeCraft','CurseForge','Prism','Modrinth'].map(function(s){return '<button class="chip" data-src="'+s+'" aria-pressed="'+(S.wcSrc===s)+'">'+(s==='all'?'Toutes':s)+'</button>'}).join('')+'</div>'+
         '<input type="search" id="wcQ" placeholder="Rechercher une instance" aria-label="Rechercher une instance" value="'+esc(S.wcQ)+'"></div>'+
         '<div class="tablewrap"><table><thead><tr><th></th><th>Instance</th><th>Version</th><th>Loader</th><th>Mods</th><th>Mémoire</th><th>Source</th><th></th></tr></thead><tbody id="wcRows"></tbody></table></div>'+
-        '<div class="confirm gl" id="delBox" hidden><span style="font-size:13.5px">Supprimer <b id="delName"></b> ? Le dossier part à la corbeille.</span><span class="row"><button class="btn sm" data-act="delNo">Annuler</button><button class="btn sm danger" data-act="delYes">Supprimer</button></span></div>'+
+        '<div class="confirm gl" id="delBox" hidden><span style="font-size:13.5px">Supprimer <b id="delName"></b> ? Le dossier et tout son contenu (mods, mondes, captures) partent à la corbeille de Windows.<span id="delSrc"></span></span><span class="row"><button class="btn sm" data-act="delNo">Annuler</button><button class="btn sm danger" data-act="delYes">Supprimer</button></span></div>'+
       '</div>';
     rowsWc();
     $('wcSrc').addEventListener('click',function(e){var b=e.target.closest('[data-src]');if(!b)return;S.wcSrc=b.dataset.src;this.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed',String(c===b))});rowsWc();refresh()});
@@ -555,9 +555,9 @@
     var q=S.wcQ.trim().toLowerCase();
     var rows=INST.filter(function(i){return (S.wcSrc==='all'||i.s===S.wcSrc)&&i.n.toLowerCase().indexOf(q)>-1});
     rows.sort(function(a,b){return (b.fav?1:0)-(a.fav?1:0)});
-    /* [ReLaunch] valeurs lues dans des fichiers d'instances : toujours échappées ; suppression = lot E8 */
+    /* [ReLaunch] valeurs lues dans des fichiers d'instances : toujours échappées ; suppression (lot E8) = corbeille */
     $('wcRows').innerHTML=rows.map(function(i){
-      return '<tr data-a="inst-'+esc(i.id)+'"><td><button class="star" data-act="fav" data-id="'+esc(i.id)+'" aria-pressed="'+i.fav+'" aria-label="Favori">★</button></td><td><b>'+esc(i.n)+'</b></td><td class="num">'+esc(i.v||'?')+'</td><td>'+esc(i.l+' '+i.lv)+'</td><td class="num">'+esc(i.m||'—')+'</td><td class="num">'+(i.r?esc(i.r)+' Go':'—')+'</td><td><span class="src" style="--sc:'+(SC[i.s]||'var(--acc)')+'">'+esc(i.s)+'</span></td><td><span class="row" style="justify-content:flex-end">'+pinBtn(i.id)+'<button class="btn sm pri" data-play="'+esc(i.id)+'">Jouer</button></span></td></tr>';
+      return '<tr data-a="inst-'+esc(i.id)+'"><td><button class="star" data-act="fav" data-id="'+esc(i.id)+'" aria-pressed="'+i.fav+'" aria-label="Favori">★</button></td><td><b>'+esc(i.n)+'</b></td><td class="num">'+esc(i.v||'?')+'</td><td>'+esc(i.l+' '+i.lv)+'</td><td class="num">'+esc(i.m||'—')+'</td><td class="num">'+(i.r?esc(i.r)+' Go':'—')+'</td><td><span class="src" style="--sc:'+(SC[i.s]||'var(--acc)')+'">'+esc(i.s)+'</span></td><td><span class="row" style="justify-content:flex-end">'+pinBtn(i.id)+'<button class="ib" data-act="del" data-id="'+esc(i.id)+'" aria-label="Supprimer '+esc(i.n)+'" title="Supprimer (corbeille)">🗑</button><button class="btn sm pri" data-play="'+esc(i.id)+'">Jouer</button></span></td></tr>';
     }).join('')||'<tr><td colspan="8" class="faint">'+(INST.length?'Aucune instance ne correspond.':'Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).')+'</td></tr>';
     if(HIDDEN)$('wcRows').insertAdjacentHTML('beforeend','<tr><td colspan="8" class="faint">'+HIDDEN+' instance'+(HIDDEN>1?'s masquées':' masquée')+' (réglage de WeCraft).</td></tr>');
   }
@@ -910,8 +910,11 @@
       case 'closeShot': $('shotOv').hidden=true; refresh(); break;
       case 'fav': x=byId(a.dataset.id); if(!x)break; x.fav=!x.fav; RENDER[S.view](); refresh();
         if(x.k==='wc')document.dispatchEvent(new CustomEvent('relaunch:set-fav',{detail:{id:x.id,fav:x.fav}})); break;
-      case 'del': S.delId=a.dataset.id; $('delName').textContent=byId(S.delId).n; $('delBox').hidden=false; refresh(); break;
-      case 'delNo': $('delBox').hidden=true; refresh(); break;
+      case 'del': x=byId(a.dataset.id); if(!x)break; S.delId=x.id; $('delName').textContent=x.n;
+        $('delSrc').textContent=x.s!=='WeCraft'?' Cette instance vient de '+x.s+' : elle disparaîtra aussi de '+x.s+'.':'';
+        $('delBox').hidden=false; var no=$('delBox').querySelector('[data-act="delNo"]'); if(no&&!dev)no.focus(); refresh(); break;
+      case 'delNo': S.delId=null; $('delBox').hidden=true; refresh(); break;
+      case 'delYes': if(!S.delId)break; document.dispatchEvent(new CustomEvent('relaunch:delete',{detail:{id:S.delId,name:$('delName').textContent}})); S.delId=null; $('delBox').hidden=true; refresh(); break;
       case 'navOn': NAV.items[i].on=!NAV.items[i].on; saveNav(); break;
       case 'navUp': moveNav(i,i-1); break;
       case 'navDown': moveNav(i,i+1); break;

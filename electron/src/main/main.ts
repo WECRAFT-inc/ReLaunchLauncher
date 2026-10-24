@@ -6,7 +6,7 @@ import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AppInfo, InstanceList, InvalidFileNotice, LaunchStartResult, LaunchStatus, SettingResult } from "../shared/api";
+import type { AppInfo, DeleteResult, InstanceList, InvalidFileNotice, LaunchStartResult, LaunchStatus, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
 import { Settings } from "./config";
 import { loadXmcl } from "./install/xmcl";
@@ -221,6 +221,14 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     if (!instances) return { ok: false, reason: "write-failed" };
     return instances.setFavorite(id, fav); // identifiant opaque + booléen vérifiés dans le service
+  });
+
+  ipcMain.handle(CHANNELS.removeInstance, async (event, id: unknown, confirmed: unknown): Promise<DeleteResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (!instances || confirmed !== true) return { ok: false, reason: "invalid" };
+    if (launcher?.busy()) return { ok: false, reason: "busy" };
+    // corbeille de Windows uniquement : jamais d'effacement définitif
+    return instances.remove(id, (folder) => shell.trashItem(folder));
   });
 
   ipcMain.handle(CHANNELS.launchStart, async (event, id: unknown, opts: unknown): Promise<LaunchStartResult> => {

@@ -6,6 +6,7 @@ export const CHANNELS = {
   setTheme: "settings:set-theme",
   listInstances: "instances:list",
   setFavorite: "instances:set-favorite",
+  removeInstance: "instances:remove",
   launchStart: "launch:start",
   launchStatus: "launch:status",
   launchAnswer: "launch:answer",
