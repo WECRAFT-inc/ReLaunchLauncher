@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { runInNewContext } from "node:vm";
 import { tempDir } from "./helpers";
 
 const ROOT = path.join(__dirname, "..", "..");
 
 async function bundler(): Promise<{ bundle: (entry: string, o?: { root?: string }) => string }> {
-  return (await import(path.join(ROOT, "scripts", "bundle-ui.mjs"))) as { bundle: (entry: string, o?: { root?: string }) => string };
+  return (await import(pathToFileURL(path.join(ROOT, "scripts", "bundle-ui.mjs")).href)) as { bundle: (entry: string, o?: { root?: string }) => string };
 }
 
 test("assemblage : modules CommonJS reliés, NODE_ENV fixé, versions de développement exclues", async () => {
