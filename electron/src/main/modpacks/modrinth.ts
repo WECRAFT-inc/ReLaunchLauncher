@@ -35,7 +35,7 @@ export type Fetch = (path: string, params?: Params) => Promise<unknown>;
 /** modrinth_get : requête GET sur l'API Modrinth (gratuite, sans clé ; User-Agent demandé par Modrinth). */
 export function modrinthFetcher(userAgent: string, opts: NetOptions = {}): Fetch {
   return (p, params) => {
-    const q = params ? `?${new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString()}` : "";
+    const q = params ? `?${new URLSearchParams(Object.entries(params).map(([k, v]): [string, string] => [k, String(v)])).toString()}` : "";
     return fetchJson(MODRINTH_API + p + q, 8 * 1024 * 1024, {}, { ...opts, allowedHosts: MODRINTH_HOSTS, headers: { "User-Agent": userAgent } });
   };
 }
