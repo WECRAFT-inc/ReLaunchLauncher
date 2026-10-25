@@ -21,6 +21,8 @@ export const CHANNELS = {
   updateInstall: "update:install",
   updateStatus: "update:status",
   updatePage: "update:page",
+  updateGetBeta: "update:get-beta",
+  updateSetBeta: "update:set-beta",
   openLink: "link:open",
   setTheme: "settings:set-theme",
   listInstances: "instances:list",

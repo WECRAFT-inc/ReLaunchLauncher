@@ -231,8 +231,9 @@ async function start(): Promise<void> {
   } else {
     void cleanupLeftovers(updateEnv);
   }
-  updater = new UpdateService({ env: updateEnv, quit: () => app.quit() });
   settings = new Settings(store, configFile(env));
+  const st = settings;
+  updater = new UpdateService({ env: updateEnv, quit: () => app.quit(), beta: () => st.beta() });
   instances = new InstanceService(store, env);
   media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
   const ua = `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`;
@@ -471,6 +472,17 @@ function registerIpc(): void {
   ipcMain.handle(CHANNELS.updateStatus, async (event): Promise<UpdateStatus> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     return updater?.status() ?? { phase: "idle", done: 0, total: 0, message: "" };
+  });
+
+  ipcMain.handle(CHANNELS.updateGetBeta, async (event): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return settings ? settings.beta() : false;
+  });
+
+  ipcMain.handle(CHANNELS.updateSetBeta, async (event, on: unknown): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (typeof on !== "boolean" || !settings) return false;
+    return settings.setBeta(on);
   });
 
   ipcMain.handle(CHANNELS.updatePage, async (event): Promise<boolean> => {

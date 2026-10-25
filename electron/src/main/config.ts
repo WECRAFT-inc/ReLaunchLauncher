@@ -64,6 +64,20 @@ export class Settings {
     }
   }
 
+  /** « Participer à la bêta » (clé « relaunch_beta ») : désactivé par défaut, les installations suivent le canal stable. */
+  async beta(): Promise<boolean> {
+    return (await this.store.read(this.file))?.["relaunch_beta"] === true;
+  }
+
+  async setBeta(on: boolean): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_beta: on === true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Shaders préférés (clé « relaunch_shaders », propre à ReLaunch ; ignorée par la version Python). */
   async shaders(): Promise<ShaderPrefs> {
     const v = (await this.store.read(this.file))?.["relaunch_shaders"];

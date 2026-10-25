@@ -519,6 +519,9 @@ export interface WeCraftApi {
     status(): Promise<UpdateStatus>;
     /** Ouvre la page de la release sur GitHub (installation à la main). */
     openPage(): Promise<boolean>;
+    /** « Participer à la bêta » : reçoit aussi les préversions. */
+    beta(): Promise<boolean>;
+    setBeta(on: boolean): Promise<boolean>;
   };
   links: {
     open(id: ExternalLinkId): Promise<boolean>;

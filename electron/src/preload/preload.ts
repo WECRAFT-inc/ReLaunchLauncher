@@ -14,6 +14,8 @@ const UPDATE_CHECK = "update:check";
 const UPDATE_INSTALL = "update:install";
 const UPDATE_STATUS = "update:status";
 const UPDATE_PAGE = "update:page";
+const UPDATE_GET_BETA = "update:get-beta";
+const UPDATE_SET_BETA = "update:set-beta";
 const OPEN_LINK = "link:open";
 const SET_THEME = "settings:set-theme";
 const LIST_INSTANCES = "instances:list";
@@ -175,6 +177,8 @@ const api: WeCraftApi = Object.freeze({
     install: () => ipcRenderer.invoke(UPDATE_INSTALL),
     status: () => ipcRenderer.invoke(UPDATE_STATUS),
     openPage: () => ipcRenderer.invoke(UPDATE_PAGE),
+    beta: () => ipcRenderer.invoke(UPDATE_GET_BETA),
+    setBeta: (on: boolean) => ipcRenderer.invoke(UPDATE_SET_BETA, on === true),
   }),
   links: Object.freeze({
     open: (id: ExternalLinkId) => ipcRenderer.invoke(OPEN_LINK, id),

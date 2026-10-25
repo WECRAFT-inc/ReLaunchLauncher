@@ -558,6 +558,7 @@ export function Settings() {
             {t("Rechercher une mise à jour")}
           </button>
         </div>
+        <BetaRow />
         <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le détail des vérifications est dans Réglages > Logs (origine « Mises à jour »).")}</p>
       </div>
     );
@@ -850,6 +851,36 @@ export function Settings() {
         <span className="ver">{`ReLaunch ${appVer}`}</span>
       </div>
       <div className="setbody">{body}</div>
+    </div>
+  );
+}
+
+/** « Participer à la bêta » : enregistré par le processus principal (launcher_config.json). */
+function BetaRow() {
+  const { toast } = useApp();
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    void window.wecraft.update.beta().then(setOn, () => setOn(false));
+  }, []);
+  const flip = () => {
+    if (on === null) return;
+    const next = !on;
+    void window.wecraft.update.setBeta(next).then(
+      (ok) => {
+        if (!ok) return toast(t("Réglage non enregistré."));
+        setOn(next);
+        toast(next ? t("Bêta activée : les préversions te seront proposées.") : t("Bêta désactivée : seules les versions stables te seront proposées."));
+      },
+      () => toast(t("Réglage non enregistré.")),
+    );
+  };
+  return (
+    <div className="setrow">
+      <span>
+        <b>{t("Participer à la bêta")}</b>
+        <small>{t("Reçois les nouvelles versions avant tout le monde. Elles sont signées comme les autres, mais peuvent contenir des bugs.")}</small>
+      </span>
+      <button className="toggle" role="switch" aria-checked={tf(on === true)} disabled={on === null} onClick={flip} aria-label={t("Participer à la bêta")}></button>
     </div>
   );
 }
