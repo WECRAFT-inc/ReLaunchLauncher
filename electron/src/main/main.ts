@@ -291,7 +291,19 @@ function registerIpc(): void {
       if (!trustedSender(event)) throw new Error("Expéditeur refusé");
       return fn(...args);
     });
-  registerProjectIpc(handle, { modpacks: () => modpacks, media: () => media, links: new LinkStore(), openExternal: (url) => shell.openExternal(url) });
+  registerProjectIpc(handle, {
+    modpacks: () => modpacks,
+    instances: () => ({ target: (id) => instances?.target(id) ?? null }),
+    media: () => media,
+    links: new LinkStore(),
+    openExternal: (url) => shell.openExternal(url),
+    launching: () => launcher?.busy() ?? false,
+    pickMrpack: async () => {
+      const opts = { title: "Importer un modpack Modrinth (.mrpack)", properties: ["openFile" as const], filters: [{ name: "Modpack Modrinth", extensions: ["mrpack"] }] };
+      const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
+      return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    },
+  });
   registerLookIpc(handle, {
     instances: () => instances,
     media: () => media,

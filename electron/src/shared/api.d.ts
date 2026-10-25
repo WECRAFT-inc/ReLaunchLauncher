@@ -349,6 +349,10 @@ export interface WeCraftApi {
     status(job: string): Promise<ModpackJob | null>;
     /** Page Modrinth d'un mod (adresse construite par le processus principal). */
     openPage(slug: string): Promise<boolean>;
+    /** Fenêtre « Ouvrir » du système : fichier .mrpack installé dans une nouvelle instance (suivi par status). */
+    importFile(): Promise<ModpackStartResult | { ok: false; reason: "canceled" }>;
+    /** Version d'un modpack Modrinth installée dans une nouvelle instance. */
+    installVersion(versionId: string, name?: string): Promise<ModpackStartResult>;
   };
   projects: {
     search(q: ProjectQuery): Promise<ProjectSearch>;
@@ -356,6 +360,10 @@ export interface WeCraftApi {
     versions(id: string, mc?: string, loader?: string): Promise<ProjectVersion[] | { error: string }>;
     /** Ouvre un lien (jeton reçu dans une page de projet) dans le navigateur. */
     openLink(token: string): Promise<boolean>;
+    /** Fichiers déjà présents dans resourcepacks / shaderpacks de l'instance (noms seuls). */
+    installed(instanceId: string, type: "resourcepack" | "shader"): Promise<string[]>;
+    /** Télécharge (SHA-512 vérifié) la version d'un pack de ressources ou d'un shader dans l'instance. */
+    installFile(instanceId: string, versionId: string): Promise<{ ok: true; file: string; dir: string } | { ok: false; message: string }>;
   };
   discord: {
     /** askNow : demander l'accord (premier démarrage de cette version). */

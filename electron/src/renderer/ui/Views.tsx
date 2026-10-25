@@ -2,10 +2,15 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
+import { InstIcon } from "./symbols";
 import { ago, detail, isPinned, SC, type Inst } from "./model";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
-const cover = (x: Inst): Css => ({ "--c1": x.c[0], "--c2": x.c[1] });
+/** Couverture : fond choisi pour l'instance (si les images de fond sont activées), sinon dégradé. */
+const coverOf = (x: Inst, imgs: boolean): Css => {
+  const c = x.icon?.kind === "gen" ? x.icon.c : x.c;
+  return imgs && x.bg ? { "--c1": c[0], "--c2": c[1], backgroundImage: `url("${x.bg}")`, backgroundSize: "cover", backgroundPosition: "center" } : { "--c1": c[0], "--c2": c[1] };
+};
 
 export function PinBtn({ id }: { id: string }) {
   const { nav } = useApp();
@@ -45,8 +50,9 @@ export const SOON: Record<string, { title: string; sub: string; text: string }> 
 };
 
 export function Home() {
-  const { inst, ui, byId, setUi } = useApp();
+  const { inst, ui, byId, setUi, pref } = useApp();
   const sel = byId(ui.sel) ?? inst[0];
+  const bgStyle: CSSProperties | undefined = sel?.bg && pref.imgs !== false ? { backgroundImage: `linear-gradient(90deg, rgba(8,9,14,.82), rgba(8,9,14,.35)), url("${sel.bg}")` } : undefined;
   if (!sel) {
     return (
       <div className="home nocar">
@@ -70,7 +76,7 @@ export function Home() {
     );
   }
   return (
-    <div className="home nocar">
+    <div className={`home nocar${bgStyle ? " has-bg" : ""}`} style={bgStyle}>
       <div className="hmain">
         <span className="hmeta">
           <button className="newsbtn" data-go="news" data-a="home-news">
@@ -107,7 +113,7 @@ export function Home() {
 const SRC_CHIPS = ["all", "WeCraft", "CurseForge", "Prism", "Modrinth"];
 
 export function Wecraft() {
-  const { inst, hidden, ui, setUi, byId } = useApp();
+  const { inst, hidden, ui, setUi, byId, pref } = useApp();
   const recent = inst
     .filter((x) => x.last)
     .sort((a, b) => b.last! - a.last!)
@@ -151,7 +157,9 @@ export function Wecraft() {
           )}
           {recent.map((x) => (
             <div key={x.id} className="wcard" data-a={`wrec-${x.id}`}>
-              <div className="cover" style={cover(x)}></div>
+              <div className="cover" style={coverOf(x, pref.imgs !== false)}>
+                <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={44} className="on-cover" />
+              </div>
               <b>{x.n}</b>
               <small>{`${x.l} · ${x.v} · ${ago(x.last)}`}</small>
               <span className="row">
@@ -200,7 +208,10 @@ export function Wecraft() {
                     </button>
                   </td>
                   <td>
-                    <b>{i.n}</b>
+                    <span className="row inst-name">
+                      <InstIcon icon={i.icon} fallback={i.c} name={i.n} size={30} />
+                      <b>{i.n}</b>
+                    </span>
                   </td>
                   <td className="num">{i.v || "?"}</td>
                   <td>{`${i.l} ${i.lv}`}</td>
@@ -214,6 +225,9 @@ export function Wecraft() {
                   <td>
                     <span className="row" style={{ justifyContent: "flex-end" }}>
                       <PinBtn id={i.id} />
+                      <button className="ib" data-act="instEdit" data-id={i.id} aria-label={`Réglages de ${i.n}`} title="Réglages (nom, version, loader, RAM, icône, fond)">
+                        ⚙
+                      </button>
                       {i.mp ? (
                         <button className="ib" data-act="mpEdit" data-id={i.id} aria-label={`Modifier les mods de ${i.n}`} title="Modifier les mods (Découvrir)">
                           ✎
@@ -266,7 +280,7 @@ export function Wecraft() {
 }
 
 export function Favorites() {
-  const { inst } = useApp();
+  const { inst, pref } = useApp();
   const f = inst.filter((x) => x.fav);
   return (
     <>
@@ -280,7 +294,9 @@ export function Favorites() {
         <div className="favgrid">
           {f.map((x) => (
             <div key={x.id} className="favc" data-a={`favc-${x.id}`}>
-              <div className="cover" style={cover(x)}></div>
+              <div className="cover" style={coverOf(x, pref.imgs !== false)}>
+                <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={44} className="on-cover" />
+              </div>
               <span className="row">
                 <b>{x.n}</b>
                 <button className="star" data-act="fav" data-id={x.id} aria-pressed="true" aria-label="Retirer des favoris">

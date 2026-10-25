@@ -107,6 +107,10 @@ export interface Pref {
   bg: string;
   style?: string;
   reclick?: string;
+  /** Images de fond des instances (et, plus tard, des événements) affichées ; false = fond du thème. */
+  imgs?: boolean;
+  /** Animations et transitions ; false = réduites (respecte aussi le réglage d'accessibilité du système). */
+  anim?: boolean;
   [k: string]: unknown;
 }
 export function loadPref(): Pref {
@@ -383,3 +387,16 @@ export const SKINS: Skin[] = [
 export const VIEWS = ["news", "home", "wecraft", "relaunch", "welive", "live", "relink", "settings", "favorites", "discover"] as const;
 export type View = (typeof VIEWS)[number];
 export const THEMES = ["phenix", "relink", "aurore", "glace"] as const;
+
+/** Catégories Modrinth traduites (affichage et filtre). */
+export const CATEGORY_FR: Record<string, string> = {
+  optimization: "Optimisation", decoration: "Décoration", library: "Bibliothèque", utility: "Utilitaire", technology: "Technologie",
+  adventure: "Aventure", magic: "Magie", storage: "Stockage", equipment: "Équipement", food: "Nourriture", "game-mechanics": "Mécaniques",
+  mobs: "Créatures", worldgen: "Génération", transportation: "Transport", social: "Social", economy: "Économie", cursed: "Maudit",
+  management: "Gestion", minigame: "Mini-jeu", challenging: "Difficile", combat: "Combat", "kitchen-sink": "Tout-en-un", lightweight: "Léger",
+  multiplayer: "Multijoueur", quests: "Quêtes", realistic: "Réaliste", simplistic: "Simple", "vanilla-like": "Comme l'original", themed: "Thématique",
+  cartoon: "Cartoon", fantasy: "Fantastique", "semi-realistic": "Semi-réaliste", atmosphere: "Atmosphère", bloom: "Bloom", shadows: "Ombres",
+  reflections: "Reflets", "path-tracing": "Path tracing", "colored-lighting": "Éclairage coloré", potato: "PC modeste", low: "Léger", medium: "Moyen",
+  high: "Exigeant", screenshot: "Captures", "audio": "Audio", blocks: "Blocs", "core-shaders": "Core shaders", entities: "Entités", environment: "Environnement",
+  fonts: "Polices", gui: "Interface", items: "Objets", locale: "Langue", models: "Modèles", "16x": "16x", "32x": "32x", "64x": "64x", "128x": "128x", "256x": "256x", "512x+": "512x+",
+};

@@ -38,6 +38,7 @@ import { moveNav, playFlip, Settings, snapPos } from "./Settings";
 import { Discover, emptyDraft } from "./Discover";
 import { CreateModal } from "./Create";
 import { ImportModal } from "./Import";
+import { InstanceEditor } from "./InstanceEditor";
 import { Favorites, Home, Soon, SOON, Wecraft } from "./Views";
 import type { MpDraft } from "./ctx";
 
@@ -121,6 +122,7 @@ export function App() {
   const [discordOn, setDiscordOn] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [editInst, setEditInst] = useState<string | null>(null);
   const [discordAsk, setDiscordAsk] = useState(false);
   const hist = useRef<string[]>([]);
   const back = useRef(false);
@@ -569,6 +571,12 @@ export function App() {
       case "create":
         setCreateOpen(true);
         break;
+      case "import":
+        setImportOpen(true);
+        break;
+      case "instEdit":
+        setEditInst(a.dataset["id"]!);
+        break;
       case "mpEdit":
         editModpack(a.dataset["id"]!);
         break;
@@ -858,6 +866,7 @@ export function App() {
         }}
       />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <InstanceEditor x={editInst ? (byId(editInst) ?? null) : null} onClose={() => setEditInst(null)} />
       <DiscordAsk
         open={discordAsk && !upd}
         onAnswer={(on) => {

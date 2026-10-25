@@ -184,3 +184,40 @@ export async function getVersions(fetch: Fetch, id: unknown, mc: unknown, loader
     return { error: explainModrinthError(e) };
   }
 }
+
+// ---------------------------------------------------------------- packs de ressources et shaders
+export const CONTENT_DIRS: Record<"resourcepack" | "shader", string> = { resourcepack: "resourcepacks", shader: "shaderpacks" };
+const CONTENT_FILE = /^[^<>:"/\\|?*\x00-\x1f]{1,200}\.zip$/i;
+const WIN_RESERVED_NAME = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
+/** Nom de fichier de pack sûr (.zip, sans dossier ni nom réservé). */
+export function safeContentFile(n: unknown): n is string {
+  return typeof n === "string" && CONTENT_FILE.test(n) && !/[. ]$/.test(n) && !WIN_RESERVED_NAME.test(n);
+}
+
+export interface ContentPlan {
+  type: "resourcepack" | "shader";
+  dir: string;
+  file: string;
+  url: string;
+  sha512: string;
+  size: number;
+  title: string;
+}
+
+/** Version d'un pack de ressources ou d'un shader -> fichier à installer, vérifié. */
+export async function planContent(fetch: Fetch, versionId: unknown): Promise<ContentPlan> {
+  if (typeof versionId !== "string" || !PID.test(versionId)) throw new Error("Version invalide.");
+  const v = obj(await fetch(`/version/${versionId}`));
+  const pid = v["project_id"];
+  if (typeof pid !== "string" || !PID.test(pid)) throw new Error("Réponse de Modrinth illisible.");
+  const p = obj(await fetch(`/project/${pid}`));
+  const type = p["project_type"];
+  if (type !== "resourcepack" && type !== "shader") throw new Error("Seuls les packs de ressources et les shaders s'installent ainsi.");
+  const files = arr(v["files"]).map(obj);
+  const f = files.find((x) => x["primary"] === true) ?? files[0];
+  const hashes = obj(f?.["hashes"]);
+  const sha512 = typeof hashes["sha512"] === "string" && /^[0-9a-f]{128}$/i.test(hashes["sha512"]) ? hashes["sha512"].toLowerCase() : null;
+  if (!f || !safeContentFile(f["filename"]) || typeof f["url"] !== "string" || !sha512) throw new Error("Cette version n'a pas de fichier .zip vérifiable : installation impossible.");
+  return { type, dir: CONTENT_DIRS[type], file: f["filename"], url: f["url"], sha512, size: num(f["size"]), title: str(p["title"], 200) };
+}

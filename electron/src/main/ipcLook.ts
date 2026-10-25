@@ -2,7 +2,8 @@
 // Chaque gestionnaire est enregistré par `handle`, qui vérifie l'expéditeur (fenêtre principale, app://wecraft)
 // AVANT d'appeler la fonction. Toutes les valeurs reçues sont vérifiées ici : l'interface ne fournit jamais
 // de chemin, seulement des identifiants opaques et des valeurs contrôlées.
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat } from "node:fs/promises";
+import path from "node:path";
 import type { CreateInstanceResult, IconChoice, InstanceEdit, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
 import { cleanCreate, createCustomInstance } from "./instances/create";
@@ -10,7 +11,7 @@ import { parseIconMeta, type IconMeta } from "./instances/detect";
 import { InstanceService } from "./instances/service";
 import type { LinkStore } from "./links";
 import { MAX_IMPORT, MediaError, MediaStore, type Crop } from "./media/media";
-import { cleanProjectQuery, getProject, getVersions, searchProjects } from "./modpacks/projects";
+import { CONTENT_DIRS, cleanProjectQuery, getProject, getVersions, planContent, safeContentFile, searchProjects } from "./modpacks/projects";
 import type { ModpackService } from "./modpacks/service";
 
 export type Handle = (channel: string, fn: (...args: unknown[]) => Promise<unknown>) => void;
@@ -58,9 +59,14 @@ async function readPicked(file: string): Promise<Buffer> {
 
 export interface ProjectDeps {
   modpacks: () => ModpackService | null;
+  instances: () => { target(id: unknown): { path: string } | null };
   media: () => MediaStore | null;
   links: LinkStore;
   openExternal: (url: string) => Promise<void>;
+  /** Fenêtre « Ouvrir » du système pour un fichier .mrpack ; null si annulée. */
+  pickMrpack: () => Promise<string | null>;
+  /** Un lancement est en cours (installation refusée pendant ce temps). */
+  launching: () => boolean;
 }
 
 export function registerProjectIpc(handle: Handle, d: ProjectDeps): void {
@@ -77,6 +83,51 @@ export function registerProjectIpc(handle: Handle, d: ProjectDeps): void {
   handle(CHANNELS.projVersions, async (id, mc, loader) => {
     const mp = d.modpacks();
     return mp ? getVersions(mp.api, id, mc, loader) : { error: "Indisponible." };
+  });
+  handle(CHANNELS.mpImportFile, async () => {
+    const mp = d.modpacks();
+    if (!mp) return { ok: false, reason: "invalid" };
+    if (d.launching() || mp.busy()) return { ok: false, reason: "busy" };
+    const file = await d.pickMrpack();
+    if (!file) return { ok: false, reason: "canceled" };
+    return mp.importFile(file);
+  });
+  handle(CHANNELS.mpInstallVersion, async (versionId, name) => {
+    const mp = d.modpacks();
+    if (!mp) return { ok: false, reason: "invalid" };
+    if (d.launching()) return { ok: false, reason: "busy" };
+    return mp.installVersion(versionId, name);
+  });
+  handle(CHANNELS.projInstalled, async (instanceId, type) => {
+    const inst = d.instances().target(instanceId);
+    if (!inst || (type !== "resourcepack" && type !== "shader")) return [];
+    try {
+      return (await readdir(path.join(inst.path, CONTENT_DIRS[type]))).filter((n) => safeContentFile(n)).slice(0, 2000);
+    } catch {
+      return [];
+    }
+  });
+  handle(CHANNELS.projInstallFile, async (instanceId, versionId) => {
+    const mp = d.modpacks();
+    const inst = d.instances().target(instanceId);
+    if (!mp || !inst) return { ok: false, message: "Instance introuvable." };
+    if (d.launching() || mp.busy()) return { ok: false, message: "Une opération est en cours : réessayez dans un instant." };
+    try {
+      const plan = await planContent(mp.api, versionId);
+      const dir = path.join(inst.path, plan.dir);
+      const dest = path.join(dir, plan.file);
+      try {
+        await stat(dest);
+        return { ok: false, message: `« ${plan.file} » est déjà dans ${plan.dir} : rien n'a été remplacé.` };
+      } catch {
+        // fichier absent : on installe
+      }
+      await mkdir(dir, { recursive: true });
+      await mp.downloader(plan.url, dest, plan.sha512, null); // cdn.modrinth.com seulement, SHA-512 vérifié
+      return { ok: true, file: plan.file, dir: plan.dir };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) };
+    }
   });
   handle(CHANNELS.projOpenLink, async (token) => {
     const url = d.links.url(token); // seulement une adresse HTTPS vue dans une réponse de Modrinth

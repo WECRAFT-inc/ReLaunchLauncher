@@ -2,13 +2,14 @@
 // L'interface n'envoie que des valeurs vérifiées ici (texte, version, loader, identifiants de projets) ;
 // les dossiers sont calculés dans le processus principal, jamais fournis par l'interface.
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type { ModpackEditInfo, ModpackHit, ModpackJob, ModpackSearch, ModpackStartResult, PackRowView } from "../../shared/api";
 import { fetchVersionList } from "../install/vanilla";
 import type { InstanceService } from "../instances/service";
 import type { MediaStore } from "../media/media";
 import type { NetOptions } from "../net/download";
+import { installMrpack } from "./mrpack";
 import {
   applyModpackEdit,
   buildModpack,
@@ -124,6 +125,50 @@ export class ModpackService {
 
   status(id: unknown): ModpackJob | null {
     return this.job && this.job.id === id ? { ...this.job, warnings: [...this.job.warnings] } : null;
+  }
+
+  private async installArchive(archive: string, name: string | null, progress: (d: number, t: number, m: string) => void): Promise<{ summary: string; warnings: string[] }> {
+    const r = await installMrpack(archive, this.d.instancesDir, name, progress, { ...(this.d.net ?? {}), userAgent: this.d.userAgent });
+    await this.d.instances.list(true);
+    const n = r.plan.files.length;
+    return {
+      summary: `Instance « ${path.basename(r.folder)} » créée : Minecraft ${r.plan.mc}${r.plan.loader ? ` · ${r.plan.loader} ${r.plan.loaderVersion ?? ""}`.trimEnd() : ""}, ${n} fichier${n > 1 ? "s" : ""} téléchargé${n > 1 ? "s" : ""} et vérifié${n > 1 ? "s" : ""}. Le jeu et le loader seront installés au premier lancement.`,
+      warnings: r.warnings,
+    };
+  }
+
+  /** Importe un fichier .mrpack choisi par l'utilisateur (fenêtre du système) dans une nouvelle instance. */
+  importFile(file: string): ModpackStartResult {
+    if (this.busy()) return { ok: false, reason: "busy" };
+    return this.run((progress) => this.installArchive(file, null, progress));
+  }
+
+  /** Installe une version de modpack Modrinth (Découvrir > Modpacks > Installer) dans une nouvelle instance. */
+  installVersion(versionId: unknown, name: unknown): ModpackStartResult {
+    if (this.busy()) return { ok: false, reason: "busy" };
+    if (!isPid(versionId)) return { ok: false, reason: "invalid" };
+    const wanted = typeof name === "string" && name.trim() ? name.trim().slice(0, 60) : null;
+    return this.run(async (progress) => {
+      progress(0, 0, "Recherche du modpack sur Modrinth...");
+      const v = (await this.fetch(`/version/${versionId}`)) as Record<string, unknown>;
+      const files = (Array.isArray(v?.["files"]) ? v["files"] : []) as Record<string, unknown>[];
+      const f = files.find((x) => x?.["primary"] === true) ?? files[0];
+      const hashes = (f?.["hashes"] ?? {}) as Record<string, unknown>;
+      const sha512 = typeof hashes["sha512"] === "string" && /^[0-9a-f]{128}$/i.test(hashes["sha512"]) ? hashes["sha512"].toLowerCase() : null;
+      if (!f || typeof f["url"] !== "string" || typeof f["filename"] !== "string" || !/\.mrpack$/i.test(f["filename"]) || !sha512) {
+        throw new Error("Cette version ne contient pas de fichier .mrpack vérifiable : installation impossible.");
+      }
+      const tmpDir = path.join(path.dirname(this.d.instancesDir), "cache", "mrpack");
+      await mkdir(tmpDir, { recursive: true });
+      const tmp = path.join(tmpDir, `${versionId}.mrpack`);
+      progress(0, 0, "Téléchargement du modpack...");
+      await this.download(f["url"], tmp, sha512, null); // cdn.modrinth.com seulement, SHA-512 vérifié
+      try {
+        return await this.installArchive(tmp, wanted, progress);
+      } finally {
+        await unlink(tmp).catch(() => undefined);
+      }
+    });
   }
 
   /** Une création ou une modification est en cours (lancement et suppression refusés pendant ce temps). */

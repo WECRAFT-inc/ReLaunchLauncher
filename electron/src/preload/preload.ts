@@ -35,10 +35,14 @@ const MP_ROWS = "modpacks:rows";
 const MP_EDIT = "modpacks:edit";
 const MP_STATUS = "modpacks:status";
 const MP_PAGE = "modpacks:page";
+const MP_IMPORT_FILE = "modpacks:import-file";
+const MP_INSTALL_VERSION = "modpacks:install-version";
 const PROJ_SEARCH = "projects:search";
 const PROJ_GET = "projects:get";
 const PROJ_VERSIONS = "projects:versions";
 const PROJ_OPEN_LINK = "projects:open-link";
+const PROJ_INSTALLED = "projects:installed";
+const PROJ_INSTALL_FILE = "projects:install-file";
 const LAUNCH_START = "launch:start";
 const LAUNCH_STATUS = "launch:status";
 const LAUNCH_ANSWER = "launch:answer";
@@ -87,12 +91,16 @@ const api: WeCraftApi = Object.freeze({
     edit: (id: string, selected: unknown) => ipcRenderer.invoke(MP_EDIT, id, selected),
     status: (job: string) => ipcRenderer.invoke(MP_STATUS, job),
     openPage: (slug: string) => ipcRenderer.invoke(MP_PAGE, slug),
+    importFile: () => ipcRenderer.invoke(MP_IMPORT_FILE),
+    installVersion: (versionId: string, name?: string) => ipcRenderer.invoke(MP_INSTALL_VERSION, versionId, name ?? null),
   }),
   projects: Object.freeze({
     search: (q: unknown) => ipcRenderer.invoke(PROJ_SEARCH, q),
     get: (id: string) => ipcRenderer.invoke(PROJ_GET, id),
     versions: (id: string, mc?: string, loader?: string) => ipcRenderer.invoke(PROJ_VERSIONS, id, mc ?? null, loader ?? null),
     openLink: (token: string) => ipcRenderer.invoke(PROJ_OPEN_LINK, token),
+    installed: (instanceId: string, type: string) => ipcRenderer.invoke(PROJ_INSTALLED, instanceId, type),
+    installFile: (instanceId: string, versionId: string) => ipcRenderer.invoke(PROJ_INSTALL_FILE, instanceId, versionId),
   }),
   update: Object.freeze({
     check: (manual: boolean) => ipcRenderer.invoke(UPDATE_CHECK, manual === true),
