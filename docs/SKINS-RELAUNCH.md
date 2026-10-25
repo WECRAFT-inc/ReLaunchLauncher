@@ -106,24 +106,20 @@ Une valeur invalide fait refuser **tout le skin**, avec un message qui dit laque
    node tools/relaunch-skin.mjs sign vague.rlskin
    ```
    Le script écrit `vague.rlskin.sig` (base64) et affiche le SHA-256. La signature porte sur les **octets exacts** du fichier, comme le Worker l'exige pour les releases et les modpacks.
-5. Envoie `vague.rlskin` et `vague.rlskin.sig` depuis le panneau, dans la fiche du skin. Voir la section 4 : la route d'envoi du fichier reste à ajouter au Worker.
+5. Dans le panneau, ouvre **Skins du launcher**, puis « Modifier » sur la fiche. Dans « Fichier du skin », indique la version du fichier, puis envoie `vague.rlskin` et `vague.rlskin.sig`.
 
-## 4. Ce que le Worker doit fournir (à faire côté Worker et panneau)
+## 4. Côté Worker (fait)
 
-Aujourd'hui, `/admin/launcher-skins` gère seulement la **fiche** d'un skin : nom, conditions d'obtention, versions, `followsTheme`. Il n'existe pas encore de fichier. Pour que les skins s'obtiennent sans mise à jour du launcher, il faut :
+- **Envoi du fichier.** La route `POST /admin/launcher-skins/{id}/file` reçoit un multipart :
+  - `metadata` = `{ "version": "1.0.0", "sha256": "<hex>" }` ;
+  - `file` = l'archive `.rlskin`, 40 Mo maximum ;
+  - `signature` = la signature.
 
-1. **Envoi du fichier.** Une route `POST /admin/launcher-skins/{id}/file` en multipart, sur le modèle de `POST /admin/modpacks/{id}/versions` :
-   - `metadata` = `{ "version": "1.0.0", "sha256": "<hex>" }` ;
-   - `file` = l'archive `.rlskin` ;
-   - `signature` = la signature Ed25519 détachée.
-
-   Le Worker y recalcule le SHA-256, vérifie Ed25519 et stocke l'archive dans R2 privé, comme les autres artefacts.
-2. **Fichier dans la réponse publique.** Dans `GET /launcher/bootstrap` → `skins[]`, ajouter :
-   ```json
-   "file": { "id": "<id d'asset>", "sha256": "<hex>", "size": 123456, "version": "1.0.0" }
-   ```
-   Le fichier se télécharge par `GET /launcher/assets/{id}` et sa signature par `?signature=1`. Le launcher lit déjà ce champ, qu'il soit nommé `file` ou `asset`.
-3. **Propriété des skins.** Pour les skins « à débloquer » (event, shop, succès, premium), il faut un endpoint public authentifié qui dise quels skins le joueur possède. Il n'existe pas : il faut des comptes ReLink connectés au launcher. En attendant, ReLaunch n'installe que les skins **sans condition d'obtention** et qui ont un fichier.
+  Le Worker recalcule le SHA-256, vérifie Ed25519, contrôle que c'est un ZIP contenant `skin.json`, puis le stocke : dans GitHub si `RELAUNCH_GITHUB_TOKEN` et `RELAUNCH_GITHUB_REPO` sont configurés, sinon dans R2.
+- **Retrait du fichier.** `DELETE /admin/launcher-skins/{id}/file` retire le fichier publié. Le fichier lui-même se supprime ensuite depuis « Stockage ».
+- **Fichier dans la réponse publique.** `GET /launcher/bootstrap` → `skins[]` contient `"file": { "id", "sha256", "size", "version" }`, ou `null`. Le fichier se télécharge par `GET /launcher/assets/{id}`, et sa signature par `?signature=1` (base64).
+- **Fiche protégée.** Enregistrer la fiche du skin depuis le panel ne peut pas écraser `file`.
+- **Propriété des skins (reste à faire).** Pour les skins « à débloquer », il faut un endpoint authentifié qui dise quels skins le joueur possède, donc des comptes ReLink connectés au launcher. En attendant, ReLaunch n'installe que les skins **sans condition d'obtention** et qui ont un fichier.
 
 Côté launcher, il reste à intégrer la **clé publique** `RELAUNCH_SIGNING_PUBLIC_KEY` dans `electron/src/main/skins/skins.ts` (`RELINK_SIGNING_PUBLIC_KEY`). Tant qu'elle vaut `null`, aucun skin téléchargé n'est installé, et le message le dit.
 
