@@ -10,6 +10,8 @@ import { INSTALLER_NAME } from "./pending";
 import { checkUpdateSignature, UpdateRefused } from "./signature";
 
 export const GITHUB_REPO = "Rexidelamort/WeCraft-Releases";
+/** Nom de l'installeur publié dans chaque release (le seul .exe retenu). */
+export const PUBLISHED_NAME = "ReLaunch.exe";
 export const UPDATE_HOSTS: ReadonlySet<string> = new Set([
   "api.github.com",
   "github.com",
@@ -43,7 +45,7 @@ async function readSmall(url: string, opts: NetOptions): Promise<string> {
 
 /**
  * Dernière release publiée : version, notes, installeur, son empreinte SHA-256 et sa signature.
- * Seul l'installeur « ReLaunch-Setup-<version>.exe » de la version du tag est retenu (jamais un autre .exe,
+ * Seul l'installeur « ReLaunch.exe » est retenu (jamais un autre .exe,
  * par exemple le WeCraft.exe de la version Python) ; un tag qui ne donne pas un nom sûr = pas d'installeur.
  */
 export async function fetchLatestRelease(opts: NetOptions = {}, repo: string = GITHUB_REPO): Promise<ReleaseInfo> {
@@ -63,8 +65,9 @@ async function parseRelease(d: Record<string, unknown>, opts: NetOptions, repo: 
   const assets = (Array.isArray(d["assets"]) ? d["assets"] : []) as Asset[];
   const nameOf = (a: Asset) => (typeof a.name === "string" ? a.name.toLowerCase() : "");
   const tag0 = typeof d["tag_name"] === "string" ? d["tag_name"] : "";
-  const want = `ReLaunch-Setup-${tag0.replace(/^[vV]+/, "")}.exe`;
-  const exe = INSTALLER_NAME.test(want) ? (assets.find((a) => nameOf(a) === want.toLowerCase()) ?? null) : null;
+  // le tag doit donner un nom de fichier sûr : l'installeur est gardé sous « ReLaunch-Setup-<version>.exe »
+  const safeTag = INSTALLER_NAME.test(`ReLaunch-Setup-${tag0.replace(/^[vV]+/, "")}.exe`);
+  const exe = safeTag ? (assets.find((a) => nameOf(a) === PUBLISHED_NAME.toLowerCase()) ?? null) : null;
   let sha: string | null = null;
   let sig: string | null = null;
   if (exe) {

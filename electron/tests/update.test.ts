@@ -72,7 +72,7 @@ test("politique : release non signée ou mal signée refusée (messages de la ve
 const API = "https://api.github.com/repos/Rexidelamort/WeCraft-Releases/releases/latest";
 const DL = "https://github.com/Rexidelamort/WeCraft-Releases/releases/download/v2.0.0/";
 
-test("release : installeur ReLaunch-Setup-<version>.exe seulement, empreinte (digest ou .sha256), signature, notes", async () => {
+test("release : installeur ReLaunch.exe seulement, empreinte (digest ou .sha256), signature, notes", async () => {
   const sha = "b".repeat(64);
   const release = (digest?: string) => ({
     tag_name: "v2.0.0",
@@ -81,17 +81,17 @@ test("release : installeur ReLaunch-Setup-<version>.exe seulement, empreinte (di
     assets: [
       { name: "notes.txt", browser_download_url: `${DL}notes.txt` },
       { name: "WeCraft.exe", browser_download_url: `${DL}WeCraft.exe`, size: 99 },
-      { name: "ReLaunch-Setup-2.0.0.exe", browser_download_url: `${DL}ReLaunch-Setup-2.0.0.exe`, size: 10, ...(digest ? { digest } : {}) },
-      { name: "ReLaunch-Setup-2.0.0.exe.sha256", browser_download_url: `${DL}ReLaunch-Setup-2.0.0.exe.sha256` },
-      { name: "ReLaunch-Setup-2.0.0.exe.sig", browser_download_url: `${DL}ReLaunch-Setup-2.0.0.exe.sig` },
+      { name: "ReLaunch.exe", browser_download_url: `${DL}ReLaunch.exe`, size: 10, ...(digest ? { digest } : {}) },
+      { name: "ReLaunch.exe.sha256", browser_download_url: `${DL}ReLaunch.exe.sha256` },
+      { name: "ReLaunch.exe.sig", browser_download_url: `${DL}ReLaunch.exe.sig` },
     ],
   });
   const routes = {
-    [`${DL}ReLaunch-Setup-2.0.0.exe.sha256`]: { body: `${sha}  ReLaunch-Setup-2.0.0.exe\n` },
-    [`${DL}ReLaunch-Setup-2.0.0.exe.sig`]: { body: " SIG== \n" },
+    [`${DL}ReLaunch.exe.sha256`]: { body: `${sha}  ReLaunch.exe\n` },
+    [`${DL}ReLaunch.exe.sig`]: { body: " SIG== \n" },
   };
   let info = await fetchLatestRelease({ fetch: fakeFetch({ ...routes, [API]: { body: JSON.stringify(release()) } }) });
-  assert.deepEqual(info, { version: "2.0.0", notes: "Nouveautés", page: release().html_url, url: `${DL}ReLaunch-Setup-2.0.0.exe`, size: 10, sha256: sha, signature: "SIG==" });
+  assert.deepEqual(info, { version: "2.0.0", notes: "Nouveautés", page: release().html_url, url: `${DL}ReLaunch.exe`, size: 10, sha256: sha, signature: "SIG==" });
   info = await fetchLatestRelease({ fetch: fakeFetch({ ...routes, [API]: { body: JSON.stringify(release(`sha256:${"C".repeat(64)}`)) } }) });
   assert.equal(info.sha256, "c".repeat(64));
   // jamais un autre .exe (WeCraft.exe de la version Python) ; tag qui ne donne pas un nom sûr = pas d'installeur
@@ -100,7 +100,7 @@ test("release : installeur ReLaunch-Setup-<version>.exe seulement, empreinte (di
   const pyOnly = { ...release(), assets: [{ name: "WeCraft.exe", browser_download_url: `${DL}WeCraft.exe` }] };
   assert.equal((await fetchLatestRelease({ fetch: fakeFetch({ [API]: { body: JSON.stringify(pyOnly) } }) })).url, null);
   // adresse hors GitHub : refusée par la couche réseau
-  const evil = { ...release(), assets: [{ name: "ReLaunch-Setup-2.0.0.exe", browser_download_url: "https://exemple.com/x.exe" }, { name: "ReLaunch-Setup-2.0.0.exe.sig", browser_download_url: "https://exemple.com/x.exe.sig" }] };
+  const evil = { ...release(), assets: [{ name: "ReLaunch.exe", browser_download_url: "https://exemple.com/x.exe" }, { name: "ReLaunch.exe.sig", browser_download_url: "https://exemple.com/x.exe.sig" }] };
   await assert.rejects(fetchLatestRelease({ fetch: fakeFetch({ [API]: { body: JSON.stringify(evil) } }) }), /serveur non autorisé/);
 });
 

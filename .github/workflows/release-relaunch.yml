@@ -80,8 +80,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
-          $name = "ReLaunch-Setup-$env:VERSION.exe"
-          Copy-Item electron/release/ReLaunch-Setup.exe "out/$name"
+          $name = "ReLaunch.exe"
+          Copy-Item electron/release/ReLaunch.exe "out/$name"
           $h = (Get-FileHash "out/$name" -Algorithm SHA256).Hash.ToLower()
           "$h  $name" | Out-File "out/$name.sha256" -Encoding ascii
 
@@ -113,7 +113,7 @@ jobs:
       - name: Empreinte de l'installeur reçu
         shell: bash
         run: |
-          NAME="ReLaunch-Setup-$VERSION.exe"
+          NAME="ReLaunch.exe"
           [ "$(ls "$RUNNER_TEMP/out" | sort | tr '\n' ' ')" = "$NAME $NAME.sha256 " ] || { echo "Fichiers inattendus : $(ls "$RUNNER_TEMP/out")"; exit 1; }
           GOT=$(sha256sum "$RUNNER_TEMP/out/$NAME" | cut -c1-64)
           WANT=$(head -c 64 "$RUNNER_TEMP/out/$NAME.sha256")
@@ -176,7 +176,7 @@ jobs:
       - name: Vérification par la version Python, clés identiques
         shell: pwsh
         run: |
-          $name = "ReLaunch-Setup-$env:VERSION.exe"
+          $name = "ReLaunch.exe"
           $py = python -c "import ast; t=ast.parse(open('wecraft_launcher.py',encoding='utf-8').read()); print(next(ast.literal_eval(n.value) for n in t.body if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='UPDATE_PUBLIC_KEY'))"
           $ts = (Select-String -Path electron/src/main/update/signature.ts -Pattern 'UPDATE_PUBLIC_KEY = "([^"]+)"').Matches[0].Groups[1].Value
           if ($py -ne $ts) { Write-Error "Clés publiques différentes entre Python et ReLaunch"; exit 1 }
@@ -207,7 +207,7 @@ jobs:
       - name: Empreinte et signature revérifiées
         shell: bash
         run: |
-          NAME="ReLaunch-Setup-$VERSION.exe"
+          NAME="ReLaunch.exe"
           OUT="$RUNNER_TEMP/out"
           [ "$(sha256sum "$RUNNER_TEMP/out/$NAME" | cut -c1-64)" = "$(head -c 64 "$RUNNER_TEMP/out/$NAME.sha256")" ] || { echo "Empreinte différente"; exit 1; }
           PUB=$(sed -n 's/^export const UPDATE_PUBLIC_KEY = "\([^"]*\)";.*/\1/p' electron/src/main/update/signature.ts)
@@ -222,7 +222,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
-          NAME="ReLaunch-Setup-$VERSION.exe"
+          NAME="ReLaunch.exe"
           RTAG="v$VERSION"
           PUB=Rexidelamort/WeCraft-Releases
           FILES="out/$NAME out/$NAME.sha256 out/$NAME.sig"

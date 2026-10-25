@@ -45,9 +45,9 @@ jobs:
       - name: Empreinte SHA-256
         shell: pwsh
         run: |
-          $h = (Get-FileHash release/ReLaunch-Setup.exe -Algorithm SHA256).Hash.ToLower()
-          "$h  ReLaunch-Setup.exe" | Out-File release/ReLaunch-Setup.exe.sha256 -Encoding ascii
-          Get-Item release/ReLaunch-Setup.exe | Select-Object Name, Length | Format-Table
+          $h = (Get-FileHash release/ReLaunch.exe -Algorithm SHA256).Hash.ToLower()
+          "$h  ReLaunch.exe" | Out-File release/ReLaunch.exe.sha256 -Encoding ascii
+          Get-Item release/ReLaunch.exe | Select-Object Name, Length | Format-Table
 
       # Scénario complet sur la machine de la CI (jetable) : installation, raccourcis, démarrage,
       # relance de l'installeur comme le ferait un ancien raccourci, désinstallation.
@@ -59,7 +59,7 @@ jobs:
           function Fail($msg) { Write-Error $msg; exit 1 }
           function Stop-ReLaunch { Get-Process -Name ReLaunch -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 2 }
 
-          $setup = (Resolve-Path release/ReLaunch-Setup.exe).Path
+          $setup = (Resolve-Path release/ReLaunch.exe).Path
           $cfgDir = Join-Path $env:APPDATA ".wecraft"
           New-Item -ItemType Directory -Force $cfgDir | Out-Null
           $cfg = Join-Path $cfgDir "launcher_config.json"
@@ -146,8 +146,8 @@ jobs:
           name: relaunch-installeur
           retention-days: 14
           path: |
-            electron/release/ReLaunch-Setup.exe
-            electron/release/ReLaunch-Setup.exe.sha256
+            electron/release/ReLaunch.exe
+            electron/release/ReLaunch.exe.sha256
 
   # Lot E3 : installation RÉELLE depuis les serveurs officiels (Mojang, Fabric, Quilt, Forge, NeoForge),
   # avec le Java de Mojang, dans un dossier jetable de la machine de CI. Aucune publication, aucun secret.

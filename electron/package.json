@@ -68,7 +68,7 @@
       "shortcutName": "ReLaunch",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "ReLaunch-Setup.exe",
+      "artifactName": "ReLaunch.exe",
       "include": "build/installer.nsh"
     }
   },
