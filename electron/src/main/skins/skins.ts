@@ -25,7 +25,7 @@ export const MAX_FILES = 300;
  * Clé publique Ed25519 (32 octets, base64) correspondant à RELAUNCH_SIGNING_PUBLIC_KEY du Worker.
  * null tant qu'elle n'est pas fournie : aucun skin téléchargé ne peut alors être installé.
  */
-export const RELINK_SIGNING_PUBLIC_KEY: string | null = null;
+export const RELINK_SIGNING_PUBLIC_KEY: string | null = "MgGSWwwFZQsyGY0oVhUUcuKOOnlAjvg6HMZ7r/FUB7c=";
 
 const EXT_TYPES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".otf": "font/otf" };
 

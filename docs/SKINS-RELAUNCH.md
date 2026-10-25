@@ -121,7 +121,7 @@ Une valeur invalide fait refuser **tout le skin**, avec un message qui dit laque
 - **Fiche protégée.** Enregistrer la fiche du skin depuis le panel ne peut pas écraser `file`.
 - **Propriété des skins (reste à faire).** Pour les skins « à débloquer », il faut un endpoint authentifié qui dise quels skins le joueur possède, donc des comptes ReLink connectés au launcher. En attendant, ReLaunch n'installe que les skins **sans condition d'obtention** et qui ont un fichier.
 
-Côté launcher, il reste à intégrer la **clé publique** `RELAUNCH_SIGNING_PUBLIC_KEY` dans `electron/src/main/skins/skins.ts` (`RELINK_SIGNING_PUBLIC_KEY`). Tant qu'elle vaut `null`, aucun skin téléchargé n'est installé, et le message le dit.
+Côté launcher, la **clé publique** `RELAUNCH_SIGNING_PUBLIC_KEY` est épinglée dans `electron/src/main/skins/skins.ts` (`RELINK_SIGNING_PUBLIC_KEY` = `MgGSWwwFZQsyGY0oVhUUcuKOOnlAjvg6HMZ7r/FUB7c=`). Changer de clé demande donc une nouvelle version du launcher.
 
 ## 5. Sécurité, côté launcher
 
