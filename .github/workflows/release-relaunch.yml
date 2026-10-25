@@ -50,6 +50,7 @@ jobs:
           VERSION="${TAG#relaunch-v}"
           # La version doit être plus récente que la version Python, sinon personne ne la recevrait.
           PY=$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' wecraft_launcher.py)
+          [[ "$PY" =~ ^[0-9]+\.[0-9]+ ]] || { echo "Version Python introuvable dans wecraft_launcher.py"; exit 1; }
           VERSION="$VERSION" PY="$PY" node -e "const k=v=>v.split('-')[0].split('.').map(Number);const a=k(process.env.VERSION),b=k(process.env.PY);for(let i=0;i<Math.max(a.length,b.length);i++){const d=(a[i]||0)-(b[i]||0);if(d>0)process.exit(0);if(d<0)break;}console.error('Version '+process.env.VERSION+' pas plus récente que la version Python '+process.env.PY);process.exit(1)"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -96,23 +97,28 @@ jobs:
     environment: signature-release
     env:
       VERSION: ${{ needs.compilation.outputs.version }}
+      OUT: ${{ runner.temp }}/out
     steps:
+      # Artefact téléchargé HORS du dossier de travail et AVANT le checkout : le checkout (clean) remet ensuite
+      # les fichiers du dépôt dans leur état exact, même si l'archive avait tenté d'en écraser un.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: installeur
+          path: ${{ runner.temp }}/out
+
       # Seulement les fichiers du dépôt (outil de signature, clé publique) : rien n'est installé ni exécuté d'autre.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: installeur
-          path: out
-
       - name: Empreinte de l'installeur reçu
         shell: bash
         run: |
           NAME="ReLaunch-Setup-$VERSION.exe"
-          [ "$(ls out | sort | tr '\n' ' ')" = "$NAME $NAME.sha256 " ] || { echo "Fichiers inattendus : $(ls out)"; exit 1; }
-          (cd out && sha256sum -c "$NAME.sha256")
+          [ "$(ls "$OUT" | sort | tr '\n' ' ')" = "$NAME $NAME.sha256 " ] || { echo "Fichiers inattendus : $(ls "$OUT")"; exit 1; }
+          GOT=$(sha256sum "$OUT/$NAME" | cut -c1-64)
+          WANT=$(head -c 64 "$OUT/$NAME.sha256")
+          [ "$GOT" = "$WANT" ] || { echo "Empreinte différente de celle de la compilation"; exit 1; }
           echo "NAME=$NAME" >> "$GITHUB_ENV"
 
       - name: Clé de signature présente
@@ -126,18 +132,18 @@ jobs:
         shell: bash
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        run: node tools/sign_release_node.mjs sign "out/$NAME" "$VERSION" > "out/$NAME.sig"
+        run: node tools/sign_release_node.mjs sign "$OUT/$NAME" "$VERSION" > "$OUT/$NAME.sig"
 
       - name: Contrôle de la signature (clé publique de ReLaunch)
         shell: bash
         run: |
           PUB=$(sed -n 's/^export const UPDATE_PUBLIC_KEY = "\([^"]*\)";.*/\1/p' electron/src/main/update/signature.ts)
-          node tools/sign_release_node.mjs verify "out/$NAME" "$VERSION" "out/$NAME.sig" "$PUB"
+          node tools/sign_release_node.mjs verify "$OUT/$NAME" "$VERSION" "$OUT/$NAME.sig" "$PUB"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: signature
-          path: out/*.sig
+          path: ${{ runner.temp }}/out/*.sig
           retention-days: 14
 
   verification:
@@ -187,12 +193,27 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: installeur
-          path: out
+          path: ${{ runner.temp }}/out
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: signature
-          path: out
+          path: ${{ runner.temp }}/out
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # Dernier contrôle juste avant l'envoi (aucun secret dans cette étape)
+      - name: Empreinte et signature revérifiées
+        shell: bash
+        run: |
+          NAME="ReLaunch-Setup-$VERSION.exe"
+          OUT="$RUNNER_TEMP/out"
+          [ "$(sha256sum "$OUT/$NAME" | cut -c1-64)" = "$(head -c 64 "$OUT/$NAME.sha256")" ] || { echo "Empreinte différente"; exit 1; }
+          PUB=$(sed -n 's/^export const UPDATE_PUBLIC_KEY = "\([^"]*\)";.*/\1/p' electron/src/main/update/signature.ts)
+          node tools/sign_release_node.mjs verify "$OUT/$NAME" "$VERSION" "$OUT/$NAME.sig" "$PUB"
+          rm -rf out && cp -r "$OUT" out
 
       # Dépôt public : BROUILLON, sans « prerelease » (une prerelease n'est jamais proposée par /releases/latest).
       # Le publier à la main = le proposer à tous les utilisateurs.
