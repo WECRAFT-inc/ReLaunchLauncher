@@ -752,6 +752,7 @@ export function Settings() {
           </div>
         </div>
         <ShadersGroup />
+        <SkinModRow />
         <div className="setrow">
           <span>
             <b>{t("Java")}</b>
@@ -951,9 +952,48 @@ function AccountGroup() {
             {account.minecraftSkin ? <button className="btn sm" disabled={!!busy} onClick={() => skinAct("rmskin", window.wecraft.account.removeMinecraftSkin(), t("Skin Minecraft retiré."))}>{t("Retirer")}</button> : null}
           </span>
         </div>
-        <p className="faint" style={{ fontSize: "12.5px" }}>{t("Visible en jeu sur les serveurs et avec les mods qui lisent les skins ReLink.")}</p>
+        <div className="card" style={{ padding: "12px 14px", fontSize: "13px", lineHeight: 1.5 }}>
+          <b>{t("Où ce skin est utilisé")}</b>
+          <p className="faint" style={{ margin: "6px 0 0" }}>{t("Pour l'instant, le skin envoyé sur ReLaunch n'est visible que :")}</p>
+          <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+            <li>{t("dans les events ReLaunch ;")}</li>
+            <li>{t("dans tes instances moddées pour lesquelles le mod de skins compatible existe (installé automatiquement au lancement, sauf si tu le désactives dans Réglages > Jeu) ;")}</li>
+            <li>{t("sur les serveurs et les versions où le plugin de skins compatible existe.")}</li>
+          </ul>
+          <p className="faint" style={{ margin: "6px 0 0" }}>{t("Ailleurs (Minecraft vanilla, serveurs sans le plugin), c'est le skin de ton compte Microsoft qui s'affiche.")}</p>
+        </div>
       </div>
     </>
+  );
+}
+
+/** « Skin ReLink en jeu » : mod de skins installé automatiquement dans les instances moddées (processus principal). */
+function SkinModRow() {
+  const { toast } = useApp();
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    void window.wecraft.account.skinMod().then(setOn, () => setOn(true));
+  }, []);
+  const flip = () => {
+    if (on === null) return;
+    const next = !on;
+    void window.wecraft.account.setSkinMod(next).then(
+      (ok) => {
+        if (!ok) return toast(t("Réglage non enregistré."));
+        setOn(next);
+        toast(next ? t("Le mod de skins sera installé au prochain lancement de tes instances moddées.") : t("Le mod de skins installé par ReLaunch sera retiré au prochain lancement."));
+      },
+      () => toast(t("Réglage non enregistré.")),
+    );
+  };
+  return (
+    <div className="setrow">
+      <span>
+        <b>{t("Skin ReLink en jeu")}</b>
+        <small>{t("Installe automatiquement le mod de skins compatible (CustomSkinLoader, depuis Modrinth) dans tes instances moddées, pour voir ton skin ReLink en jeu. Sans effet en vanilla et dans les packs d'event (ils ont leur propre mod).")}</small>
+      </span>
+      <button className="toggle" role="switch" aria-checked={tf(on !== false)} disabled={on === null} onClick={flip} aria-label={t("Skin ReLink en jeu")}></button>
+    </div>
   );
 }
 

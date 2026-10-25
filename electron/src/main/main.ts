@@ -20,6 +20,8 @@ import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLo
 import { explainWorkerError, RelinkClient, WORKER_HOSTS, WORKER_URL } from "./relink/worker";
 import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore, verifyDetached } from "./skins/skins";
 import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
+import { syncSkinMod } from "./launch/skinMod";
+import { readEventManifest } from "./events/eventLock";
 import { AccountError, RelinkAccount } from "./relink/account";
 import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
@@ -454,6 +456,8 @@ function registerIpc(): void {
     }
   });
   handle(CHANNELS.accountSkinImage, async () => (account ? account.minecraftSkinImage() : null));
+  handle(CHANNELS.skinModGet, async () => (settings ? settings.skinMod() : true));
+  handle(CHANNELS.skinModSet, async (on) => (settings && typeof on === "boolean" ? settings.setSkinMod(on) : false));
   handle(CHANNELS.accountBuySkin, async (relinkId) => {
     if (!account || typeof relinkId !== "string") return { ok: false, message: "Indisponible." };
     try {
@@ -728,6 +732,20 @@ function registerIpc(): void {
     } catch (e) {
       void appLog?.error("Modpacks", `Pack d'event : remise en état impossible (${e instanceof Error ? e.message : String(e)}).`);
       return { ok: false, reason: "pack" };
+    }
+    // skin ReLink en jeu : mod de skins compatible (instances moddées, hors event) ; un échec ne bloque pas
+    if (modpacks && !(await readEventManifest(inst.folder))) {
+      try {
+        const note = await syncSkinMod(inst.path, inst.version, inst.loader, settings ? await settings.skinMod() : true, {
+          api: modpacks.api,
+          download: modpacks.downloader,
+          trash: (f) => shell.trashItem(f),
+          apiRoot: `${WORKER_URL}/launcher/mcskin/csl/`,
+        });
+        if (note) void appLog?.info("Skins", note);
+      } catch (e) {
+        void appLog?.warn("Skins", `Mod de skins non installé : ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
     const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
     const ram = typeof o.ram === "number" ? o.ram : NaN;

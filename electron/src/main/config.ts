@@ -78,6 +78,20 @@ export class Settings {
     }
   }
 
+  /** « Skin ReLink en jeu » (clé « relaunch_skin_mod ») : activé par défaut. */
+  async skinMod(): Promise<boolean> {
+    return (await this.store.read(this.file))?.["relaunch_skin_mod"] !== false;
+  }
+
+  async setSkinMod(on: boolean): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_skin_mod: on === true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Shaders préférés (clé « relaunch_shaders », propre à ReLaunch ; ignorée par la version Python). */
   async shaders(): Promise<ShaderPrefs> {
     const v = (await this.store.read(this.file))?.["relaunch_shaders"];

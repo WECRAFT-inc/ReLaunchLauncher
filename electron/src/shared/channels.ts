@@ -32,6 +32,8 @@ export const CHANNELS = {
   updatePage: "update:page",
   updateGetBeta: "update:get-beta",
   updateSetBeta: "update:set-beta",
+  skinModGet: "skins:get-skin-mod",
+  skinModSet: "skins:set-skin-mod",
   openLink: "link:open",
   setTheme: "settings:set-theme",
   listInstances: "instances:list",

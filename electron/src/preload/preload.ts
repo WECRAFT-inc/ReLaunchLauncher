@@ -41,6 +41,8 @@ const ACC_SKIN_UP = "account:skin-upload";
 const ACC_SKIN_RM = "account:skin-remove";
 const ACC_SKIN_IMG = "account:skin-image";
 const ACC_BUY = "account:buy-skin";
+const SKINMOD_GET = "skins:get-skin-mod";
+const SKINMOD_SET = "skins:set-skin-mod";
 const ACC_REDEEM = "account:redeem-code";
 const SKINS_LIST = "skins:list";
 const SKINS_IMPORT = "skins:import-local";
@@ -129,6 +131,8 @@ const api: WeCraftApi = Object.freeze({
     removeMinecraftSkin: () => ipcRenderer.invoke(ACC_SKIN_RM),
     minecraftSkinImage: () => ipcRenderer.invoke(ACC_SKIN_IMG),
     buySkin: (relinkId: string) => ipcRenderer.invoke(ACC_BUY, relinkId),
+    skinMod: () => ipcRenderer.invoke(SKINMOD_GET),
+    setSkinMod: (on: boolean) => ipcRenderer.invoke(SKINMOD_SET, on === true),
     redeemCode: (code: string) => ipcRenderer.invoke(ACC_REDEEM, code),
   }),
   skins: Object.freeze({

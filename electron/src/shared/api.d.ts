@@ -434,6 +434,9 @@ export interface WeCraftApi {
     /** Fenêtre « Ouvrir » : PNG 64 × 64 envoyé comme skin Minecraft. */
     uploadMinecraftSkin(model: "classic" | "slim"): Promise<AccountResult>;
     removeMinecraftSkin(): Promise<AccountResult>;
+    /** « Skin ReLink en jeu » : installation automatique du mod de skins dans les instances moddées. */
+    skinMod(): Promise<boolean>;
+    setSkinMod(on: boolean): Promise<boolean>;
     /** Image du skin Minecraft actuel (data:), ou null. */
     minecraftSkinImage(): Promise<string | null>;
     /** Achète un skin du launcher avec des Éclats. */
