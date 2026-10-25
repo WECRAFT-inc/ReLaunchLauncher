@@ -89,7 +89,7 @@ jobs:
         with:
           name: installeur
           path: out/
-          retention-days: 14
+          retention-days: 1
 
   signature:
     needs: compilation
@@ -143,7 +143,7 @@ jobs:
         with:
           name: signature
           path: ${{ runner.temp }}/out/*.sig
-          retention-days: 14
+          retention-days: 1
 
   verification:
     needs: [compilation, signature]
