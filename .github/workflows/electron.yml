@@ -141,10 +141,13 @@ jobs:
           if ((Get-FileHash $cfg).Hash -ne $cfgHash) { Fail "launcher_config.json a été modifié" }
           Write-Host "Désinstallation propre ; launcher_config.json intact."
 
+      # Installeur de test (~110 Mo) gardé 2 jours seulement : le quota de stockage du compte est limité.
+      # Un quota plein n'est pas une erreur du code : l'envoi peut échouer sans faire échouer la vérification.
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: relaunch-installeur
-          retention-days: 14
+          retention-days: 2
           path: |
             electron/release/ReLaunch.exe
             electron/release/ReLaunch.exe.sha256
