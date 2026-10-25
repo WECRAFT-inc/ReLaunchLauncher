@@ -59,6 +59,8 @@ export class InstanceService {
           : false,
       ),
     );
+    // dernière partie : date de logs/latest.log (écrit par le jeu à chaque lancement)
+    const played = await Promise.all(visible.map((i) => stat(path.join(i.path, "logs", "latest.log")).then((s) => Math.round(s.mtimeMs), () => null)));
     return {
       hidden: all.length - visible.length,
       instances: visible.map((i, k) => ({
@@ -74,6 +76,7 @@ export class InstanceService {
         icon: !i.icon ? null : "file" in i.icon ? { kind: "file" as const, url: `app://wecraft/user/icons/${i.icon.file}` } : { kind: "gen" as const, c: i.icon.c, sym: i.icon.sym },
         background: i.background ? `app://wecraft/user/backgrounds/${i.background}` : null,
         event: events[k] ? { id: events[k]!.id, name: events[k]!.name } : null,
+        lastPlayed: played[k] ?? null,
       })),
     };
   }

@@ -1,5 +1,5 @@
 // Fenêtres et encarts : épingles (pop), panneau latéral, lancement, RAM, mise à jour, bandeau d'avertissement.
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LaunchStatus, UpdateCheck } from "../../shared/api";
 import { Minis } from "./Bars";
 import { useApp } from "./ctx";
@@ -7,10 +7,16 @@ import { useEscapeLayer } from "./keys";
 import { Ic } from "./Ic";
 import { detail, gById, type Inst } from "./model";
 import { t } from "./i18n";
-import { coverVars, IconFace } from "./symbols";
+import { InstIcon } from "./symbols";
 
-type Css = CSSProperties & Record<`--${string}`, string>;
-const cover = (x: Inst): Css => coverVars(x);
+/** Entrée ou Espace sur un faux bouton = clic (glisser-déposer impossible depuis un vrai <button>). */
+const keyClick = (e: import("react").KeyboardEvent<HTMLElement>) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    e.currentTarget.click();
+  }
+};
+
 
 export function Pop() {
   const { ui, nav, byId, editNav, setUi } = useApp();
@@ -96,9 +102,7 @@ export function Pop() {
               .filter((x): x is Inst => !!x)
               .map((x) => (
                 <div key={x.id} className="pitem" draggable="true" data-pin-drag={`i:${x.id}`} data-pin-drop={`i:${x.id}`} data-a={`pgi-${x.id}`}>
-                  <span className="cover" style={cover(x)}>
-                    <IconFace x={x} size={34} />
-                  </span>
+                  <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={34} />
                   <span style={{ minWidth: 0 }}>
                     <b>{x.n}</b>
                     <small>{detail(x)}</small>
@@ -136,21 +140,19 @@ export function Pop() {
                   const x = byId(p.id);
                   if (!x) return null;
                   return (
-                    <button key={p.id} className="ptile" draggable="true" data-pin-drag={`i:${x.id}`} data-pin-drop={`i:${x.id}`} data-play={x.id} data-a={`pt-${x.id}`}>
-                      <span className="cover" style={cover(x)}>
-                        <IconFace x={x} size={52} />
-                      </span>
+                    <div key={p.id} role="button" tabIndex={0} onKeyDown={keyClick} className="ptile" draggable="true" data-pin-drag={`i:${x.id}`} data-pin-drop={`i:${x.id}`} data-play={x.id} data-a={`pt-${x.id}`}>
+                      <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={52} />
                       <small>{x.n}</small>
-                    </button>
+                    </div>
                   );
                 }
                 return (
-                  <button key={p.id} className="ptile" draggable="true" data-pin-drag={`g:${p.id}`} data-pin-drop={`g:${p.id}`} data-act="openGroupIn" data-gid={p.id} data-a={`ptg-${p.id}`}>
+                  <div key={p.id} role="button" tabIndex={0} onKeyDown={keyClick} className="ptile" draggable="true" data-pin-drag={`g:${p.id}`} data-pin-drop={`g:${p.id}`} data-act="openGroupIn" data-gid={p.id} data-a={`ptg-${p.id}`}>
                     <span className="gmini">
                       <Minis g={p} byId={byId} />
                     </span>
                     <small>{`${p.name} · ${p.items.length}`}</small>
-                  </button>
+                  </div>
                 );
               })
             ) : (

@@ -53,6 +53,7 @@ export function toInst(i: InstanceView): Inst {
     icon: i.icon ?? null,
     bg: i.background ?? null,
     ev: i.event ?? null,
+    ...(i.lastPlayed ? { last: i.lastPlayed } : {}),
   };
 }
 
@@ -116,8 +117,29 @@ export interface Pref {
   anim?: boolean;
   /** Langue de l'interface (français par défaut, langue de secours). */
   lang?: "fr" | "en";
+  /** Format de l'image de fond de l'accueil. */
+  bgFmt?: BgFmt;
+  /** Espacement entre les boutons (px) : barre principale, barre séparée des épingles, barre d'utilitaires. */
+  gaps?: { main: number; dock: number; util: number };
   [k: string]: unknown;
 }
+export type BgFmt = "off" | "mini" | "reduced" | "large" | "fill";
+export const BG_FORMATS: [BgFmt, string, string][] = [
+  ["off", "Désactivé", "Aucune image (sauf événements)"],
+  ["mini", "Minimaliste", "Un petit encart au-dessus du titre"],
+  ["reduced", "Réduite", "Au-dessus du titre, la majorité de l'écran"],
+  ["large", "Large", "Derrière l'accueil (actuel)"],
+  ["fill", "Remplissage", "Tout l'écran, derrière les barres"],
+];
+/** Format choisi ; l'ancien interrupteur « Images de fond » désactivé vaut « Désactivé ». */
+export const bgFmtOf = (p: Pref): BgFmt => (p.bgFmt && BG_FORMATS.some((f) => f[0] === p.bgFmt) ? p.bgFmt : p.imgs === false ? "off" : "large");
+export const GAP_DEF = { main: 5, dock: 5, util: 5 };
+export const gapsOf = (p: Pref) => {
+  const g = (p.gaps ?? {}) as Partial<typeof GAP_DEF>;
+  const n = (v: unknown, d: number) => (typeof v === "number" && v >= 0 && v <= 24 ? Math.round(v) : d);
+  return { main: n(g.main, GAP_DEF.main), dock: n(g.dock, GAP_DEF.dock), util: n(g.util, GAP_DEF.util) };
+};
+
 export function loadPref(): Pref {
   const p = load<Pref | null>("proto-pref2", null) ?? ({ skin: "phenix", ram: 6, discord: false, reopen: true, start: "home", java: true } as Pref);
   if (!p.custom) p.custom = { h: 330, s: 80, l: 60 };
@@ -389,7 +411,7 @@ export const SKINS: Skin[] = [
   { n: "Event S3", sk: "#d49a72", hair: "#1a1a1a", eye: "#fbbf24", shirt: "#7c2d12", pants: "#3a3a3a", shoe: "#fb923c", saved: true },
 ];
 
-export const VIEWS = ["news", "home", "wecraft", "relaunch", "welive", "live", "relink", "settings", "favorites", "discover"] as const;
+export const VIEWS = ["news", "home", "wecraft", "relaunch", "welive", "live", "relink", "settings", "favorites", "discover", "instance", "pins"] as const;
 export type View = (typeof VIEWS)[number];
 export const THEMES = ["phenix", "relink", "aurore", "glace"] as const;
 
@@ -406,10 +428,18 @@ export const CATEGORY_FR: Record<string, string> = {
   fonts: "Polices", gui: "Interface", items: "Objets", locale: "Langue", models: "Modèles", "16x": "16x", "32x": "32x", "64x": "64x", "128x": "128x", "256x": "256x", "512x+": "512x+",
 };
 
-/** Ordre des listes d'instances : favoris d'abord, puis épinglées, puis le reste (ordre d'origine gardé). */
-export function orderInstances(list: Inst[], nav: NavConfig): Inst[] {
-  const rank = (x: Inst) => (x.fav ? 0 : isPinned(nav, x.id) ? 1 : 2);
-  return list.map((x, i) => ({ x, i })).sort((a, b) => rank(a.x) - rank(b.x) || a.i - b.i).map(({ x }) => x);
+export const RECENT_DAYS = 30;
+export const isRecent = (x: Inst, now = Date.now()) => !!x.last && now - x.last < RECENT_DAYS * DAY;
+/**
+ * Ordre des listes d'instances : favoris d'abord, puis celles lancées depuis moins de 30 jours (la plus récente
+ * en premier), puis le reste (ordre d'origine gardé).
+ */
+export function orderInstances(list: Inst[], now = Date.now()): Inst[] {
+  const rank = (x: Inst) => (x.fav ? 0 : isRecent(x, now) ? 1 : 2);
+  return list
+    .map((x, i) => ({ x, i }))
+    .sort((a, b) => rank(a.x) - rank(b.x) || (rank(a.x) === 1 ? b.x.last! - a.x.last! : 0) || a.i - b.i)
+    .map(({ x }) => x);
 }
 
 /** Groupes d'instances de la page WeCraft (affichage seulement, gardés sur ce PC). */
@@ -427,3 +457,5 @@ export function loadGroups(): InstGroup[] {
 export function saveGroups(g: InstGroup[]): void {
   store("rl-igroups", g);
 }
+/** Groupe « Inactives » (créé au premier « Ranger comme inactive »). */
+export const INACTIVE_ID = "inactive";

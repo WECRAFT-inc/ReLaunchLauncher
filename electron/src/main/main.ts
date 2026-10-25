@@ -16,7 +16,7 @@ import { instancesDir } from "./instances/detect";
 import { InstanceService } from "./instances/service";
 import { loaderVersionList } from "./install/loaderList";
 import { isSafeVersionId } from "./install/vanilla";
-import { registerLookIpc, registerProjectIpc } from "./ipcLook";
+import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLook";
 import { LinkStore } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
 import { mkdir } from "node:fs/promises";
@@ -336,6 +336,15 @@ function registerIpc(): void {
       const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
     },
+  });
+  registerContentIpc(handle, {
+    instances: () => instances,
+    modpacks: () => modpacks,
+    media: () => media,
+    cacheFile: path.join(wecraftDataDir(pathEnv()), "cache", "content_meta.json"),
+    trash: (f) => shell.trashItem(f),
+    openDir: async (dir) => (await shell.openPath(dir)) === "",
+    launching: () => launcher?.busy() ?? false,
   });
   registerLookIpc(handle, {
     instances: () => instances,

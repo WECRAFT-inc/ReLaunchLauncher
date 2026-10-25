@@ -70,6 +70,50 @@ export interface InstanceView {
   background: string | null;
   /** Modpack d'événement (wecraft_event.json) : seuls ses packs de ressources et shaders se modifient. */
   event: { id: string; name: string } | null;
+  /** Dernière partie (date de logs/latest.log, écrit par le jeu) ; null si jamais lancée. */
+  lastPlayed: number | null;
+}
+
+export type ContentKind = "mod" | "resourcepack" | "shader";
+export interface ContentItem {
+  kind: ContentKind;
+  /** Nom du fichier (ou du dossier) dans mods/, resourcepacks/ ou shaderpacks/. */
+  file: string;
+  name: string;
+  version: string;
+  disabled: boolean;
+  dir: boolean;
+  size: number;
+  /** Fourni par le modpack de l'instance. */
+  pack: boolean;
+  /** Imposé par un événement : ni désactivable ni retirable. */
+  locked: boolean;
+}
+export interface ContentList {
+  items: ContentItem[];
+  truncated: boolean;
+  event: boolean;
+  pack: { name: string; version: string; source: string; counts: Record<ContentKind, number> } | null;
+}
+export interface ContentMeta {
+  title: string;
+  slug: string;
+  /** Adresse app:// (image Modrinth vérifiée) ou null. */
+  icon: string | null;
+  author: string;
+  version: string;
+}
+export type ContentResult = { ok: true; file?: string } | { ok: false; message: string };
+export interface WorldView {
+  folder: string;
+  name: string;
+  last: number;
+}
+export interface FileEntry {
+  name: string;
+  dir: boolean;
+  size: number;
+  mtime: number;
 }
 
 export interface EventPackView {
@@ -359,6 +403,24 @@ export interface WeCraftApi {
     screenshots(id: string): Promise<ScreenshotItem[]>;
     /** Fond : capture listée (`shot` + jeton), image du PC (`import`, fenêtre du système) ou aucun (`clear`). */
     setBackground(id: string, how: "shot" | "import" | "clear", token?: string): Promise<BackgroundResult>;
+    /** Mondes (dossier saves), les plus récents d'abord. */
+    worlds(id: string): Promise<WorldView[]>;
+    /** Premier niveau du dossier de jeu de l'instance. */
+    files(id: string): Promise<FileEntry[]>;
+    /** Ouvre le dossier de l'instance (ou l'un de ses sous-dossiers, par son nom) dans l'Explorateur. */
+    openFolder(id: string, sub?: string): Promise<boolean>;
+    /** Fin de logs/latest.log du jeu, données sensibles masquées. */
+    gameLog(id: string): Promise<{ lines: string[]; truncated: boolean; at: number | null }>;
+  };
+  content: {
+    /** Mods, packs de ressources et shaders de l'instance (lecture locale, rapide). */
+    list(id: string): Promise<ContentList | null>;
+    /** Icônes, noms, auteurs et versions trouvés sur Modrinth, par « genre/fichier ». */
+    details(id: string): Promise<Record<string, ContentMeta>>;
+    /** Active ou désactive (renommage .disabled). */
+    toggle(id: string, kind: ContentKind, file: string, on: boolean): Promise<ContentResult>;
+    /** Retire (corbeille). */
+    remove(id: string, kind: ContentKind, file: string): Promise<ContentResult>;
   };
   logs: {
     /** Fin des journaux (relaunch.log, lancement.log, update.log), les plus récentes d'abord, textes masqués. */

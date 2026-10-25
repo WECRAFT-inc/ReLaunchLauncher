@@ -216,6 +216,8 @@ export async function readMrpackIndex(file: string): Promise<{ plan: MrpackPlan;
 }
 
 export type Progress = (done: number, total: number, msg: string) => void;
+/** Liste du contenu fourni par un modpack installé (mods, packs de ressources, shaders). */
+export const PACK_FILE = "wecraft_pack.json";
 
 /**
  * Installe le modpack dans une NOUVELLE instance `<instancesDir>/<nom>` : fichiers téléchargés et vérifiés,
@@ -277,6 +279,9 @@ export async function installMrpack(
     if (plan.loader) wj["loader"] = plan.loader;
     if (plan.loaderVersion) wj["loader_version"] = plan.loaderVersion;
     await writeFile(path.join(folder, "wecraft.json"), JSON.stringify(wj, null, 2), "utf8");
+    // contenu fourni par le modpack (affiché « Contenu du modpack » dans la page de l'instance)
+    const packFiles = plan.files.map((f) => f.path).filter((p) => /^(mods|resourcepacks|shaderpacks)\//.test(p));
+    await writeFile(path.join(folder, PACK_FILE), JSON.stringify({ name: plan.name, version: plan.version, source: "Modrinth", files: packFiles }, null, 2), "utf8").catch(() => undefined);
   } catch (e) {
     await rm(folder, { recursive: true, force: true }).catch(() => undefined); // dossier créé à l'instant
     throw e;

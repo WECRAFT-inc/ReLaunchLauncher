@@ -8,6 +8,7 @@ import type { CreateInstanceResult, IconChoice, InstanceEdit, SettingResult } fr
 import { CHANNELS } from "../shared/channels";
 import { currentShader, EventLockError, listPacks, readEventManifest, removePack, setResourcePack, setShader, type EventManifest } from "./events/eventLock";
 import { cleanCreate, createCustomInstance } from "./instances/create";
+import { ContentError, contentDetails, gameLog, listContent, listFiles, listWorlds, openableDir, removeContent, toggleContent } from "./instances/content";
 import { parseIconMeta, type IconMeta } from "./instances/detect";
 import { InstanceService } from "./instances/service";
 import type { LinkStore } from "./links";
@@ -254,5 +255,74 @@ export function registerLookIpc(handle: Handle, d: LookDeps): void {
     } catch (e) {
       return { ok: false, message: failMessage(e) };
     }
+  });
+}
+
+export interface ContentDeps {
+  instances: () => InstanceService | null;
+  modpacks: () => ModpackService | null;
+  media: () => MediaStore | null;
+  /** .wecraft\cache\content_meta.json */
+  cacheFile: string;
+  trash: (file: string) => Promise<void>;
+  /** Ouvre un dossier dans l'Explorateur (jamais un fichier : rien n'est exécuté). */
+  openDir: (dir: string) => Promise<boolean>;
+  launching: () => boolean;
+}
+
+/** Page d'une instance : contenu, mondes, fichiers, journal du jeu. */
+export function registerContentIpc(handle: Handle, d: ContentDeps): void {
+  const inst = (id: unknown) => d.instances()?.target(id) ?? null;
+  const busy = () => d.launching() || (d.modpacks()?.busy() ?? false);
+  const fail = (e: unknown) => ({ ok: false as const, message: e instanceof ContentError ? e.message : "Opération impossible sur ce fichier." });
+  handle(CHANNELS.contentList, async (id) => {
+    const i = inst(id);
+    return i ? listContent(i.path, i.folder) : null;
+  });
+  handle(CHANNELS.contentDetails, async (id) => {
+    const i = inst(id);
+    const mp = d.modpacks();
+    const media = d.media();
+    if (!i || !mp) return {};
+    const list = await listContent(i.path, i.folder);
+    return contentDetails(i.path, list.items, mp.api, d.cacheFile, (u) => media?.remoteUrl(u) ?? null);
+  });
+  handle(CHANNELS.contentToggle, async (id, kind, file, on) => {
+    const i = inst(id);
+    if (!i) return { ok: false, message: "Instance introuvable." };
+    if (busy()) return { ok: false, message: "Un lancement ou un téléchargement est en cours : réessayez dans un instant." };
+    try {
+      return { ok: true, file: await toggleContent(i.path, i.folder, kind, file, on === true) };
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  handle(CHANNELS.contentRemove, async (id, kind, file) => {
+    const i = inst(id);
+    if (!i) return { ok: false, message: "Instance introuvable." };
+    if (busy()) return { ok: false, message: "Un lancement ou un téléchargement est en cours : réessayez dans un instant." };
+    try {
+      await removeContent(i.path, i.folder, kind, file, d.trash);
+      return { ok: true };
+    } catch (e) {
+      return fail(e);
+    }
+  });
+  handle(CHANNELS.worlds, async (id) => {
+    const i = inst(id);
+    return i ? listWorlds(i.path) : [];
+  });
+  handle(CHANNELS.files, async (id) => {
+    const i = inst(id);
+    return i ? listFiles(i.path) : [];
+  });
+  handle(CHANNELS.openFolder, async (id, sub) => {
+    const i = inst(id);
+    const dir = i ? await openableDir(i.path, sub) : null;
+    return dir ? d.openDir(dir) : false;
+  });
+  handle(CHANNELS.gameLog, async (id) => {
+    const i = inst(id);
+    return i ? gameLog(i.path) : { lines: [], truncated: false, at: null };
   });
 }

@@ -7,9 +7,15 @@ import { useBarsModel } from "./Bars";
 import { Ctx, useApp, type AppCtx, type Ui } from "./ctx";
 import {
   BARSIZES,
+  bgFmtOf,
   clone,
+  gapsOf,
+  orderInstances,
+  INACTIVE_ID,
   isPinned,
   loadCar,
+  loadGroups,
+  saveGroups,
   loadHome,
   loadPref,
   load,
@@ -28,6 +34,7 @@ import {
   type Car,
   type HomePref,
   type Inst,
+  type InstGroup,
   type NavConfig,
   type Pref,
   type View,
@@ -42,7 +49,8 @@ import { CreateModal } from "./Create";
 import { ImportModal } from "./Import";
 import { InstanceEditor } from "./InstanceEditor";
 import { EventEditor, RelaunchEvents } from "./EventEditor";
-import { Favorites, Home, Soon, SOON, Wecraft } from "./Views";
+import { Favorites, Home, homeBg, PinsPage, Soon, SOON, Wecraft } from "./Views";
+import { InstancePage } from "./InstancePage";
 import type { MpDraft } from "./ctx";
 
 const SECTION_NAMES: Record<View, string> = {
@@ -56,8 +64,10 @@ const SECTION_NAMES: Record<View, string> = {
   discover: "Découvrir",
   live: "Diffusion Partenaires",
   news: "Info & News",
+  instance: "Instance",
+  pins: "Instances épinglées",
 };
-const SECTION_ORDER: View[] = ["home", "wecraft", "relaunch", "welive", "relink", "settings", "favorites", "discover", "live", "news"];
+const SECTION_ORDER: View[] = ["home", "wecraft", "relaunch", "welive", "relink", "settings", "favorites", "discover", "live", "news", "instance", "pins"];
 
 type FailureReason = Extract<SettingResult, { ok: false }>["reason"];
 const SAVE_ERRORS: Record<FailureReason, string> = {
@@ -87,6 +97,7 @@ function startView(pref: Pref): View {
   } catch {
     // stockage indisponible
   }
+  if (vw === "instance") vw = "wecraft"; // la page d'une instance ne se rouvre pas au démarrage
   return (VIEWS as readonly string[]).includes(vw) ? (vw as View) : "home";
 }
 
@@ -111,7 +122,7 @@ export function App() {
     } catch {
       // stockage indisponible
     }
-    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "" };
+    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content" };
   });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tip, setTip] = useState<{ text: string; el: HTMLElement } | null>(null);
@@ -129,6 +140,16 @@ export function App() {
   const [editInst, setEditInst] = useState<string | null>(null);
   const [editEvent, setEditEvent] = useState<string | null>(null);
   const [discordAsk, setDiscordAsk] = useState(false);
+  const [groups, setGroupsState] = useState<InstGroup[]>(loadGroups);
+  const setGroups = useCallback(
+    (fn: (g: InstGroup[]) => InstGroup[]) =>
+      setGroupsState((g0) => {
+        const g = fn(g0);
+        saveGroups(g);
+        return g;
+      }),
+    [],
+  );
   const hist = useRef<string[]>([]);
   const back = useRef(false);
   const flip = useRef<{ before: Record<string, DOMRect>; key?: string } | null>(null);
@@ -344,6 +365,21 @@ export function App() {
     },
     [nav, editNav, toast],
   );
+  const toggleInactive = useCallback(
+    (id: string) => {
+      const was = groups.some((g) => g.id === INACTIVE_ID && g.ids.includes(id));
+      setGroups((gs) => {
+        const out = gs.map((g) => ({ ...g, ids: g.ids.filter((x) => x !== id) }));
+        if (was) return out;
+        const ina = out.find((g) => g.id === INACTIVE_ID);
+        if (ina) ina.ids.push(id);
+        else out.push({ id: INACTIVE_ID, name: "Inactives", ids: [id] });
+        return out;
+      });
+      toast(was ? "Instance sortie des inactives" : "Rangée dans « Inactives »");
+    },
+    [groups, setGroups, toast],
+  );
   const applyPreset = useCallback(
     (k: string) => {
       const p = PRESETS[k]!();
@@ -493,6 +529,7 @@ export function App() {
     [toast],
   );
 
+  const openInstance = useCallback((id: string, tab = "content") => show("instance", { page: id, itab: tab }), [show]);
   const toggleDrawer = useCallback((k: string) => setUiState((u) => ({ ...u, drawer: u.drawer === k ? null : k })), []);
 
   // ------------------------------------------------------------ démarrage
@@ -589,6 +626,21 @@ export function App() {
         break;
       case "import":
         setImportOpen(true);
+        break;
+      case "openInst":
+        openInstance(a.dataset["id"]!, a.dataset["tab"]);
+        break;
+      case "inactive":
+        toggleInactive(a.dataset["id"]!);
+        break;
+      case "instFolder":
+        void window.wecraft.instances.openFolder(a.dataset["id"]!, a.dataset["sub"] ?? "").then((ok) => !ok && toast("Ce dossier n'a pas pu être ouvert."));
+        break;
+      case "bgFmt":
+        editPref((p) => {
+          p.bgFmt = a.dataset["v"] as NonNullable<Pref["bgFmt"]>;
+          p.imgs = a.dataset["v"] !== "off";
+        });
         break;
       case "instEdit":
         setEditInst(a.dataset["id"]!);
@@ -753,9 +805,6 @@ export function App() {
       case "lang":
         editPref((p) => (p.lang = a.dataset["v"] === "en" ? "en" : "fr"));
         break;
-      case "imgsTgl":
-        editPref((p) => (p.imgs = p.imgs === false));
-        break;
       case "animTgl":
         editPref((p) => (p.anim = p.anim === false));
         break;
@@ -907,6 +956,10 @@ export function App() {
     editModpack,
     refreshInstances: () => void loadInstances(true),
     discordOn,
+    groups,
+    setGroups,
+    toggleInactive,
+    openInstance,
   };
 
   const extras: ExtrasProps = { toastMsg, tip, launchUi, setLaunchUi, ram, setRam, startLaunch, upd, setUpd, job };
@@ -962,8 +1015,12 @@ function Shell({
   setTip: (t: { text: string; el: HTMLElement } | null) => void;
   extras: ExtrasProps;
 }) {
-  const { ui, pref, nav } = useApp();
+  const { ui, pref, nav, byId, inst } = useApp();
   const bars = useBarsModel();
+  const gaps = gapsOf(pref);
+  // format « Remplissage » : l'image de l'instance choisie couvre toute la fenêtre (accueil seulement)
+  const hb = ui.view === "home" ? homeBg(byId(ui.sel) ?? orderInstances(inst)[0], bgFmtOf(pref)) : null;
+  const fill = hb?.url && hb.fmt === "fill" ? hb.url : null;
   const rootRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const lastTip = useRef("");
@@ -976,6 +1033,7 @@ function Shell({
     pref.style === "lg" ? "lg" : "",
     pref.bg === "plain" ? "bg-plain" : "",
     pref.bg === "flat" ? "bg-flat" : "",
+    fill ? "bg-fill" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -1019,11 +1077,11 @@ function Shell({
       ref={rootRef}
       className={cls}
       id="appRoot"
-      style={{ ["--nb" as string]: `${(nav.size && BARSIZES[nav.size] ? BARSIZES[nav.size]! : BARSIZES["m"]!).b}px`, gridTemplateColumns: bars.grid[0], gridTemplateRows: bars.grid[1], gridTemplateAreas: bars.grid[2] }}
+      style={{ ["--nb" as string]: `${(nav.size && BARSIZES[nav.size] ? BARSIZES[nav.size]! : BARSIZES["m"]!).b}px`, ["--gap-main" as string]: `${gaps.main}px`, ["--gap-dock" as string]: `${gaps.dock}px`, ["--gap-util" as string]: `${gaps.util}px`, gridTemplateColumns: bars.grid[0], gridTemplateRows: bars.grid[1], gridTemplateAreas: bars.grid[2] }}
       onClick={onClick}
       {...dnd}
     >
-      <div className="bg" aria-hidden="true"></div>
+      <div className="bg" aria-hidden="true" style={fill ? { backgroundImage: `linear-gradient(90deg, rgba(8,9,14,.78), rgba(8,9,14,.25)), url("${fill}")` } : undefined}></div>
       <div
         id="bars"
         style={{ display: "contents" }}
@@ -1070,6 +1128,8 @@ function Shell({
 
 function ViewBody({ v }: { v: View }) {
   if (v === "home") return <Home />;
+  if (v === "instance") return <InstancePage />;
+  if (v === "pins") return <PinsPage />;
   if (v === "wecraft") return <Wecraft />;
   if (v === "favorites") return <Favorites />;
   if (v === "settings") return <Settings />;

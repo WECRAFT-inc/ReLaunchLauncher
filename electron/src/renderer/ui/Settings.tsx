@@ -1,13 +1,11 @@
 // Page Réglages (port de RENDER.settings, mini, pinMgr… du prototype), même balisage.
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { ShaderPrefsView } from "../../shared/api";
-import { Minis } from "./Bars";
 import { useApp } from "./ctx";
 import { BASE_THEMES, cleanRotation, ROT_FADES, ROT_INTERVALS, THEME_COLORS, THEME_NAMES, type BaseTheme } from "./theme";
 import { Ic } from "./Ic";
 import { LogsTab } from "./Logs";
-import { coverVars, IconFace } from "./symbols";
-import { BARSIZES, dockSide, NAVINFO, occupied, pinCount, PRESETS, profPlace, type NavConfig, type Side } from "./model";
+import { BARSIZES, BG_FORMATS, bgFmtOf, dockSide, gapsOf, GAP_DEF, NAVINFO, occupied, pinCount, PRESETS, profPlace, type NavConfig, type Side } from "./model";
 import { LANGS, t } from "./i18n";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
@@ -114,25 +112,8 @@ function FoldHead({ k, t, sub }: { k: string; t: string; sub: string }) {
 const FR: Record<Side, string> = { top: "Haut", bottom: "Bas", left: "Gauche", right: "Droite" };
 const tf = (b: boolean) => (b ? "true" : "false");
 
-function PinChip({ id }: { id: string }) {
-  const { byId } = useApp();
-  const x = byId(id);
-  if (!x) return null;
-  return (
-    <span className="pinchip" draggable="true" data-pin-drag={`i:${id}`} data-pin-drop={`i:${id}`} data-a={`pc-${id}`}>
-      <i style={coverVars(x)}>
-        <IconFace x={x} size={18} />
-      </i>
-      {x.n}
-      <button data-act="pin" data-id={id} aria-label={`Retirer ${x.n}`}>
-        ✕
-      </button>
-    </span>
-  );
-}
-
 function PinMgr() {
-  const { nav, ui, inst, editNav, byId } = useApp();
+  const { nav, ui } = useApp();
   const occ = occupied(nav);
   const sides: [Side, string][] = [
     ["top", "Haut"],
@@ -154,7 +135,7 @@ function PinMgr() {
     <>
       {head}
       <div className="grp fbody" data-a="pin-settings">
-        <p>{t("Choisis où elles s'affichent. Glisse une instance sur une autre pour créer un groupe, puis donne-lui un nom.")}</p>
+        <p>{t("Choisis où elles s'affichent dans les barres.")}</p>
         <div className="layouts" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
           {modes.map((m) => (
             <button key={m[0]} className="lay" data-act="pinMode" data-m={m[0]} aria-pressed={tf(nav.pinMode === m[0])}>
@@ -212,61 +193,14 @@ function PinMgr() {
             </div>
           </>
         ) : null}
-        <div className="pinmgr" data-pin-zone="1">
-          {nav.pins.map((p) =>
-            p.t === "i" ? (
-              <PinChip key={p.id} id={p.id} />
-            ) : (
-              <div key={p.id} className="pgroup" draggable="true" data-pin-drag={`g:${p.id}`} data-pin-drop={`g:${p.id}`} data-a={`pmg-${p.id}`}>
-                <span className="gmini">
-                  <Minis g={p} byId={byId} />
-                </span>
-                <input
-                  type="text"
-                  data-gname={p.id}
-                  value={p.name}
-                  aria-label={t("Nom du groupe")}
-                  draggable="false"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    editNav((nv) => {
-                      const g = nv.pins.find((q) => q.t === "g" && q.id === p.id);
-                      if (g && g.t === "g") g.name = v.trim() || "Groupe";
-                    });
-                  }}
-                />
-                <span className="chips">
-                  {p.items.map((id) => (
-                    <PinChip key={id} id={id} />
-                  ))}
-                </span>
-                <button className="btn sm" data-act="dissolve" data-gid={p.id}>
-                  {t("Dissoudre")}
-                </button>
-              </div>
-            ),
-          )}
-          <select
-            id="pinAdd"
-            aria-label={t("Épingler une instance")}
-            value=""
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) editNav((nv) => void nv.pins.push({ t: "i", id: v }), { pins: true });
-            }}
-          >
-            <option value="">{t("+ Épingler…")}</option>
-            <optgroup label="WeCraft">
-              {inst
-                .filter((p) => !nav.pins.some((q) => (q.t === "i" ? q.id === p.id : q.items.includes(p.id))))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.n}
-                  </option>
-                ))}
-            </optgroup>
-            <optgroup label="ReLaunch"></optgroup>
-          </select>
+        <div className="setrow pins-link">
+          <span>
+            <b>{`${n} instance${n > 1 ? "s" : ""} épinglée${n > 1 ? "s" : ""}`}</b>
+            <small>{t("La liste, les groupes et l'ajout se gèrent dans la section « Instances épinglées » (aussi en double-cliquant sur la barre séparée, ou depuis WeCraft et Favoris).")}</small>
+          </span>
+          <button className="btn sm pri" data-go="pins">
+            {t("Gérer les instances épinglées")}
+          </button>
         </div>
       </div>
     </>
@@ -368,6 +302,7 @@ function NavTab() {
           ))}
         </div>
       </div>
+      <GapsGroup />
       <FoldHead k="orga" t="Organisation des barres" sub={`${orgSum} · ${sections} sections`} />
       {ui.fold["orga"] ? null : (
         <div className="grp fbody" data-a="orga-body">
@@ -502,6 +437,39 @@ function NavTab() {
   );
 }
 
+/** Espacement entre les boutons des barres (principale, barre séparée des épingles, barre d'utilitaires). */
+function GapsGroup() {
+  const { pref, editPref } = useApp();
+  const g = gapsOf(pref);
+  const rows: [keyof typeof GAP_DEF, string, string][] = [
+    ["main", "Barre principale (latérale)", "Entre les sections et les épingles de la barre"],
+    ["dock", "Barre séparée (épingles)", "Entre les instances de la barre des épingles"],
+    ["util", "Barre d'utilitaires", "Notifications, lives, téléchargements, amis, profil"],
+  ];
+  return (
+    <div className="grp" data-a="bar-gaps">
+      <h3>{t("Espacement des boutons")}</h3>
+      {rows.map(([k, l, d]) => (
+        <div key={k} className="setrow">
+          <span>
+            <b>{t(l)}</b>
+            <small>{t(d)}</small>
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: "220px" }}>
+            <input type="range" min="0" max="24" step="1" value={g[k]} aria-label={t(l)} onChange={(e) => editPref((p) => (p.gaps = { ...gapsOf(p), [k]: Number(e.target.value) }))} />
+            <b style={{ fontFamily: "var(--f-mono)", minWidth: "44px", textAlign: "right" }}>{`${g[k]} px`}</b>
+          </span>
+        </div>
+      ))}
+      <div className="row" style={{ justifyContent: "flex-start" }}>
+        <button className="btn sm" onClick={() => editPref((p) => (p.gaps = { ...GAP_DEF }))}>
+          {t("Espacement par défaut")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** moveNav : déplace une section (Réglages reste en dernier), avec l'animation de glissement. */
 export function moveNav(editNav: ReturnType<typeof useApp>["editNav"], nav: NavConfig, from: number, to: number): void {
   if (to < 0 || to > nav.items.length - 2 || from === to) return;
@@ -554,6 +522,7 @@ export function Settings() {
   const app = useApp();
   const { ui, pref, car, home, appVer, defaultRam } = app;
   const menu: [string, string, string][] = [
+    ["maj", "Mises à jour", "downloads"],
     ["apparence", "Apparence", "paint"],
     ["nav", "Navigation", "nav"],
     ["accueil", "Accueil", "home"],
@@ -573,7 +542,26 @@ export function Settings() {
     if (ramRef.current) ramRef.current.value = String(defaultRam);
   }, [defaultRam]);
   let body: ReactNode;
-  if (ui.setTab === "apparence") {
+  if (ui.setTab === "maj") {
+    body = (
+      <div className="grp">
+        <h3>{t("Mises à jour de ReLaunch")}</h3>
+        <div className="card updcard">
+          <span className="updcard-ic">
+            <Ic n="downloads" />
+          </span>
+          <span className="updcard-txt">
+            <b>{`${t("Version installée")} : ${appVer || "?"}`}</b>
+            <small>{t("ReLaunch vérifie les mises à jour à chaque démarrage. Une mise à jour n'est installée que si sa signature (clé de l'auteur) et son empreinte SHA-256 sont valides ; sinon elle est refusée et rien n'est remplacé.")}</small>
+          </span>
+          <button className="btn pri updcard-btn" data-act="updCheck">
+            {t("Rechercher une mise à jour")}
+          </button>
+        </div>
+        <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le détail des vérifications est dans Réglages > Logs (origine « Mises à jour »).")}</p>
+      </div>
+    );
+  } else if (ui.setTab === "apparence") {
     body = (
       <>
         <div className="grp">
@@ -643,12 +631,23 @@ export function Settings() {
         </div>
         <div className="grp">
           <h3>{t("Images et animations")}</h3>
-          <div className="setrow">
+          <div className="setcol">
             <span>
-              <b>{t("Images de fond")}</b>
-              <small>{t("Fonds choisis pour les instances (et, plus tard, images des événements). Désactivées : fond du thème. Réglage propre à ce PC, il ne change rien pour les autres joueurs.")}</small>
+              <b>{t("Format de l'image de fond")}</b>
+              <small>{t("Image de fond de l'instance choisie sur l'accueil. Un modpack d'événement garde toujours la sienne. Réglage propre à ce PC.")}</small>
             </span>
-            <button className="toggle" role="switch" aria-checked={tf(pref.imgs !== false)} data-act="imgsTgl" aria-label={t("Images de fond")}></button>
+            <div className="bgfmts" role="radiogroup" aria-label={t("Format de l'image de fond")}>
+              {BG_FORMATS.map(([k, l, d]) => (
+                <button key={k} className="bgfmt" role="radio" data-act="bgFmt" data-v={k} aria-checked={tf(bgFmtOf(pref) === k)} aria-pressed={tf(bgFmtOf(pref) === k)}>
+                  <span className={`bfp ${k}`}>
+                    <i className="t"></i>
+                    <i className="im"></i>
+                  </span>
+                  <b>{t(l)}</b>
+                  <small>{t(d)}</small>
+                </button>
+              ))}
+            </div>
           </div>
           <div className="setrow">
             <span>
@@ -815,8 +814,8 @@ export function Settings() {
             <b>{t("Mises à jour")}</b>
             <small>{t("Vérifiées au démarrage ; installées seulement si elles sont signées par l'auteur")}</small>
           </span>
-          <button className="btn sm" data-act="updCheck">
-            {t("Rechercher")}
+          <button className="btn sm" data-settab="maj">
+            {t("Ouvrir")}
           </button>
         </div>
       </>
@@ -832,14 +831,21 @@ export function Settings() {
   return (
     <div className="setwin">
       <div className="setnav">
+        <button className="setmaj" data-settab="maj" aria-current={tf(ui.setTab === "maj")}>
+          <Ic n="downloads" />
+          <span>
+            <b>{t("Mises à jour")}</b>
+            <small>{`ReLaunch ${appVer}`}</small>
+          </span>
+        </button>
         <h4>{t("Affichage")}</h4>
-        {menu.slice(0, 3).map(mb)}
+        {menu.slice(1, 4).map(mb)}
         <h4>{t("Jeu")}</h4>
-        {menu.slice(3, 5).map(mb)}
+        {menu.slice(4, 6).map(mb)}
         <h4>{t("Diagnostic")}</h4>
-        {mb(menu[5]!)}
-        <h4>{t("Compte")}</h4>
         {mb(menu[6]!)}
+        <h4>{t("Compte")}</h4>
+        {mb(menu[7]!)}
         <span className="ver">{`ReLaunch ${appVer}`}</span>
       </div>
       <div className="setbody">{body}</div>
@@ -948,24 +954,27 @@ function ShadersGroup() {
 function ComboInput({ value, options, placeholder, disabled, onCommit }: { value: string; options: string[]; placeholder: string; disabled: boolean; onCommit: (v: string) => void }) {
   const [text, setText] = useState(value);
   const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState(false); // filtre seulement quand on tape (le bouton ▾ montre tout)
+  const inRef = useRef<HTMLInputElement>(null);
   useEffect(() => setText(value), [value]);
-  const needle = text.trim().toLowerCase();
+  const needle = typed ? text.trim().toLowerCase() : "";
   const list = options.filter((o) => !needle || o.toLowerCase().includes(needle));
   const commit = (v: string) => {
     setText(v);
     setOpen(false);
+    setTyped(false);
     if (v.trim() !== value) onCommit(v.trim());
   };
   return (
     <span className="combo">
       <input
+        ref={inRef}
         type="text"
         maxLength={120}
         value={text}
         placeholder={placeholder}
         disabled={disabled}
-        onChange={(e) => (setText(e.target.value), setOpen(true))}
-        onFocus={() => setOpen(true)}
+        onChange={(e) => (setText(e.target.value), setTyped(true), setOpen(true))}
         onBlur={() => window.setTimeout(() => commit(text), 120)}
         onKeyDown={(e) => {
           if (e.key === "Enter") commit(text);
@@ -975,6 +984,22 @@ function ComboInput({ value, options, placeholder, disabled, onCommit }: { value
           }
         }}
       />
+      <button
+        type="button"
+        className="combo-btn"
+        aria-label={t("Afficher la liste")}
+        aria-expanded={open ? "true" : "false"}
+        disabled={disabled || !options.length}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => {
+          e.preventDefault();
+          setTyped(false);
+          setOpen((o) => !o);
+          inRef.current?.focus(); // un clic ailleurs referme la liste
+        }}
+      >
+        ▾
+      </button>
       {open && !disabled && list.length ? (
         <span className="combo-list" role="listbox">
           {list.map((o) => (

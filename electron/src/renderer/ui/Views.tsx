@@ -1,14 +1,16 @@
-// Pages Accueil, WeCraft, Favoris et pages « bientôt » (port du prototype, même balisage).
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+// Pages Accueil, WeCraft, Favoris, Instances épinglées et pages « bientôt ».
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
+import { Menu, type MenuItem } from "./Menu";
+import { Minis } from "./Bars";
 import { InstIcon } from "./symbols";
-import { ago, detail, isPinned, loadGroups, orderInstances, saveGroups, SC, type Inst, type InstGroup } from "./model";
+import { ago, bgFmtOf, detail, INACTIVE_ID, isPinned, isRecent, orderInstances, pinCount, SC, type Inst, type InstGroup } from "./model";
 import { t } from "./i18n";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 /** Couverture : fond choisi pour l'instance (si les images de fond sont activées), sinon dégradé. */
-const coverOf = (x: Inst, imgs: boolean): Css => {
+export const coverOf = (x: Inst, imgs: boolean): Css => {
   const c = x.icon?.kind === "gen" ? x.icon.c : x.c;
   return imgs && x.bg ? { "--c1": c[0], "--c2": c[1], backgroundImage: `url("${x.bg}")`, backgroundSize: "cover", backgroundPosition: "center" } : { "--c1": c[0], "--c2": c[1] };
 };
@@ -18,7 +20,7 @@ export function PinBtn({ id }: { id: string }) {
   const on = isPinned(nav, id);
   const l = on ? "Retirer de la barre" : "Épingler dans la barre";
   return (
-    <button className="pinbtn" data-act="pin" data-id={id} aria-pressed={on ? "true" : "false"} aria-label={l} title={l}>
+    <button className="pinbtn" data-act="pin" data-id={id} aria-pressed={on ? "true" : "false"} aria-label={t(l)} title={t(l)}>
       <Ic n="pins" />
     </button>
   );
@@ -50,11 +52,20 @@ export const SOON: Record<string, { title: string; sub: string; text: string }> 
   discover: { title: "Découvrir", sub: "Modpacks, mods, shaders et serveurs", text: "Le catalogue (Modrinth) arrivera dans une prochaine version." },
 };
 
+/** Image de fond de l'accueil selon le format choisi ; un événement garde toujours la sienne. */
+export function homeBg(sel: Inst | undefined, fmt: ReturnType<typeof bgFmtOf>): { fmt: ReturnType<typeof bgFmtOf>; url: string | null } {
+  if (!sel?.bg) return { fmt, url: null };
+  if (fmt === "off") return sel.ev ? { fmt: "large", url: sel.bg } : { fmt, url: null };
+  return { fmt, url: sel.bg };
+}
+
 export function Home() {
-  const { inst: inst0, ui, byId, setUi, pref, nav } = useApp();
-  const inst = orderInstances(inst0, nav); // favoris, puis épinglées, puis le reste
+  const { inst: inst0, ui, byId, setUi, pref } = useApp();
+  const inst = orderInstances(inst0);
   const sel = byId(ui.sel) ?? inst[0];
-  const bgStyle: CSSProperties | undefined = sel?.bg && pref.imgs !== false ? { backgroundImage: `linear-gradient(90deg, rgba(8,9,14,.82), rgba(8,9,14,.35)), url("${sel.bg}")` } : undefined;
+  const bg = homeBg(sel, bgFmtOf(pref));
+  const large = bg.url && bg.fmt === "large";
+  const bgStyle: CSSProperties | undefined = large ? { backgroundImage: `linear-gradient(90deg, rgba(8,9,14,.82), rgba(8,9,14,.35)), url("${bg.url}")` } : undefined;
   if (!sel) {
     return (
       <div className="home nocar">
@@ -77,8 +88,17 @@ export function Home() {
       </div>
     );
   }
+  const favs = inst.filter((x) => x.fav);
+  const recents = inst.filter((x) => !x.fav && isRecent(x));
+  const rest = inst.filter((x) => !x.fav && !isRecent(x));
+  const opts = (l: Inst[]) =>
+    l.map((x) => (
+      <option key={x.id} value={x.id}>
+        {x.fav ? `★ ${x.n}` : x.n}
+      </option>
+    ));
   return (
-    <div className={`home nocar${bgStyle ? " has-bg" : ""}`} style={bgStyle}>
+    <div className={`home nocar${large ? " has-bg" : ""} bgf-${bg.url ? bg.fmt : "none"}`} style={bgStyle}>
       <div className="hmain">
         <span className="hmeta">
           <button className="newsbtn" data-go="news" data-a="home-news">
@@ -86,19 +106,16 @@ export function Home() {
             {t("Info & News")}
           </button>
         </span>
+        {bg.url && (bg.fmt === "mini" || bg.fmt === "reduced") ? <div className={`hbg ${bg.fmt}`} style={{ backgroundImage: `url("${bg.url}")` }} aria-hidden="true"></div> : null}
         <h2 className="huge" aria-label="ReLaunch">
           RELAUNCH
         </h2>
         <div className="playrow">
           <select id="homeSel" aria-label={t("Instance ou serveur")} value={sel.id} onChange={(e) => setUi({ sel: e.target.value })}>
             <optgroup label="ReLaunch · serveurs"></optgroup>
-            <optgroup label="WeCraft · instances">
-              {inst.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.n}
-                </option>
-              ))}
-            </optgroup>
+            {favs.length ? <optgroup label={t("Favoris")}>{opts(favs)}</optgroup> : null}
+            {recents.length ? <optgroup label={t("Lancées ces 30 derniers jours")}>{opts(recents)}</optgroup> : null}
+            {rest.length ? <optgroup label={favs.length || recents.length ? t("Autres instances") : "WeCraft · instances"}>{opts(rest)}</optgroup> : null}
           </select>
           <InstIcon icon={sel.icon} fallback={sel.c} name={sel.n} size={46} />
           <button className="btn play" data-play={sel.id} id="homePlay">
@@ -115,99 +132,196 @@ export function Home() {
 
 const SRC_CHIPS = ["all", "WeCraft", "CurseForge", "Prism", "Modrinth"];
 
+/** Actions d'une instance (menu ⋯ des cartes et de sa page). */
+export function instMenu(x: Inst, groups: InstGroup[], moveTo: (gid: string) => void, inactive: boolean): (MenuItem | "sep")[] {
+  return [
+    { label: "Ouvrir la page de l'instance", data: { act: "openInst", id: x.id } },
+    { label: "Réglages (nom, version, icône, fond)", data: { act: "instEdit", id: x.id } },
+    { label: "Modifier les mods (Découvrir)", data: { act: "mpEdit", id: x.id }, hidden: !x.mp },
+    { label: "Packs de ressources et shaders de l'événement", data: { act: "evEdit", id: x.id }, hidden: !x.ev },
+    { label: "Ouvrir le dossier", data: { act: "instFolder", id: x.id } },
+    "sep",
+    { label: x.fav ? "Retirer des favoris" : "Ajouter aux favoris", data: { act: "fav", id: x.id } },
+    { label: "Épingler / retirer de la barre", data: { act: "pin", id: x.id } },
+    { label: inactive ? "Sortir des inactives" : "Ranger comme inactive", data: { act: "inactive", id: x.id } },
+    ...groups
+      .filter((g) => g.id !== INACTIVE_ID && !g.ids.includes(x.id))
+      .map((g): MenuItem => ({ label: `Déplacer dans « ${g.name} »`, onClick: () => moveTo(g.id) })),
+    { label: "Retirer de son groupe", onClick: () => moveTo(""), hidden: !groups.some((g) => g.id !== INACTIVE_ID && g.ids.includes(x.id)) },
+    "sep",
+    { label: "Supprimer (corbeille)", data: { act: "del", id: x.id }, danger: true },
+  ];
+}
+
 export function Wecraft() {
-  const { inst, hidden, ui, setUi, byId, pref, nav } = useApp();
+  const { inst, hidden, ui, setUi, byId, pref, groups, setGroups, nav } = useApp();
+  const imgs = bgFmtOf(pref) !== "off";
   const recent = inst
     .filter((x) => x.last)
     .sort((a, b) => b.last! - a.last!)
     .slice(0, 5);
   const q = ui.wcQ.trim().toLowerCase();
-  const rows = orderInstances(
-    inst.filter((i) => (ui.wcSrc === "all" || i.s === ui.wcSrc) && i.n.toLowerCase().includes(q)),
-    nav,
-  );
-  // groupes d'instances (affichage seulement : rien n'est déplacé sur le disque)
-  const [groups, setGroupsState] = useState<InstGroup[]>(loadGroups);
-  const [closed, setClosed] = useState<Set<string>>(new Set());
+  const rows = orderInstances(inst.filter((i) => (ui.wcSrc === "all" || i.s === ui.wcSrc) && i.n.toLowerCase().includes(q)));
+  const [closed, setClosed] = useState<Set<string>>(() => new Set([INACTIVE_ID]));
   const [newGroup, setNewGroup] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const setGroups = (fn: (g: InstGroup[]) => InstGroup[]) =>
-    setGroupsState((g0) => {
-      const g = fn(g0);
-      saveGroups(g);
-      return g;
+  const moveTo = (id: string, gid: string) =>
+    setGroups((gs) => {
+      const out = gs.map((g) => ({ ...g, ids: g.id === gid ? [...g.ids.filter((x) => x !== id), id] : g.ids.filter((x) => x !== id) }));
+      if (gid === INACTIVE_ID && !out.some((g) => g.id === INACTIVE_ID)) out.push({ id: INACTIVE_ID, name: "Inactives", ids: [id] });
+      return out;
     });
-  const groupOf = (id: string) => groups.find((g) => g.ids.includes(id))?.id ?? "";
-  const moveTo = (id: string, gid: string) => setGroups((gs) => gs.map((g) => ({ ...g, ids: g.id === gid ? [...g.ids.filter((x) => x !== id), id] : g.ids.filter((x) => x !== id) })));
   const createGroup = (name: string) => {
     const n = name.trim().slice(0, 40);
     if (!n) return setNewGroup(null);
-    setGroups((gs) => [...gs, { id: `g${Date.now().toString(36)}`, name: n, ids: [] }]);
+    setGroups((gs) => [...gs.filter((g) => g.id !== INACTIVE_ID), { id: `g${Date.now().toString(36)}`, name: n, ids: [] }, ...gs.filter((g) => g.id === INACTIVE_ID)]);
     setNewGroup(null);
   };
-  const ungrouped = rows.filter((r) => !groups.some((g) => g.ids.includes(r.id)));
-  const rowOf = (i: Inst) => (
-                <tr key={i.id} data-a={`inst-${i.id}`}>
-                  <td>
-                    <button className="star" data-act="fav" data-id={i.id} aria-pressed={i.fav ? "true" : "false"} aria-label={t("Favori")}>
-                      ★
-                    </button>
-                  </td>
-                  <td>
-                    <span className="row inst-name">
-                      <InstIcon icon={i.icon} fallback={i.c} name={i.n} size={30} />
-                      <b>{i.n}</b>
-                    </span>
-                  </td>
-                  <td className="num">{i.v || "?"}</td>
-                  <td>{`${i.l} ${i.lv}`}</td>
-                  <td className="num">{i.m || "—"}</td>
-                  <td className="num">{i.r ? `${i.r} Go` : "—"}</td>
-                  <td>
-                    <span className="src" style={{ "--sc": SC[i.s] ?? "var(--acc)" } as Css}>
-                      {i.s}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="row" style={{ justifyContent: "flex-end" }}>
-                      <select className="grp-sel" value={groupOf(i.id)} onChange={(e) => moveTo(i.id, e.target.value)} aria-label={t("Groupe")} title={t("Groupe")}>
-                        <option value="">{t("Sans groupe")}</option>
-                        {groups.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
-                      <PinBtn id={i.id} />
-                      {i.ev ? (
-                        <button className="btn sm" data-act="evEdit" data-id={i.id} title={t("Packs de ressources et shaders de l'événement")}>
-                          {t("Modifier")}
-                        </button>
-                      ) : null}
-                      <button className="ib" data-act="instEdit" data-id={i.id} aria-label={`Réglages de ${i.n}`} title={t("Réglages (nom, version, loader, RAM, icône, fond)")}>
-                        ⚙
-                      </button>
-                      {i.mp ? (
-                        <button className="ib" data-act="mpEdit" data-id={i.id} aria-label={`Modifier les mods de ${i.n}`} title={t("Modifier les mods (Découvrir)")}>
-                          ✎
-                        </button>
-                      ) : null}
-                      <button className="ib" data-act="del" data-id={i.id} aria-label={`Supprimer ${i.n}`} title={t("Supprimer (corbeille)")}>
-                        🗑
-                      </button>
-                      <button className="btn sm pri" data-play={i.id}>
-                        {t("Jouer")}
-                      </button>
-                    </span>
-                  </td>
-                </tr>
-  );
+  const toggleOpen = (gid: string) =>
+    setClosed((c) => {
+      const n = new Set(c);
+      if (n.has(gid)) n.delete(gid);
+      else n.add(gid);
+      return n;
+    });
 
+  // glisser une carte sur un groupe pour l'y ranger
+  const drag = useRef<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const dropProps = (gid: string) => ({
+    onDragOver: (e: DragEvent) => {
+      if (!drag.current) return;
+      e.preventDefault();
+      if (over !== gid) setOver(gid);
+    },
+    onDragLeave: () => setOver((o) => (o === gid ? null : o)),
+    onDrop: (e: DragEvent) => {
+      if (!drag.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      moveTo(drag.current, gid);
+      drag.current = null;
+      setOver(null);
+    },
+  });
+
+  const card = (x: Inst) => {
+    const inactive = groups.some((g) => g.id === INACTIVE_ID && g.ids.includes(x.id));
+    return (
+      <div
+        key={x.id}
+        className="icard2"
+        data-a={`inst-${x.id}`}
+        draggable="true"
+        onDragStart={(e) => {
+          drag.current = x.id;
+          try {
+            e.dataTransfer.setData("text/plain", x.n);
+            e.dataTransfer.effectAllowed = "move";
+          } catch {
+            // glisser indisponible
+          }
+        }}
+        onDragEnd={() => {
+          drag.current = null;
+          setOver(null);
+        }}
+      >
+        <button className="cover ic2-cover" style={coverOf(x, imgs)} data-act="openInst" data-id={x.id} aria-label={`${t("Ouvrir la page de l'instance")} ${x.n}`}>
+          <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={48} className="on-cover" />
+          <span className="src ic2-src" style={{ "--sc": SC[x.s] ?? "var(--acc)" } as Css}>
+            {x.ev ? t("Événement") : x.s}
+          </span>
+        </button>
+        <button className="star ic2-star" data-act="fav" data-id={x.id} aria-pressed={x.fav ? "true" : "false"} aria-label={t("Favori")} title={t("Favori")}>
+          ★
+        </button>
+        <div className="ic2-body">
+          <b title={x.n}>{x.n}</b>
+          <small>{`${[x.l, x.lv].filter(Boolean).join(" ")} · ${x.v || "?"}${x.r ? ` · ${x.r} Go` : ""}`}</small>
+          <small className="faint">{x.last ? `${t("Lancée")} ${ago(x.last)}` : t("Jamais lancée")}</small>
+        </div>
+        <div className="ic2-acts">
+          <button className="btn sm pri" data-play={x.id}>
+            <Ic n="play" />
+            {t("Jouer")}
+          </button>
+          <PinBtn id={x.id} />
+          <button className="ib" data-act="inactive" data-id={x.id} aria-pressed={inactive ? "true" : "false"} title={inactive ? t("Sortir des inactives") : t("Ranger comme inactive")} aria-label={inactive ? t("Sortir des inactives") : t("Ranger comme inactive")}>
+            {inactive ? "↺" : "⏾"}
+          </button>
+          <button className="ib" data-act="instEdit" data-id={x.id} aria-label={`${t("Réglages")} ${x.n}`} title={t("Réglages (nom, version, loader, RAM, icône, fond)")}>
+            ⚙
+          </button>
+          <Menu items={instMenu(x, groups, (gid) => moveTo(x.id, gid), inactive)} />
+        </div>
+      </div>
+    );
+  };
+
+  const section = (gid: string, name: string, items: Inst[], opts: { fixed?: boolean; hint?: string } = {}) => {
+    const open = !closed.has(gid);
+    return (
+      <div key={gid} className={`igrp${over === gid ? " dropon" : ""}`} {...dropProps(gid)} data-a={`igrp-${gid}`}>
+        <div className="igrp-head">
+          <button className="ib" aria-expanded={open ? "true" : "false"} aria-label={open ? t("Replier") : t("Déplier")} onClick={() => toggleOpen(gid)}>
+            {open ? "▾" : "▸"}
+          </button>
+          {renaming === gid ? (
+            <input
+              autoFocus
+              type="text"
+              maxLength={40}
+              defaultValue={name}
+              aria-label={t("Nom du groupe")}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v) setGroups((gs) => gs.map((x) => (x.id === gid ? { ...x, name: v.slice(0, 40) } : x)));
+                setRenaming(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setRenaming(null);
+                }
+              }}
+            />
+          ) : (
+            <b onDoubleClick={() => !opts.fixed && setRenaming(gid)}>{t(name)}</b>
+          )}
+          <small className="faint">{`${items.length}`}</small>
+          <span style={{ flex: 1 }}></span>
+          {opts.fixed ? null : (
+            <Menu
+              items={[
+                { label: "Renommer", onClick: () => setRenaming(gid) },
+                { label: "Supprimer le groupe (les instances restent)", onClick: () => setGroups((gs) => gs.filter((x) => x.id !== gid)), danger: true },
+              ]}
+            />
+          )}
+        </div>
+        {open ? (
+          items.length ? (
+            <div className="icards">{items.map(card)}</div>
+          ) : (
+            <div className="igrp-empty faint">{t(opts.hint ?? "Groupe vide : glisse une carte ici, ou utilise le menu ⋯ d'une instance.")}</div>
+          )
+        ) : null}
+      </div>
+    );
+  };
+
+  const inGroup = (id: string) => groups.some((g) => g.ids.includes(id));
+  const ungrouped = rows.filter((r) => !inGroup(r.id));
+  const userGroups = groups.filter((g) => g.id !== INACTIVE_ID);
+  const ina = groups.find((g) => g.id === INACTIVE_ID);
   const del = ui.delId ? byId(ui.delId) : undefined;
   const noRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (ui.delId) noRef.current?.focus();
   }, [ui.delId]);
+  const nPins = pinCount(nav);
   return (
     <>
       <div className="vhead">
@@ -219,15 +333,23 @@ export function Wecraft() {
       <div className="qa">
         <button className="btn" data-act="create">
           <Ic n="create" />
-          {t("Créer un WePack")}<small>{t("Nouvelle instance personnalisée")}</small>
+          {t("Créer un WePack")}
+          <small>{t("Nouvelle instance personnalisée")}</small>
         </button>
         <button className="btn" data-act="import">
           <Ic n="import" />
-          {t("Importer une instance")}<small>Prism, CurseForge, Modrinth</small>
+          {t("Importer une instance")}
+          <small>Prism, CurseForge, Modrinth</small>
         </button>
         <button className="btn" data-go="discover">
           <Ic n="discover" />
-          {t("Parcourir les modpacks")}<small>{t("Catalogue de contenus")}</small>
+          {t("Parcourir les modpacks")}
+          <small>{t("Catalogue de contenus")}</small>
+        </button>
+        <button className="btn" data-go="pins">
+          <Ic n="pins" />
+          {t("Instances épinglées")}
+          <small>{nPins ? `${nPins} ${t("épinglée(s) · groupes")}` : t("Aucune pour l'instant")}</small>
         </button>
       </div>
       <div className="sect">
@@ -240,9 +362,9 @@ export function Wecraft() {
           )}
           {recent.map((x) => (
             <div key={x.id} className="wcard" data-a={`wrec-${x.id}`}>
-              <div className="cover" style={coverOf(x, pref.imgs !== false)}>
+              <button className="cover" style={coverOf(x, imgs)} data-act="openInst" data-id={x.id} aria-label={`${t("Ouvrir la page de l'instance")} ${x.n}`}>
                 <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={44} className="on-cover" />
-              </div>
+              </button>
               <b>{x.n}</b>
               <small>{`${x.l} · ${x.v} · ${ago(x.last)}`}</small>
               <span className="row">
@@ -262,12 +384,28 @@ export function Wecraft() {
           <div className="chips" id="wcSrc">
             {SRC_CHIPS.map((s) => (
               <button key={s} className="chip" data-src={s} aria-pressed={ui.wcSrc === s ? "true" : "false"} onClick={() => setUi({ wcSrc: s })}>
-                {s === "all" ? "Toutes" : s}
+                {s === "all" ? t("Toutes") : s}
               </button>
             ))}
           </div>
           {newGroup !== null ? (
-            <input autoFocus type="text" maxLength={40} placeholder={t("Nom du groupe")} aria-label={t("Nom du groupe")} value={newGroup} onChange={(e) => setNewGroup(e.target.value)} onBlur={() => createGroup(newGroup)} onKeyDown={(e) => { if (e.key === "Enter") createGroup(newGroup); if (e.key === "Escape") { e.stopPropagation(); setNewGroup(null); } }} />
+            <input
+              autoFocus
+              type="text"
+              maxLength={40}
+              placeholder={t("Nom du groupe")}
+              aria-label={t("Nom du groupe")}
+              value={newGroup}
+              onChange={(e) => setNewGroup(e.target.value)}
+              onBlur={() => createGroup(newGroup)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") createGroup(newGroup);
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setNewGroup(null);
+                }
+              }}
+            />
           ) : (
             <button className="btn sm" onClick={() => setNewGroup("")}>
               {t("+ Nouveau groupe")}
@@ -275,80 +413,15 @@ export function Wecraft() {
           )}
           <input type="search" id="wcQ" placeholder={t("Rechercher une instance")} aria-label={t("Rechercher une instance")} value={ui.wcQ} onChange={(e) => setUi({ wcQ: e.target.value })} />
         </div>
-        <div className="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th></th>
-                <th>{t("Instance")}</th>
-                <th>{t("Version")}</th>
-                <th>{t("Loader")}</th>
-                <th>{t("Mods")}</th>
-                <th>{t("Mémoire")}</th>
-                <th>{t("Source")}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="wcRows">
-              {groups.map((g) => {
-                const items = rows.filter((r) => g.ids.includes(r.id));
-                if (q && !items.length) return null;
-                const open = !closed.has(g.id);
-                return [
-                  <tr key={`g-${g.id}`} className="grp-row">
-                    <td colSpan={8}>
-                      <span className="row grp-head">
-                        <button className="ib" aria-expanded={open ? "true" : "false"} aria-label={open ? t("Replier") : t("Déplier")} onClick={() => setClosed((c) => { const n = new Set(c); if (n.has(g.id)) n.delete(g.id); else n.add(g.id); return n; })}>
-                          {open ? "▾" : "▸"}
-                        </button>
-                        {renaming === g.id ? (
-                          <input autoFocus type="text" maxLength={40} defaultValue={g.name} aria-label={t("Nom du groupe")} onBlur={(e) => { const v = e.target.value.trim(); if (v) setGroups((gs) => gs.map((x) => (x.id === g.id ? { ...x, name: v.slice(0, 40) } : x))); setRenaming(null); }} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { e.stopPropagation(); setRenaming(null); } }} />
-                        ) : (
-                          <b>{g.name}</b>
-                        )}
-                        <small className="faint">{`${items.length} instance${items.length > 1 ? "s" : ""}`}</small>
-                        <span style={{ flex: 1 }}></span>
-                        <button className="btn sm" onClick={() => setRenaming(g.id)}>{t("Renommer")}</button>
-                        <button className="btn sm" title={t("Les instances reviennent dans « Sans groupe » (rien n'est supprimé)")} onClick={() => setGroups((gs) => gs.filter((x) => x.id !== g.id))}>{t("Supprimer le groupe")}</button>
-                      </span>
-                    </td>
-                  </tr>,
-                  ...(open ? items.map((i) => rowOf(i)) : []),
-                  open && !items.length ? (
-                    <tr key={`ge-${g.id}`}>
-                      <td colSpan={8} className="faint">{t("Groupe vide : choisis-le dans la liste « Groupe » d'une instance.")}</td>
-                    </tr>
-                  ) : null,
-                ];
-              })}
-              {groups.length && ungrouped.length ? (
-                <tr className="grp-row">
-                  <td colSpan={8}>
-                    <span className="row grp-head">
-                      <b>{t("Sans groupe")}</b>
-                      <small className="faint">{`${ungrouped.length}`}</small>
-                    </span>
-                  </td>
-                </tr>
-              ) : null}
-              {ungrouped.map((i) => rowOf(i))}
-              {rows.length ? null : (
-                <tr>
-                  <td colSpan={8} className="faint">
-                    {inst.length ? "Aucune instance ne correspond." : "Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism)."}
-                  </td>
-                </tr>
-              )}
-              {hidden ? (
-                <tr>
-                  <td colSpan={8} className="faint">
-                    {`${hidden} instance${hidden > 1 ? "s masquées" : " masquée"} (réglage de WeCraft).`}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        {userGroups.map((g) => {
+          const items = rows.filter((r) => g.ids.includes(r.id));
+          if (q && !items.length) return null;
+          return section(g.id, g.name, items);
+        })}
+        {userGroups.length || ina ? section("", "Sans groupe", ungrouped, { fixed: true, hint: "Aucune instance hors des groupes." }) : ungrouped.length ? <div className="icards">{ungrouped.map(card)}</div> : null}
+        {ina ? section(INACTIVE_ID, "Inactives", rows.filter((r) => ina.ids.includes(r.id)), { fixed: true, hint: "Aucune instance inactive." }) : null}
+        {rows.length ? null : <div className="empty">{inst.length ? t("Aucune instance ne correspond.") : t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}</div>}
+        {hidden ? <p className="faint" style={{ fontSize: "12.5px" }}>{`${hidden} instance${hidden > 1 ? "s masquées" : " masquée"} (réglage de WeCraft).`}</p> : null}
         <div className="confirm gl" id="delBox" hidden={!del}>
           <span style={{ fontSize: "13.5px" }}>
             {t("Supprimer")} <b id="delName">{del?.n ?? ""}</b> ? Le dossier et tout son contenu (mods, mondes, captures) partent à la corbeille de Windows.
@@ -369,23 +442,30 @@ export function Wecraft() {
 }
 
 export function Favorites() {
-  const { inst, pref } = useApp();
+  const { inst, pref, nav } = useApp();
+  const imgs = bgFmtOf(pref) !== "off";
   const f = inst.filter((x) => x.fav);
+  const nPins = pinCount(nav);
   return (
     <>
       <div className="vhead">
         <div>
           <h2>{t("Favoris")}</h2>
-          <div className="sub">{`${f.length} instances et serveurs épinglés`}</div>
+          <div className="sub">{`${f.length} instance${f.length > 1 ? "s" : ""} en favori`}</div>
+          <button className="btn sm vhead-link" data-go="pins">
+            <Ic n="pins" />
+            {t("Instances épinglées")}
+            {nPins ? <span className="cntb">{nPins}</span> : null}
+          </button>
         </div>
       </div>
       {f.length ? (
         <div className="favgrid">
           {f.map((x) => (
             <div key={x.id} className="favc" data-a={`favc-${x.id}`}>
-              <div className="cover" style={coverOf(x, pref.imgs !== false)}>
+              <button className="cover" style={coverOf(x, imgs)} data-act="openInst" data-id={x.id} aria-label={`${t("Ouvrir la page de l'instance")} ${x.n}`}>
                 <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={44} className="on-cover" />
-              </div>
+              </button>
               <span className="row">
                 <b>{x.n}</b>
                 <button className="star" data-act="fav" data-id={x.id} aria-pressed="true" aria-label={t("Retirer des favoris")}>
@@ -404,8 +484,106 @@ export function Favorites() {
           ))}
         </div>
       ) : (
-        <div className="empty">{t("Aucun favori. Clique sur l'étoile d'une instance dans WeCraft pour l'épingler.")}</div>
+        <div className="empty">{t("Aucun favori. Clique sur l'étoile d'une instance dans WeCraft pour l'ajouter.")}</div>
       )}
+    </>
+  );
+}
+
+/**
+ * Instances épinglées : liste complète, groupes (glisser une instance sur une autre), ajout et retrait.
+ * Ouverte depuis WeCraft, Favoris, ou en double-cliquant sur la barre séparée des épingles.
+ */
+export function PinsPage() {
+  const { nav, inst, byId, editNav } = useApp();
+  const n = pinCount(nav);
+  const where = { inline: "dans la barre principale", section: "dans une section de la barre", dock: "dans une barre séparée" }[nav.pinMode];
+  const tile = (id: string) => {
+    const x = byId(id);
+    if (!x) return null;
+    return (
+      <div key={id} className="ptile2" draggable="true" data-pin-drag={`i:${id}`} data-pin-drop={`i:${id}`} data-a={`pt-${id}`}>
+        <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={44} />
+        <span className="ptile2-txt">
+          <b>{x.n}</b>
+          <small className="faint">{`${x.l} · ${x.v || "?"}`}</small>
+        </span>
+        <button className="btn sm pri" data-play={id}>
+          {t("Jouer")}
+        </button>
+        <button className="ib" data-act="pin" data-id={id} aria-label={`${t("Retirer")} ${x.n}`} title={t("Retirer des épingles")}>
+          ✕
+        </button>
+      </div>
+    );
+  };
+  return (
+    <>
+      <div className="vhead">
+        <div>
+          <h2>{t("Instances épinglées")}</h2>
+          <div className="sub">{`${n} épinglée${n > 1 ? "s" : ""} · ${t("affichées")} ${t(where)}`}</div>
+          <button className="btn sm vhead-link" data-go="settings" data-set="nav">
+            <Ic n="settings" />
+            {t("Emplacement dans les barres")}
+          </button>
+        </div>
+      </div>
+      <p className="muted" style={{ fontSize: "13px", margin: "0 0 12px" }}>
+        {t("Glisse une instance sur une autre pour créer un groupe (ici, dans la barre principale ou dans la barre séparée). Glisse-la dans la zone vide pour la sortir d'un groupe ou la mettre à la fin.")}
+      </p>
+      <div className="pins2" data-pin-zone="1">
+        {nav.pins.map((p) =>
+          p.t === "i" ? (
+            tile(p.id)
+          ) : (
+            <div key={p.id} className="pgrp2" draggable="true" data-pin-drag={`g:${p.id}`} data-pin-drop={`g:${p.id}`} data-a={`pg-${p.id}`}>
+              <div className="pgrp2-head">
+                <span className="gmini">
+                  <Minis g={p} byId={byId} />
+                </span>
+                <input
+                  type="text"
+                  value={p.name}
+                  maxLength={40}
+                  aria-label={t("Nom du groupe")}
+                  draggable="false"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    editNav((nv) => {
+                      const g = nv.pins.find((q) => q.t === "g" && q.id === p.id);
+                      if (g && g.t === "g") g.name = v.trim() || "Groupe";
+                    });
+                  }}
+                />
+                <small className="faint">{`${p.items.length}`}</small>
+                <button className="btn sm" data-act="dissolve" data-gid={p.id}>
+                  {t("Dissoudre")}
+                </button>
+              </div>
+              <div className="pgrp2-items">{p.items.map(tile)}</div>
+            </div>
+          ),
+        )}
+        {n ? null : <div className="empty">{t("Aucune instance épinglée. Utilise le bouton épingle d'une instance, ou la liste ci-dessous.")}</div>}
+      </div>
+      <div className="row" style={{ justifyContent: "flex-start", marginTop: "12px" }}>
+        <select
+          aria-label={t("Épingler une instance")}
+          value=""
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v) editNav((nv) => void nv.pins.push({ t: "i", id: v }), { pins: true });
+          }}
+        >
+          <option value="">{t("+ Épingler une instance…")}</option>
+          {orderInstances(inst.filter((p) => !isPinned(nav, p.id))).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.n}
+            </option>
+          ))}
+        </select>
+      </div>
     </>
   );
 }

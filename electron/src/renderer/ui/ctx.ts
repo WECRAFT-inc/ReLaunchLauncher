@@ -1,7 +1,7 @@
 // État partagé de l'interface (lot E6).
 import { createContext, useContext } from "react";
 import type { ModpackEditInfo, ModpackRoot } from "../../shared/api";
-import type { Car, HomePref, Inst, NavConfig, Pref, View } from "./model";
+import type { Car, HomePref, Inst, InstGroup, NavConfig, Pref, View } from "./model";
 
 /** Modpack en préparation dans Découvrir (lot E7) : création, ou modification d'un WePack existant. */
 export interface MpDraft {
@@ -35,6 +35,9 @@ export interface Ui {
   /** Découvrir : recherche et onglet demandés en ouvrant la page (fenêtre « Créer un WePack »). */
   dq: string;
   dtab: string;
+  /** Page d'une instance : identifiant et onglet. */
+  page: string | null;
+  itab: string;
 }
 
 export interface AppCtx {
@@ -75,6 +78,12 @@ export interface AppCtx {
   refreshInstances: () => void;
   /** Statut Discord activé (réglage partagé avec la version Python). */
   discordOn: boolean;
+  /** Groupes d'instances de la page WeCraft (affichage seulement). */
+  groups: InstGroup[];
+  setGroups: (fn: (g: InstGroup[]) => InstGroup[]) => void;
+  /** Range l'instance dans « Inactives » (groupe créé s'il n'existe pas) ou l'en sort. */
+  toggleInactive: (id: string) => void;
+  openInstance: (id: string, tab?: string) => void;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);

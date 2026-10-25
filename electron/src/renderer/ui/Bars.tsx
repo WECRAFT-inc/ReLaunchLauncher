@@ -1,14 +1,21 @@
 // Barres de navigation (port de renderBars, navBtn, pinsHTML… du prototype). Même balisage, mêmes règles.
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { LOGO } from "./icons";
-import { barSize, dockSide, initials, NAVINFO, pinCount, profPlace, SKINS, type Inst, type NavConfig, type Pin, type Side, type Skin } from "./model";
+import { barSize, dockSide, NAVINFO, pinCount, profPlace, SKINS, type Inst, type NavConfig, type Pin, type Side, type Skin } from "./model";
 import { t } from "./i18n";
-import { coverVars, IconFace } from "./symbols";
+import { coverVars, IconFace, InstIcon } from "./symbols";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 type Piece = { kind: "sep" | "spacer" | "el"; key: string; node: ReactNode };
+/** Entrée ou Espace sur un faux bouton = clic (accessibilité clavier). */
+const keyClick = (e: KeyboardEvent<HTMLElement>) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    e.currentTarget.click();
+  }
+};
 
 export function Head({ skin, size }: { skin: Skin; size: number }) {
   const st: Css = { "--s": `${size}px`, "--sk": skin.sk, "--hair": skin.hair, "--eye": skin.eye };
@@ -34,9 +41,10 @@ export function Minis({ g, byId }: { g: Extract<Pin, { t: "g" }>; byId: (id: str
         .map((x, k) => {
           const pos = xs.length - 1 - k;
           const st: Css = coverVars(x);
+          // mêmes icônes que les instances (image, symbole ou initiales)
           return (
             <i key={pos} className={`l${pos}`} style={st}>
-              {pos === 0 ? <span>{initials(g.name) || "G"}</span> : null}
+              <IconFace x={x} size={22} />
             </i>
           );
         })}
@@ -131,17 +139,18 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
   const pinItem = (id: string): ReactNode => {
     const x = byId(id);
     if (!x) return null;
-    const st: Css = coverVars(x);
+    // exactement la même icône que dans les listes d'instances (InstIcon), à la taille du bouton
     return (
-      <button key={k(`pin-${id}`)} className="nb rec" draggable="true" data-pin-drag={`i:${id}`} data-pin-drop={`i:${id}`} data-play={id} data-a={`pin-${id}`} data-tip={`Lancer ${x.n}`} aria-label={`Lancer ${x.n}`} style={st}>
-        <IconFace x={x} size={Math.round(BS.b * 0.9)} />
-      </button>
+      // <div role="button"> : Chromium ne commence jamais un glisser-déposer depuis un <button>
+      <div key={k(`pin-${id}`)} role="button" tabIndex={0} onKeyDown={keyClick} className="nb rec pinico" draggable="true" data-pin-drag={`i:${id}`} data-pin-drop={`i:${id}`} data-play={id} data-a={`pin-${id}`} data-tip={`${t("Lancer")} ${x.n} · ${t("glisser sur une autre pour grouper")}`} aria-label={`${t("Lancer")} ${x.n}`}>
+        <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={BS.b} />
+      </div>
     );
   };
   const grpBtn = (g: Extract<Pin, { t: "g" }>) => (
-    <button key={k(`pgrp-${g.id}`)} className="nb grp" draggable="true" data-pin-drag={`g:${g.id}`} data-pin-drop={`g:${g.id}`} data-act="openGroup" data-gid={g.id} data-popbtn="1" data-a={`pgrp-${g.id}`} data-tip={`${g.name} · ${g.items.length}`} aria-label={`Groupe ${g.name}`}>
+    <div key={k(`pgrp-${g.id}`)} role="button" tabIndex={0} onKeyDown={keyClick} className="nb grp" draggable="true" data-pin-drag={`g:${g.id}`} data-pin-drop={`g:${g.id}`} data-act="openGroup" data-gid={g.id} data-popbtn="1" data-a={`pgrp-${g.id}`} data-tip={`${g.name} · ${g.items.length}`} aria-label={`Groupe ${g.name}`}>
       <Minis g={g} byId={byId} />
-    </button>
+    </div>
   );
   const pins = (): Piece[] => nav.pins.map((p) => ({ kind: "el" as const, key: k("p"), node: p.t === "i" ? pinItem(p.id) : grpBtn(p) })).filter((p) => p.node !== null);
 
@@ -290,7 +299,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
     ds = dockSide(nav as NavConfig);
     const dh = ds === "top" || ds === "bottom" ? "h" : "v";
     html.push(
-      <div key="dock" className={`dock ${dh} s-${ds} a-${nav.dock.align}`} data-a="pin-dock" data-name="Épingles" data-pin-zone="1">
+      <div key="dock" className={`dock ${dh} s-${ds} a-${nav.dock.align}`} data-a="pin-dock" data-name="Épingles" data-pin-zone="1" title={t("Double-clic : gérer les instances épinglées")} onDoubleClick={(e) => !(e.target as HTMLElement).closest("[data-play],[data-act]") && app.show("pins")}>
         {pinCount(nav) ? pins().map((p) => p.node) : <span className="dockhint">{t("Épingle une instance pour la voir ici")}</span>}
       </div>,
     );

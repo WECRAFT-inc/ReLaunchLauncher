@@ -24,6 +24,14 @@ const LOADER_VERSIONS = "instances:loader-versions";
 const EDIT_INSTANCE = "instances:edit";
 const SET_ICON = "instances:set-icon";
 const SCREENSHOTS = "instances:screenshots";
+const WORLDS = "instances:worlds";
+const FILES = "instances:files";
+const OPEN_FOLDER = "instances:open-folder";
+const GAME_LOG = "instances:game-log";
+const CONTENT_LIST = "content:list";
+const CONTENT_DETAILS = "content:details";
+const CONTENT_TOGGLE = "content:toggle";
+const CONTENT_REMOVE = "content:remove";
 const SET_BACKGROUND = "instances:set-background";
 const IMPORT_ICON = "media:import-icon";
 const LOGS_READ = "logs:read";
@@ -78,6 +86,16 @@ const api: WeCraftApi = Object.freeze({
     setIcon: (id: string, icon: unknown) => ipcRenderer.invoke(SET_ICON, id, icon),
     screenshots: (id: string) => ipcRenderer.invoke(SCREENSHOTS, id),
     setBackground: (id: string, how: string, token?: string) => ipcRenderer.invoke(SET_BACKGROUND, id, how, token ?? null),
+    worlds: (id: string) => ipcRenderer.invoke(WORLDS, id),
+    files: (id: string) => ipcRenderer.invoke(FILES, id),
+    openFolder: (id: string, sub?: string) => ipcRenderer.invoke(OPEN_FOLDER, id, sub ?? ""),
+    gameLog: (id: string) => ipcRenderer.invoke(GAME_LOG, id),
+  }),
+  content: Object.freeze({
+    list: (id: string) => ipcRenderer.invoke(CONTENT_LIST, id),
+    details: (id: string) => ipcRenderer.invoke(CONTENT_DETAILS, id),
+    toggle: (id: string, kind: string, file: string, on: boolean) => ipcRenderer.invoke(CONTENT_TOGGLE, id, kind, file, on === true),
+    remove: (id: string, kind: string, file: string) => ipcRenderer.invoke(CONTENT_REMOVE, id, kind, file),
   }),
   events: Object.freeze({
     info: (id: string) => ipcRenderer.invoke(EVENT_INFO, id),
