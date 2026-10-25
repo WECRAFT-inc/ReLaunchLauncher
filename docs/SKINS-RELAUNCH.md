@@ -119,7 +119,7 @@ Une valeur invalide fait refuser **tout le skin**, avec un message qui dit laque
 - **Retrait du fichier.** `DELETE /admin/launcher-skins/{id}/file` retire le fichier publié. Le fichier lui-même se supprime ensuite depuis « Stockage ».
 - **Fichier dans la réponse publique.** `GET /launcher/bootstrap` → `skins[]` contient `"file": { "id", "sha256", "size", "version" }`, ou `null`. Le fichier se télécharge par `GET /launcher/assets/{id}`, et sa signature par `?signature=1` (base64).
 - **Fiche protégée.** Enregistrer la fiche du skin depuis le panel ne peut pas écraser `file`.
-- **Propriété des skins (reste à faire).** Pour les skins « à débloquer », il faut un endpoint authentifié qui dise quels skins le joueur possède, donc des comptes ReLink connectés au launcher. En attendant, ReLaunch n'installe que les skins **sans condition d'obtention** et qui ont un fichier.
+- **Propriété des skins (fait).** `GET /launcher/me`, avec la session ReLink du joueur, renvoie `launcherSkins` : les skins offerts depuis le panel (« Offrir un skin »). Le launcher laisse installer un skin à débloquer seulement s'il en fait partie. Le lien avec les achats de la boutique et les succès reste à brancher : il faudra qu'ils créent aussi une attribution.
 
 Côté launcher, la **clé publique** `RELAUNCH_SIGNING_PUBLIC_KEY` est épinglée dans `electron/src/main/skins/skins.ts` (`RELINK_SIGNING_PUBLIC_KEY` = `MgGSWwwFZQsyGY0oVhUUcuKOOnlAjvg6HMZ7r/FUB7c=`). Changer de clé demande donc une nouvelle version du launcher.
 
