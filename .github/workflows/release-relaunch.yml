@@ -97,7 +97,6 @@ jobs:
     environment: signature-release
     env:
       VERSION: ${{ needs.compilation.outputs.version }}
-      OUT: ${{ runner.temp }}/out
     steps:
       # Artefact téléchargé HORS du dossier de travail et AVANT le checkout : le checkout (clean) remet ensuite
       # les fichiers du dépôt dans leur état exact, même si l'archive avait tenté d'en écraser un.
@@ -115,9 +114,9 @@ jobs:
         shell: bash
         run: |
           NAME="ReLaunch-Setup-$VERSION.exe"
-          [ "$(ls "$OUT" | sort | tr '\n' ' ')" = "$NAME $NAME.sha256 " ] || { echo "Fichiers inattendus : $(ls "$OUT")"; exit 1; }
-          GOT=$(sha256sum "$OUT/$NAME" | cut -c1-64)
-          WANT=$(head -c 64 "$OUT/$NAME.sha256")
+          [ "$(ls "$RUNNER_TEMP/out" | sort | tr '\n' ' ')" = "$NAME $NAME.sha256 " ] || { echo "Fichiers inattendus : $(ls "$RUNNER_TEMP/out")"; exit 1; }
+          GOT=$(sha256sum "$RUNNER_TEMP/out/$NAME" | cut -c1-64)
+          WANT=$(head -c 64 "$RUNNER_TEMP/out/$NAME.sha256")
           [ "$GOT" = "$WANT" ] || { echo "Empreinte différente de celle de la compilation"; exit 1; }
           echo "NAME=$NAME" >> "$GITHUB_ENV"
 
@@ -132,13 +131,13 @@ jobs:
         shell: bash
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        run: node tools/sign_release_node.mjs sign "$OUT/$NAME" "$VERSION" > "$OUT/$NAME.sig"
+        run: node tools/sign_release_node.mjs sign "$RUNNER_TEMP/out/$NAME" "$VERSION" > "$RUNNER_TEMP/out/$NAME.sig"
 
       - name: Contrôle de la signature (clé publique de ReLaunch)
         shell: bash
         run: |
           PUB=$(sed -n 's/^export const UPDATE_PUBLIC_KEY = "\([^"]*\)";.*/\1/p' electron/src/main/update/signature.ts)
-          node tools/sign_release_node.mjs verify "$OUT/$NAME" "$VERSION" "$OUT/$NAME.sig" "$PUB"
+          node tools/sign_release_node.mjs verify "$RUNNER_TEMP/out/$NAME" "$VERSION" "$RUNNER_TEMP/out/$NAME.sig" "$PUB"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -210,9 +209,9 @@ jobs:
         run: |
           NAME="ReLaunch-Setup-$VERSION.exe"
           OUT="$RUNNER_TEMP/out"
-          [ "$(sha256sum "$OUT/$NAME" | cut -c1-64)" = "$(head -c 64 "$OUT/$NAME.sha256")" ] || { echo "Empreinte différente"; exit 1; }
+          [ "$(sha256sum "$RUNNER_TEMP/out/$NAME" | cut -c1-64)" = "$(head -c 64 "$RUNNER_TEMP/out/$NAME.sha256")" ] || { echo "Empreinte différente"; exit 1; }
           PUB=$(sed -n 's/^export const UPDATE_PUBLIC_KEY = "\([^"]*\)";.*/\1/p' electron/src/main/update/signature.ts)
-          node tools/sign_release_node.mjs verify "$OUT/$NAME" "$VERSION" "$OUT/$NAME.sig" "$PUB"
+          node tools/sign_release_node.mjs verify "$RUNNER_TEMP/out/$NAME" "$VERSION" "$RUNNER_TEMP/out/$NAME.sig" "$PUB"
           rm -rf out && cp -r "$OUT" out
 
       # Dépôt public : BROUILLON, sans « prerelease » (une prerelease n'est jamais proposée par /releases/latest).
