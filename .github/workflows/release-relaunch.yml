@@ -8,13 +8,15 @@ name: Release ReLaunch
 # ni ReLaunch ne voient un brouillon (elles lisent /releases/latest). La publier à la main sur GitHub la propose
 # à TOUS les utilisateurs de WeCraft (version Python comprise : passage Python -> ReLaunch).
 #
-# Sécurité de la chaîne de publication (mêmes règles que release.yml) :
-# - le nom du tag n'est jamais inséré directement dans un script (variables d'environnement) ;
-# - typecheck et tests doivent réussir avant la compilation ;
-# - la clé privée UPDATE_SIGNING_KEY n'est donnée qu'à l'étape « Signature » (npm et ses dépendances ne la
-#   voient jamais) ; la signature est vérifiée avec la clé PUBLIQUE de la version Python ET de ReLaunch ;
-# - une release déjà publiée n'est jamais modifiée.
-# À FAIRE : épingler chaque action sur son SHA de commit complet (comme pour release.yml).
+# Sécurité de la chaîne (4 jobs, chacun sur une machine neuve) :
+# 1. « compilation » : npm ci, typecheck, tests, installeur. AUCUN secret.
+# 2. « signature » : reçoit la clé privée UPDATE_SIGNING_KEY. N'installe RIEN (ni npm, ni pip) : la signature est
+#    faite par le module crypto intégré à Node (tools/sign_release_node.mjs). Environnement GitHub
+#    « signature-release » : y mettre le secret et une validation manuelle obligatoire (voir docs).
+# 3. « verification » : refait le contrôle avec l'outil Python (pip) et vérifie que les clés publiques de la
+#    version Python et de ReLaunch sont identiques. AUCUN secret.
+# 4. « brouillon » : reçoit seulement RELEASES_TOKEN, n'installe rien, ne modifie jamais une release publiée.
+# Le nom du tag n'est jamais inséré directement dans un script ; actions épinglées sur leur SHA de commit.
 on:
   push:
     tags: ["relaunch-v*"]
@@ -23,34 +25,34 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  compilation:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
     env:
       TAG: ${{ github.ref_name }}
-      HAS_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Vérification du nom du tag et de la version
+        id: tag
         shell: bash
         run: |
           if [[ ! "$TAG" =~ ^relaunch-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
             echo "Nom de tag refusé : $TAG (attendu : relaunch-v2.0.0 ou relaunch-v2.0.0-rc.1)"; exit 1
           fi
           VERSION="${TAG#relaunch-v}"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           # La version doit être plus récente que la version Python, sinon personne ne la recevrait.
-          VERSION="$VERSION" python -c "import ast,os,re,sys; t=ast.parse(open('wecraft_launcher.py',encoding='utf-8').read()); py=next(ast.literal_eval(n.value) for n in t.body if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='APP_VERSION'); k=lambda v:[int(x) for x in re.findall(r'\d+',v.split('-')[0])]; v=os.environ['VERSION']; sys.exit(0 if k(v)>k(py) else f'Version {v} pas plus récente que la version Python {py}')"
+          PY=$(sed -n 's/^APP_VERSION = "\([^"]*\)".*/\1/p' wecraft_launcher.py)
+          VERSION="$VERSION" PY="$PY" node -e "const k=v=>v.split('-')[0].split('.').map(Number);const a=k(process.env.VERSION),b=k(process.env.PY);for(let i=0;i<Math.max(a.length,b.length);i++){const d=(a[i]||0)-(b[i]||0);if(d>0)process.exit(0);if(d<0)break;}console.error('Version '+process.env.VERSION+' pas plus récente que la version Python '+process.env.PY);process.exit(1)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Dépendances (versions verrouillées)
         working-directory: electron
@@ -81,58 +83,137 @@ jobs:
           Copy-Item electron/release/ReLaunch-Setup.exe "out/$name"
           $h = (Get-FileHash "out/$name" -Algorithm SHA256).Hash.ToLower()
           "$h  $name" | Out-File "out/$name.sha256" -Encoding ascii
-          "NAME=$name" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Clé de signature présente
-        if: env.HAS_SIGNING_KEY != 'true'
-        shell: bash
-        run: |
-          echo "Le secret UPDATE_SIGNING_KEY est absent : une release non signée serait refusée."
-          exit 1
-
-      - name: Outil de signature
-        run: python -m pip install cryptography
-
-      - name: Signature
-        shell: pwsh
-        env:
-          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        run: |
-          python tools/sign_release.py sign "out/$env:NAME" "$env:VERSION" | Out-File "out/$env:NAME.sig" -Encoding ascii
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      # Les deux versions doivent accepter la signature : la version Python (passage vers ReLaunch) et ReLaunch.
-      - name: Vérification de la signature (clés Python et ReLaunch)
-        shell: pwsh
-        run: |
-          $py = python -c "import ast; t=ast.parse(open('wecraft_launcher.py',encoding='utf-8').read()); print(next(ast.literal_eval(n.value) for n in t.body if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='UPDATE_PUBLIC_KEY'))"
-          $ts = (Select-String -Path electron/src/main/update/signature.ts -Pattern 'UPDATE_PUBLIC_KEY = "([^"]+)"').Matches[0].Groups[1].Value
-          if ($py -ne $ts) { Write-Error "Clés publiques différentes entre Python et ReLaunch"; exit 1 }
-          python tools/sign_release.py verify "out/$env:NAME" "$env:VERSION" "out/$env:NAME.sig" $py
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-
-      - name: Installeur joint au run (essai direct)
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ReLaunch-${{ env.VERSION }}
+          name: installeur
           path: out/
           retention-days: 14
 
-      # Dépôt public : BROUILLON, sans « prerelease » (une prerelease n'est jamais proposée par /releases/latest,
-      # donc la publier ne servirait à rien). Le publier à la main = le proposer à tous les utilisateurs.
+  signature:
+    needs: compilation
+    runs-on: ubuntu-latest
+    environment: signature-release
+    env:
+      VERSION: ${{ needs.compilation.outputs.version }}
+    steps:
+      # Seulement les fichiers du dépôt (outil de signature, clé publique) : rien n'est installé ni exécuté d'autre.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: installeur
+          path: out
+
+      - name: Empreinte de l'installeur reçu
+        shell: bash
+        run: |
+          NAME="ReLaunch-Setup-$VERSION.exe"
+          [ "$(ls out | sort | tr '\n' ' ')" = "$NAME $NAME.sha256 " ] || { echo "Fichiers inattendus : $(ls out)"; exit 1; }
+          (cd out && sha256sum -c "$NAME.sha256")
+          echo "NAME=$NAME" >> "$GITHUB_ENV"
+
+      - name: Clé de signature présente
+        env:
+          HAS_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY != '' }}
+        shell: bash
+        run: |
+          [ "$HAS_SIGNING_KEY" = "true" ] || { echo "Le secret UPDATE_SIGNING_KEY est absent : une release non signée serait refusée."; exit 1; }
+
+      - name: Signature (module crypto de Node, aucune dépendance)
+        shell: bash
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: node tools/sign_release_node.mjs sign "out/$NAME" "$VERSION" > "out/$NAME.sig"
+
+      - name: Contrôle de la signature (clé publique de ReLaunch)
+        shell: bash
+        run: |
+          PUB=$(sed -n 's/^export const UPDATE_PUBLIC_KEY = "\([^"]*\)";.*/\1/p' electron/src/main/update/signature.ts)
+          node tools/sign_release_node.mjs verify "out/$NAME" "$VERSION" "out/$NAME.sig" "$PUB"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signature
+          path: out/*.sig
+          retention-days: 14
+
+  verification:
+    needs: [compilation, signature]
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.compilation.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: installeur
+          path: out
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signature
+          path: out
+
+      - name: Outil de vérification (aucun secret dans ce job)
+        run: python -m pip install cryptography
+
+      # Les deux versions doivent accepter la signature : la version Python (passage vers ReLaunch) et ReLaunch.
+      - name: Vérification par la version Python, clés identiques
+        shell: pwsh
+        run: |
+          $name = "ReLaunch-Setup-$env:VERSION.exe"
+          $py = python -c "import ast; t=ast.parse(open('wecraft_launcher.py',encoding='utf-8').read()); print(next(ast.literal_eval(n.value) for n in t.body if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='UPDATE_PUBLIC_KEY'))"
+          $ts = (Select-String -Path electron/src/main/update/signature.ts -Pattern 'UPDATE_PUBLIC_KEY = "([^"]+)"').Matches[0].Groups[1].Value
+          if ($py -ne $ts) { Write-Error "Clés publiques différentes entre Python et ReLaunch"; exit 1 }
+          python tools/sign_release.py verify "out/$name" "$env:VERSION" "out/$name.sig" $py
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  brouillon:
+    needs: [compilation, verification]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.compilation.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: installeur
+          path: out
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signature
+          path: out
+
+      # Dépôt public : BROUILLON, sans « prerelease » (une prerelease n'est jamais proposée par /releases/latest).
+      # Le publier à la main = le proposer à tous les utilisateurs.
       # RELEASES_TOKEN : jeton « fine-grained » limité au dépôt WeCraft-Releases, permission Contents: write.
       - name: Brouillon dans le dépôt public
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
+          NAME="ReLaunch-Setup-$VERSION.exe"
           RTAG="v$VERSION"
           PUB=Rexidelamort/WeCraft-Releases
           FILES="out/$NAME out/$NAME.sha256 out/$NAME.sig"
           HASH=$(cut -d' ' -f1 "out/$NAME.sha256")
           if gh release view "$RTAG" --repo "$PUB" --json isDraft --jq .isDraft >/tmp/draft 2>/dev/null; then
+            # Ne jamais modifier une release DÉJÀ PUBLIÉE (ni un brouillon de la version Python).
             if [ "$(cat /tmp/draft)" != "true" ]; then
               echo "La release $RTAG est déjà publiée dans $PUB : rien n'est modifié. Utilisez un nouveau tag."; exit 1
+            fi
+            if gh release view "$RTAG" --repo "$PUB" --json assets --jq '.assets[].name' | grep -qi '^WeCraft\.exe$'; then
+              echo "Le brouillon $RTAG contient la version Python : rien n'est modifié."; exit 1
             fi
             gh release upload "$RTAG" $FILES --repo "$PUB" --clobber
             exit 0

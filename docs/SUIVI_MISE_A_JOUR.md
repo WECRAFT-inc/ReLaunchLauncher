@@ -496,3 +496,10 @@ Corrections faites (même branche) :
 
 Workflow `release-relaunch.yml` ajouté : tag `relaunch-vX.Y.Z`, tests, installeur, signature (clé actuelle),
 vérification avec les clés Python et ReLaunch, **brouillon** sur WeCraft-Releases (jamais publié automatiquement).
+Seconde relecture : code OK ; workflow refait car la clé tournait sur la même machine que `npm ci`. Désormais
+4 jobs séparés : compilation (aucun secret) → **signature** (clé privée, n'installe RIEN : module crypto intégré
+à Node, `tools/sign_release_node.mjs`, signature identique octet pour octet à `sign_release.py`) → vérification
+par l'outil Python (aucun secret) → brouillon (seulement `RELEASES_TOKEN`). Actions épinglées sur leur SHA.
+**À faire par le développeur (réglages GitHub, impossible d'ici)** : créer l'environnement `signature-release`
+(Settings > Environments) avec validation manuelle obligatoire et y mettre `UPDATE_SIGNING_KEY` ; protéger les
+tags `relaunch-v*` (Settings > Rules). Même faiblesse probable dans `release.yml` (version Python) : à reprendre.
