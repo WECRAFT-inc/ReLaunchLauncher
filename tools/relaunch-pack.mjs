@@ -4,8 +4,11 @@
 //        --mc <version Minecraft> --loader <fabric|quilt|forge|neoforge|vanilla>[:<version>]
 //        [--name "Nom affiché"] [--event <id d'event>] [--java 21] [--out <dossier>]
 //        [--editable resourcepacks,shaderpacks,options.txt] [--shader <fichier de shaderpacks/>]
-//       Parcourt l'instance, retrouve chaque mod / pack de ressources / shader sur Modrinth par son empreinte
-//       (aucun fichier n'est envoyé, seulement les SHA-1), et met le reste (configs, fichiers absents de Modrinth)
+//        [--locked]   pack d'event verrouillé : le joueur ne peut changer que les shaders
+//        [--worker <adresse du Worker>]   pour retrouver les mods d'event hébergés (défaut : Worker ReLink)
+//       Parcourt l'instance, retrouve chaque mod / pack de ressources / shader sur Modrinth par son empreinte,
+//       puis parmi les mods d'event hébergés par le Worker (aucun fichier n'est envoyé, seulement les
+//       empreintes), et met le reste (configs, fichiers absents de Modrinth)
 //       dans une archive overrides.zip reproductible. Écrit <id>-<version>.relaunch.json (+ -overrides.zip).
 //   node tools/relaunch-pack.mjs sign <fichier>
 //       Signe les OCTETS EXACTS du fichier (Ed25519, clé RELAUNCH_SIGNING_KEY, 32 octets base64) -> <fichier>.sig
@@ -29,6 +32,7 @@ const SKIP = /(^|\/)(\.|__MACOSX|Thumbs\.db$|desktop\.ini$)|\.(log|tmp|bak|old|d
 const BLOCKED_EXT = /\.(exe|bat|cmd|ps1|vbs|msi|scr|com|lnk|dll|sys)$/i;
 const MAX_OVERRIDES = 90 * 1024 * 1024;
 const UA = "WeCraft/relaunch-pack (github.com/Rexidelamort/WeCraft-Launcher)";
+const WORKER = "https://relink-auth.refugeemeraudien-direction.workers.dev";
 
 const die = (m) => {
   console.error(`Erreur : ${m}`);
@@ -86,7 +90,7 @@ function okPath(p) {
 }
 
 /** Mêmes règles que launcherValidatePackManifest du Worker. */
-export function checkManifest(m) {
+export function checkManifest(m, workerHost = new URL(WORKER).host) {
   const err = (e) => ({ error: e });
   if (!m || m.format !== "relaunch-pack" || m.formatVersion !== 1) return err("format « relaunch-pack » et formatVersion 1 attendus");
   if (!/^[A-Za-z0-9_-]{1,80}$/.test(m.pack?.id ?? "")) return err("pack.id invalide");
@@ -106,12 +110,14 @@ export function checkManifest(m) {
     for (const u of f.downloads) {
       let url;
       try { url = new URL(u); } catch { return err(`files[${i}] : adresse invalide`); }
-      if (url.protocol !== "https:" || !HOSTS.has(url.hostname)) return err(`files[${i}] : hôte non autorisé ${url.hostname}`);
+      if (url.protocol !== "https:" || !(HOSTS.has(url.hostname) || (url.host === workerHost && /^\/launcher\/assets\/[^/]+$/.test(url.pathname)))) return err(`files[${i}] : hôte non autorisé ${url.hostname}`);
     }
     if (f.side !== undefined && !["client", "both", "server"].includes(f.side)) return err(`files[${i}].side invalide`);
   }
   if (m.remove !== undefined && (!Array.isArray(m.remove) || m.remove.some((p) => !okPath(p)))) return err("remove : chemins permis seulement");
   if (m.editable !== undefined && (!Array.isArray(m.editable) || m.editable.some((p) => !/^(resourcepacks|shaderpacks|options\.txt|config)(\/.*)?$/.test(p)))) return err("editable : resourcepacks/, shaderpacks/, options.txt ou config/");
+  if (m.pack.locked !== undefined && typeof m.pack.locked !== "boolean") return err("pack.locked doit être true ou false");
+  if (m.pack.locked === true && (m.editable ?? []).some((p) => !/^shaderpacks(\/|$)/.test(p))) return err("pack verrouillé : seuls les shaders peuvent être modifiables");
   if (m.overrides != null && (!/^[0-9a-f]{64}$/i.test(m.overrides.sha256 ?? "") || !Number.isSafeInteger(m.overrides.size) || m.overrides.size < 1 || m.overrides.size > MAX_OVERRIDES)) return err("overrides : { sha256, size } attendus (90 Mio max)");
   return { ok: true, files: m.files.length, mods: m.files.filter((f) => f.path.startsWith("mods/") && f.side !== "server").length };
 }
@@ -120,7 +126,12 @@ function args(list) {
   const o = {};
   for (let i = 0; i < list.length; i++) {
     if (!list[i].startsWith("--")) continue;
-    o[list[i].slice(2)] = list[i + 1];
+    const k = list[i].slice(2);
+    if (k === "locked") {
+      o.locked = true;
+      continue;
+    }
+    o[k] = list[i + 1];
     i++;
   }
   return o;
@@ -140,6 +151,20 @@ async function modrinthLookup(sha1s) {
   return found;
 }
 
+async function workerLookup(base, sha512s) {
+  if (!sha512s.length) return {};
+  try {
+    const res = await fetch(`${base.replace(/\/+$/, "")}/launcher/pack-files/lookup`, {
+      method: "POST", headers: { "Content-Type": "application/json", "User-Agent": UA }, body: JSON.stringify({ sha512: sha512s }),
+    });
+    if (res.ok) return (await res.json()).files ?? {};
+    console.log(`  (Worker : HTTP ${res.status}, les mods d'event iront dans overrides)`);
+  } catch (e) {
+    console.log(`  (Worker injoignable : ${e.message} ; les mods d'event iront dans overrides)`);
+  }
+  return {};
+}
+
 async function build(dir, o) {
   const root = path.resolve(dir);
   if (!o.id || !o.version || !o.mc || !o.loader) die("--id, --version, --mc et --loader sont obligatoires");
@@ -155,26 +180,35 @@ async function build(dir, o) {
   console.log(`${entries.length} fichiers, recherche de ${candidates.length} sur Modrinth…`);
   const found = candidates.length ? await modrinthLookup(candidates.map((e) => e.sha1)) : {};
   const files = [], overrides = [];
+  const left = [];
   for (const e of entries) {
     const v = found[e.sha1];
     const file = v?.files?.find((x) => x.hashes?.sha1 === e.sha1);
     if (file && file.hashes?.sha512 === e.sha512 && new URL(file.url).hostname === "cdn.modrinth.com") {
       files.push({ path: e.path, hashes: { sha512: e.sha512, sha1: e.sha1 }, size: e.data.length, downloads: [file.url], project: v.project_id, versionId: v.id });
-    } else overrides.push(e);
+    } else left.push(e);
+  }
+  const worker = o.worker ?? WORKER;
+  const hostedCandidates = left.filter((e) => RESOLVABLE.has(e.path.split("/")[0]) && /\.(jar|zip)$/i.test(e.path));
+  const hosted = await workerLookup(worker, hostedCandidates.map((e) => e.sha512));
+  for (const e of left) {
+    const h = hosted[e.sha512];
+    if (h && h.size === e.data.length && new URL(h.url).host === new URL(worker).host) files.push({ path: e.path, hashes: { sha512: e.sha512, sha1: e.sha1 }, size: e.data.length, downloads: [h.url], hosted: h.id });
+    else overrides.push(e);
   }
   const out = path.resolve(o.out ?? ".");
   mkdirSync(out, { recursive: true });
   const base = `${o.id}-${o.version}`;
   const manifest = {
     format: "relaunch-pack", formatVersion: 1,
-    pack: { id: o.id, name: o.name ?? o.id, version: o.version, ...(o.event ? { event: o.event } : {}) },
+    pack: { id: o.id, name: o.name ?? o.id, version: o.version, ...(o.event ? { event: o.event } : {}), ...(o.locked ? { locked: true } : {}) },
     minecraft: o.mc,
     loader: ltype === "vanilla" ? { type: "vanilla" } : { type: ltype, version: lver },
     ...(o.java ? { java: { major: Number(o.java) } } : {}),
     files,
     overrides: null,
     remove: [],
-    editable: o.editable ? o.editable.split(",").map((s) => s.trim()).filter(Boolean) : ["resourcepacks", "shaderpacks", "options.txt"],
+    editable: o.locked ? ["shaderpacks"] : o.editable ? o.editable.split(",").map((s) => s.trim()).filter(Boolean) : ["resourcepacks", "shaderpacks", "options.txt"],
     ...(o.shader ? { defaults: { shader: o.shader } } : {}),
   };
   if (overrides.length) {
@@ -183,11 +217,12 @@ async function build(dir, o) {
     writeFileSync(path.join(out, `${base}-overrides.zip`), buf);
     manifest.overrides = { sha256: hash("sha256", buf), size: buf.length };
   }
-  const check = checkManifest(manifest);
+  const check = checkManifest(manifest, new URL(worker).host);
   if (check.error) die(`manifeste refusé : ${check.error}`);
   const json = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   writeFileSync(path.join(out, `${base}.relaunch.json`), json);
-  console.log(`${path.join(out, `${base}.relaunch.json`)}\n  ${files.length} fichiers téléchargés depuis Modrinth, ${overrides.length} dans overrides${overrides.length ? ` (${path.join(out, `${base}-overrides.zip`)})` : ""}`);
+  const nHosted = files.filter((f) => f.hosted).length;
+  console.log(`${path.join(out, `${base}.relaunch.json`)}\n  ${files.length - nHosted} fichiers depuis Modrinth, ${nHosted} mods d'event hébergés, ${overrides.length} dans overrides${overrides.length ? ` (${path.join(out, `${base}-overrides.zip`)})` : ""}`);
   const unresolved = overrides.filter((e) => RESOLVABLE.has(e.path.split("/")[0]) && /\.(jar|zip)$/i.test(e.path));
   if (unresolved.length) console.log(`  Attention, absents de Modrinth (copiés dans overrides, vérifie que la licence permet de les redistribuer) :\n    ${unresolved.map((e) => e.path).join("\n    ")}`);
   console.log(`Ensuite : signe ${overrides.length ? "les deux fichiers" : "le manifeste"} (commande sign), puis publie-les dans le panel.`);

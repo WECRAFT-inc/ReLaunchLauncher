@@ -20,7 +20,7 @@ Les mods ne sont **jamais** hébergés par WeCraft s'ils sont sur Modrinth : le 
 {
   "format": "relaunch-pack",
   "formatVersion": 1,
-  "pack": { "id": "terres-brulees", "name": "Terres Brûlées", "version": "1.2.0", "event": "evt_terres" },
+  "pack": { "id": "terres-brulees", "name": "Terres Brûlées", "version": "1.2.0", "event": "evt_terres", "locked": true },
   "minecraft": "1.21.1",
   "loader": { "type": "fabric", "version": "0.16.9" },
   "java": { "major": 21 },
@@ -38,7 +38,7 @@ Les mods ne sont **jamais** hébergés par WeCraft s'ils sont sur Modrinth : le 
   ],
   "overrides": { "sha256": "<64 hex>", "size": 52311 },
   "remove": ["mods/ancien-mod-1.0.jar"],
-  "editable": ["resourcepacks", "shaderpacks", "options.txt"],
+  "editable": ["shaderpacks"],
   "defaults": { "shader": "ComplementaryReimagined_r5.3.zip" }
 }
 ```
@@ -49,13 +49,14 @@ Les mods ne sont **jamais** hébergés par WeCraft s'ils sont sur Modrinth : le 
 | `pack.id` | identifiant de la fiche du modpack dans le panel. Le Worker refuse un manifeste dont l'`id` ne correspond pas. |
 | `pack.version` | `x.y.z` ou `x.y.z-rc.1`. Doit être plus récente que la version publiée. |
 | `pack.event` | facultatif : lie la version à un event (le launcher l'affiche dans le carrousel et les instances event). |
+| `pack.locked` | facultatif. `true` = **pack d'event verrouillé** : le joueur ne peut ni ajouter, ni retirer, ni modifier de fichier, sauf les shaders. `editable` ne peut alors contenir que `shaderpacks`. Le launcher remet le pack d'origine à chaque lancement. |
 | `minecraft` | version du jeu. |
 | `loader.type` | `vanilla`, `fabric`, `quilt`, `forge` ou `neoforge`. `loader.version` est obligatoire sauf pour `vanilla`. |
 | `java.major` | facultatif. Le launcher choisit sinon le Java adapté à la version du jeu. |
 | `files[].path` | chemin relatif à l'instance, dans un dossier permis (voir plus bas). Pas de `..`, pas de `\`, pas de nom réservé Windows, pas d'exécutable (`.exe`, `.bat`, `.dll`…). |
 | `files[].hashes` | `sha512` (de préférence, c'est celui de Modrinth) ou `sha256`. `sha1` est facultatif. Le launcher refuse un fichier dont l'empreinte diffère. |
 | `files[].size` | taille exacte en octets. |
-| `files[].downloads` | 1 à 5 adresses HTTPS, seulement sur `cdn.modrinth.com`, `github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com`, `edge.forgecdn.net` ou `mediafilez.forgecdn.net`. |
+| `files[].downloads` | 1 à 5 adresses HTTPS, seulement sur `cdn.modrinth.com`, `github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com`, `edge.forgecdn.net`, `mediafilez.forgecdn.net`, ou `https://<Worker>/launcher/assets/<id>` pour un **mod hébergé par WeCraft** (voir §2 bis). |
 | `files[].side` | `client` (par défaut), `both` ou `server`. Un fichier `server` n'est pas installé par le launcher. |
 | `files[].required` | `false` : le joueur peut le désactiver (le launcher le range alors comme « inactif »). |
 | `overrides` | `{ sha256, size }` de l'archive overrides, ou `null`. 90 Mio maximum. |
@@ -77,16 +78,32 @@ C'est un ZIP dont les chemins sont **ceux de l'instance**, par exemple `config/s
 
 Un mod absent de Modrinth peut aller dans les overrides **seulement si sa licence permet de le redistribuer**. L'outil le signale.
 
+## 2 bis. Mods hébergés par WeCraft (mods d'event)
+
+Un mod développé pour un event, et donc absent de Modrinth, peut être hébergé par le Worker au lieu d'aller dans les overrides :
+
+1. **Signer.** `node tools/relaunch-pack.mjs sign mon-mod.jar` donne `mon-mod.jar.sig`.
+2. **Envoyer.** Dans le panel, ouvre **Modpacks**, puis **Mods hébergés (events)**, puis **Héberger un mod**. Le Worker vérifie la signature, calcule SHA-512 et SHA-1, puis stocke le fichier.
+3. **Fabriquer le manifeste.** `build` retrouve le mod tout seul par son empreinte et écrit son adresse `https://<Worker>/launcher/assets/<id>`.
+
+À la publication du manifeste, le Worker refuse :
+- un mod hébergé inconnu ;
+- une empreinte ou une taille qui ne correspond pas.
+
+Un mod hébergé ne peut pas être supprimé tant qu'une version de modpack l'utilise.
+
+Les mods absents de Modrinth et non hébergés vont dans les overrides. Ils sont acceptés.
+
 ## 3. Fabriquer, signer, publier
 
 1. **Préparer.** Prépare l'instance dans ReLaunch : mods, configs, shaders.
 2. **Fabriquer le manifeste.**
    ```
-   node tools/relaunch-pack.mjs build "%APPDATA%\.wecraft\instances\Terres Brulees" --id terres-brulees --version 1.2.0 --mc 1.21.1 --loader fabric:0.16.9 --event evt_terres --out publier
+   node tools/relaunch-pack.mjs build "%APPDATA%\.wecraft\instances\Terres Brulees" --id terres-brulees --version 1.2.0 --mc 1.21.1 --loader fabric:0.16.9 --event evt_terres --locked --out publier
    ```
    L'outil :
    - calcule les empreintes ;
-   - demande à Modrinth quels fichiers il connaît : seuls les SHA-1 sont envoyés, jamais les fichiers ;
+   - demande à Modrinth, puis au Worker (mods hébergés), quels fichiers ils connaissent : seules les empreintes sont envoyées, jamais les fichiers ;
    - écrit le manifeste ;
    - range le reste dans l'archive overrides.
 
