@@ -78,6 +78,20 @@ export class Settings {
     }
   }
 
+  /** « Ouvrir le launcher officiel pour jouer » (clé « relaunch_open_official ») : désactivé par défaut. */
+  async openOfficial(): Promise<boolean> {
+    return (await this.store.read(this.file))?.["relaunch_open_official"] === true;
+  }
+
+  async setOpenOfficial(on: boolean): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_open_official: on === true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** « Skin ReLink en jeu » (clé « relaunch_skin_mod ») : activé par défaut. */
   async skinMod(): Promise<boolean> {
     return (await this.store.read(this.file))?.["relaunch_skin_mod"] !== false;

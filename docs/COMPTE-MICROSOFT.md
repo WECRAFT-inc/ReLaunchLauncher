@@ -1,0 +1,39 @@
+# Compte Minecraft officiel (Microsoft) dans ReLaunch
+
+Décision validée par l'auteur le 26/10/2026 : ReLaunch se connecte lui-même à Microsoft. Cela lui permet de :
+- **lancer le jeu sans ouvrir le launcher officiel** ;
+- **lier automatiquement l'UUID Minecraft officiel au compte ReLink**, ce qui remplace `/link` pour les joueurs qui ont un compte officiel.
+
+## Fonctionnement
+
+1. Dans Réglages > Compte ReLink > « Compte Minecraft (Microsoft) », le joueur clique sur « Se connecter avec Microsoft ». Son navigateur s'ouvre sur la page de connexion de Microsoft.
+   - Le flux est OAuth 2.0 « application native », avec PKCE S256 et un `state` à usage unique.
+   - Le retour se fait sur `http://localhost:47322/relaunch/microsoft`, qui n'écoute que sur la boucle locale, pendant 5 minutes au plus.
+   - Aucun mot de passe ne passe par ReLaunch.
+2. ReLaunch enchaîne Microsoft, Xbox Live, XSTS puis Minecraft. Il vérifie que le compte possède Minecraft Java, puis chiffre le jeton de renouvellement et le jeton Minecraft avec le système (DPAPI). Ils sont rangés dans `.wecraft\microsoft_session.bin`.
+3. **Liaison avec ReLink :** ReLaunch envoie **une fois** le jeton Minecraft au Worker (`POST /launcher/me/minecraft`). Le Worker lit le profil officiel chez Mojang, enregistre l'UUID et le pseudo dans le compte ReLink (identité `minecraft_msa`), puis oublie le jeton, qui n'est jamais enregistré ni journalisé.
+4. **Au lancement :**
+   - il faut un compte ReLink **et** un compte Minecraft officiel vérifié et lié (depuis le launcher ou depuis le site) ;
+   - par défaut, ReLaunch installe ce qui manque, télécharge le Java de Mojang, puis démarre le jeu lui-même ;
+   - l'option « Ouvrir le launcher officiel pour jouer » garde l'ancien fonctionnement.
+5. **Reconnexion :** le joueur ne se reconnecte que si Microsoft refuse le renouvellement, par exemple après environ 90 jours sans jouer ou un changement de mot de passe.
+
+ReLaunch **ne lit jamais** les comptes enregistrés dans le launcher officiel. Ce serait une extraction de jeton, ce qui reste interdit. Modrinth App fait pareil : il a sa propre connexion Microsoft.
+
+**Exceptions :**
+- Les instances « ReLaunch Event » sans compte Microsoft (fonctionnement à la Nations Glory) seront traitées plus tard.
+- Pour les participants d'event qui n'ont pas de compte officiel, `/link` reste nécessaire.
+
+## À configurer (une seule fois)
+
+1. **Application Azure.** Va sur portal.azure.com, puis Microsoft Entra ID, puis Inscriptions d'applications, puis Nouvelle inscription.
+   - **Nom :** WeCraft.
+   - **Types de comptes :** « Comptes Microsoft personnels uniquement ».
+   - **URI de redirection :** plateforme « Client public / natif (mobile et bureau) », valeur `http://localhost/relaunch/microsoft`. Le port est ignoré pour `localhost`.
+   - Dans **Authentification**, active « Autoriser les flux clients publics ».
+2. **Accord de Mojang.** Demande l'accès à l'API Minecraft avec le formulaire de Mojang pour les applications tierces (https://aka.ms/mce-reviewappid), en donnant l'ID de l'application.
+   - Tant que l'accord n'est pas donné, la connexion échoue avec le message « Mojang n'a pas encore autorisé l'application WeCraft ».
+3. **Worker.** Ajoute la variable `MICROSOFT_CLIENT_ID`, avec l'ID d'application (client) Azure. Ce n'est pas un secret.
+4. **Liaison depuis le site (facultatif).**
+   - Dans la même application Azure, ajoute la plateforme « Web » avec l'URI de retour du site, crée un secret client, puis ajoute-le au Worker : `MICROSOFT_CLIENT_SECRET`.
+   - Le site envoie ensuite `{ code, redirect_uri }` à `POST /me/minecraft/microsoft`, avec la session ReLink du joueur.

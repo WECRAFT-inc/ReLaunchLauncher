@@ -20,6 +20,7 @@ import type { LaunchPhase, LaunchStatus } from "../../shared/api";
 import type { LoaderName } from "../instances/formats";
 import type { NetOptions } from "../net/download";
 import { closeOfficialLauncher, openOfficialLauncher, type CloseResult } from "./officialLauncher";
+import { installJavaRuntime } from "../install/javaRuntime";
 import { applyShaderPrefs, type ShaderPrefs } from "./shaders";
 import { setProfile, type ProfileDeps } from "./profiles";
 
@@ -39,6 +40,11 @@ export interface LaunchOptions {
   ram: number;
   /** Tout réinstaller (bouton « Réparer »), comme force=True en Python. */
   repair?: boolean;
+  /**
+   * Lancement direct, sans le launcher officiel : session Minecraft (compte Microsoft connecté dans ReLaunch).
+   * Le jeton n'est jamais écrit dans un journal ni renvoyé à l'interface.
+   */
+  direct?: { name: string; uuid: string; accessToken: string; brand: string };
 }
 
 /** Ce que l'orchestrateur utilise ; remplaçable dans les tests. */
@@ -94,10 +100,12 @@ export class LaunchService {
   start(target: LaunchTarget, opts: LaunchOptions): { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" } {
     if (this.current && !["termine", "erreur"].includes(this.current.status.phase)) return { ok: false, reason: "busy" };
     if (!Number.isInteger(opts.ram) || opts.ram < RAM_MIN || opts.ram > RAM_MAX) return { ok: false, reason: "invalid" };
-    const status: LaunchStatus = { job: randomUUID(), phase: "fermeture", message: "Fermeture du launcher officiel...", progress: null, notes: [], profile: null, opened: null };
+    const status: LaunchStatus = opts.direct
+      ? { job: randomUUID(), phase: "installation", message: "Préparation...", progress: null, notes: [], profile: null, opened: null }
+      : { job: randomUUID(), phase: "fermeture", message: "Fermeture du launcher officiel...", progress: null, notes: [], profile: null, opened: null };
     const job: Job = { status, answer: null, promise: Promise.resolve() };
     const log = this.deps.log ?? (() => undefined);
-    log(`Lancement : ${target.profileName} (Minecraft ${target.mc}, ${[target.loader ?? "Vanilla", target.loaderVersion].filter(Boolean).join(" ")}, ${opts.ram} Go${opts.repair ? ", réparer" : ""})`);
+    log(`Lancement : ${target.profileName} (Minecraft ${target.mc}, ${[target.loader ?? "Vanilla", target.loaderVersion].filter(Boolean).join(" ")}, ${opts.ram} Go${opts.repair ? ", réparer" : ""}${opts.direct ? ", direct" : ""})`);
     job.promise = this.run(job, target, opts).catch((e: unknown) => {
       log(`Erreur (${status.phase}) : ${e instanceof Error ? e.message : String(e)}`);
       status.phase = "erreur";
@@ -140,6 +148,8 @@ export class LaunchService {
     const platform = d.platform ?? process.platform;
     const close = d.close ?? ((o) => closeOfficialLauncher(o));
     await (d.mkdir ?? ((dir) => mkdir(dir, { recursive: true })))(t.gameDir);
+
+    if (opts.direct) return this.runDirect(job, t, opts, opts.direct);
 
     // 1) fermer le launcher officiel
     let closed = await close({});
@@ -201,6 +211,61 @@ export class LaunchService {
     s.message = s.opened
       ? `Profil « ${t.profileName} » prêt : cliquez sur Jouer dans le launcher officiel.`
       : `Le profil « ${t.profileName} » est prêt, mais le launcher officiel n'a pas pu être ouvert.\nOuvrez-le vous-même et choisissez ce profil.`;
+  }
+
+  /** Lancement direct : installation, Java de Mojang, puis le jeu démarré par ReLaunch (pas de profil officiel). */
+  private async runDirect(job: Job, t: LaunchTarget, opts: LaunchOptions, ses: NonNullable<LaunchOptions["direct"]>): Promise<void> {
+    const s = job.status;
+    const d = this.deps;
+    s.phase = "installation";
+    const xmcl = d.xmcl();
+    if (!xmcl.launchGame) throw new Error("Lancement direct indisponible dans cette version.");
+    const iopts: InstallVanillaOptions & { onNote: (n: string) => void } = { ...(d.net ?? {}), xmcl, onStep: (step) => this.step(s, step), onNote: (n) => s.notes.push(n) };
+    const installed = await this.inst.installedVersionIds(d.mcDir);
+    if (opts.repair || !installed.includes(t.mc)) {
+      s.message = `Installation de ${t.mc}...`;
+      await this.inst.installVanilla(d.mcDir, t.mc, iopts);
+    }
+    let launchId = t.mc;
+    if (t.loader) launchId = await this.ensureLoader(s, t, installed, !!opts.repair, iopts);
+    if (d.shaders) {
+      const note = await applyShaderPrefs(t.gameDir, await d.shaders().catch(() => ({ on: false, primary: null, secondary: null })));
+      if (note) s.notes.push(note);
+    }
+    // Java fourni par Mojang pour cette version (vérifié fichier par fichier)
+    const resolved = await xmcl.parseVersion(d.mcDir, launchId);
+    const component = resolved.javaVersion?.component && /^[a-z0-9-]+$/.test(resolved.javaVersion.component) ? resolved.javaVersion.component : "jre-legacy";
+    s.message = "Vérification de Java...";
+    const java = await installJavaRuntime(d.mcDir, component, {
+      ...(d.net ?? {}),
+      onProgress: (p) => {
+        s.message = "Téléchargement de Java...";
+        s.progress = { done: p.filesDone, total: p.filesTotal };
+      },
+    });
+    s.progress = null;
+    s.phase = "ouverture";
+    s.message = "Démarrage de Minecraft...";
+    const child = await xmcl.launchGame({
+      gamePath: t.gameDir,
+      resourcePath: d.mcDir,
+      javaPath: java.executable,
+      version: launchId,
+      maxMemory: opts.ram * 1024,
+      minMemory: Math.min(1024, opts.ram * 512),
+      gameProfile: { name: ses.name, id: ses.uuid },
+      accessToken: ses.accessToken,
+      launcherName: "ReLaunch",
+      launcherBrand: ses.brand,
+    });
+    child.once("error", () => this.deps.log?.("Le processus du jeu a signalé une erreur au démarrage."));
+    child.once("exit", (code) => this.deps.log?.(`Jeu fermé (code ${code ?? "?"}).`));
+    child.unref();
+    s.opened = true;
+    d.onOpened?.(t);
+    this.deps.log?.(`Terminé : jeu démarré par ReLaunch (${launchId}, Java ${java.version}, compte ${ses.name}).`);
+    s.phase = "termine";
+    s.message = `Minecraft démarre (${ses.name}). La fenêtre du jeu va s'ouvrir.`;
   }
 
   private step(s: LaunchStatus, step: VanillaStep): void {

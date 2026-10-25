@@ -98,6 +98,26 @@ export interface XmclApi {
   }): unknown;
   execute(plan: InstallManifest, runtime: unknown, options: { attempts: number; signal?: AbortSignal }): Promise<unknown>;
   createModernForgeWorkflow(options: ModernForgeWorkflowOptions): Workflow<{ version: string }>;
+  /** Démarre le jeu (sans le launcher officiel) : bibliothèques et natives vérifiées par xmcl avant. */
+  launchGame?(options: GameLaunchOptions): Promise<GameProcess>;
+}
+
+export interface GameLaunchOptions {
+  gamePath: string;
+  resourcePath: string;
+  javaPath: string;
+  version: string;
+  maxMemory: number;
+  minMemory: number;
+  gameProfile: { name: string; id: string };
+  accessToken: string;
+  launcherName: string;
+  launcherBrand: string;
+}
+export interface GameProcess {
+  pid?: number | undefined;
+  once(event: "exit" | "error", cb: (code: number | null) => void): unknown;
+  unref(): void;
 }
 
 /** Charge la vraie bibliothèque (processus principal uniquement). */
@@ -106,6 +126,7 @@ export function loadXmcl(): XmclApi {
   const core = require("@xmcl/core") as {
     Version: { parse(mc: string, id: string): Promise<ResolvedVersionLike> };
     MinecraftFolder: { from(mc: string): unknown };
+    launch(o: Record<string, unknown>): Promise<GameProcess>;
   };
   const inst = require("@xmcl/installer") as {
     resolveMinecraftJarInstallFile(v: ResolvedVersionLike): InstallFile | undefined;
@@ -125,6 +146,12 @@ export function loadXmcl(): XmclApi {
     resolveAssetObjectInstallFiles: (v, f) => inst.resolveAssetObjectInstallFiles(v, f),
     createRuntime: (o) => inst.createNodeInstallRuntime(o),
     execute: (p, r, o) => inst.executeInstallManifest(p, r, o),
+    launchGame: (o) =>
+      core.launch({
+        ...o,
+        userType: "msa",
+        extraExecOption: { detached: true, stdio: "ignore", windowsHide: false },
+      }),
     createModernForgeWorkflow: (o) =>
       inst.createModernForgeInstallWorkflow({
         id: o.id,

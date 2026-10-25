@@ -23,6 +23,7 @@ import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
 import { syncSkinMod } from "./launch/skinMod";
 import { readEventManifest } from "./events/eventLock";
 import { AccountError, RelinkAccount } from "./relink/account";
+import { MicrosoftAccount } from "./auth/microsoft";
 import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
@@ -72,6 +73,7 @@ let media: MediaStore | null = null;
 let relink: RelinkClient | null = null;
 let skins: SkinStore | null = null;
 let account: RelinkAccount | null = null;
+let microsoft: MicrosoftAccount | null = null;
 let appLog: AppLogger | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
@@ -252,6 +254,16 @@ async function start(): Promise<void> {
       await shell.openExternal(url);
     },
   });
+  const acc = account;
+  microsoft = new MicrosoftAccount({
+    dataDir: wecraftDataDir(env),
+    secrets: safeStorage,
+    clientId: () => acc.microsoftClientId(),
+    openExternal: async (url) => {
+      if (!url.startsWith("https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?")) throw new Error("Adresse de connexion refusée.");
+      await shell.openExternal(url);
+    },
+  });
   const rl = relink;
   skins = new SkinStore({
     dataDir: wecraftDataDir(env),
@@ -422,10 +434,45 @@ function registerIpc(): void {
   handle(CHANNELS.relinkState, async (force) => (relink ? relink.refresh("stable", force === true) : { ok: false, stale: true, fetchedAt: null, error: "Indisponible.", data: null }));
   handle(CHANNELS.relinkNotifications, async () => (relink ? relink.notifications("stable") : { items: [], error: "Indisponible." }));
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
+  /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
+  const linkOfficial = async (): Promise<string | null> => {
+    if (!account || !microsoft) return null;
+    const st = await account.state();
+    if (!st.loggedIn) return null;
+    const ses = await microsoft.session();
+    if (!ses) return null;
+    const dashed = ses.uuid.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+    if (st.user?.minecraftVerified && st.user.minecraftUuid === dashed) return null;
+    try {
+      await account.linkMinecraft(ses.accessToken);
+      return null;
+    } catch (e) {
+      return e instanceof AccountError ? e.message : "Liaison du compte Minecraft impossible.";
+    }
+  };
+  const noMs = { connected: false, profile: null, loginPending: false, available: false, persisted: false, error: "Indisponible." };
+  handle(CHANNELS.msState, async () => (microsoft ? microsoft.state() : noMs));
+  handle(CHANNELS.msLogin, async () => {
+    if (!microsoft) return noMs;
+    const st = await microsoft.login();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    if (st.connected) {
+      const err = await linkOfficial();
+      if (err) return { ...st, error: err };
+    }
+    return st;
+  });
+  handle(CHANNELS.msLogout, async () => (microsoft ? microsoft.logout() : noMs));
+  handle(CHANNELS.msGetOfficial, async () => (settings ? settings.openOfficial() : false));
+  handle(CHANNELS.msSetOfficial, async (on) => (settings && typeof on === "boolean" ? settings.setOpenOfficial(on) : false));
   handle(CHANNELS.accountState, async () => (account ? account.state() : noAccount));
   handle(CHANNELS.accountLogin, async () => {
     if (!account) return noAccount;
-    const st = await account.login();
+    let st = await account.login();
+    if (st.loggedIn && (await linkOfficial()) === null) st = await account.state();
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus(); // retour dans ReLaunch après l'accord sur Discord
@@ -725,6 +772,16 @@ function registerIpc(): void {
     // Compte ReLink obligatoire ; si le service est injoignable, le jeu se lance quand même (serveurs d'event fermés)
     const gate = account ? await account.launchGate() : "offline";
     if (gate === "login") return { ok: false, reason: "login" };
+    // compte Minecraft officiel lié au compte ReLink (Réglages > Compte ou site), sauf service injoignable
+    if (gate === "ok" && account) {
+      await linkOfficial();
+      const st = await account.state();
+      if (!st.user?.minecraftVerified) return { ok: false, reason: "minecraft" };
+    }
+    // lancement direct (défaut) : session Microsoft de ReLaunch ; sinon le launcher officiel
+    const official = settings ? await settings.openOfficial() : false;
+    const ses = official ? null : await microsoft?.session();
+    if (!official && !ses) return { ok: false, reason: "microsoft" };
     // pack d'event verrouillé : mods officiels remis en état, mods ajoutés à la corbeille
     try {
       const fix = await modpacks?.enforceLocked(inst.folder);
@@ -757,7 +814,7 @@ function registerIpc(): void {
         loader: inst.loader,
         loaderVersion: inst.loaderVersion,
       },
-      { ram, repair: o.repair === true },
+      { ram, repair: o.repair === true, ...(ses ? { direct: { name: ses.name, uuid: ses.uuid, accessToken: ses.accessToken, brand: app.getVersion() } } : {}) },
     );
     if (started.ok) {
       // comme la version Python : la RAM choisie devient celle proposée la prochaine fois

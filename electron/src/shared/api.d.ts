@@ -213,7 +213,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string; offline?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" };
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "minecraft" | "microsoft" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -424,6 +424,15 @@ export interface WeCraftApi {
     state(force?: boolean): Promise<RelinkState>;
     /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
     notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
+  };
+  microsoft: {
+    state(): Promise<MicrosoftState>;
+    /** Ouvre la connexion Microsoft dans le navigateur ; lie ensuite le compte Minecraft au compte ReLink. */
+    login(): Promise<MicrosoftState>;
+    logout(): Promise<MicrosoftState>;
+    /** « Ouvrir le launcher officiel pour jouer » (sinon ReLaunch démarre le jeu lui-même). */
+    openOfficial(): Promise<boolean>;
+    setOpenOfficial(on: boolean): Promise<boolean>;
   };
   account: {
     state(): Promise<AccountState>;
@@ -654,10 +663,21 @@ export interface RelinkBootstrap {
   events: RelinkEvent[];
   partners: RelinkPartner[];
 }
+/** Compte Minecraft officiel (Microsoft) connecté dans ReLaunch ; les jetons restent dans le processus principal. */
+export interface MicrosoftState {
+  connected: boolean;
+  profile: { id: string; name: string } | null;
+  loginPending: boolean;
+  /** L'application Microsoft de WeCraft est configurée (sinon la connexion n'est pas encore possible). */
+  available: boolean;
+  persisted: boolean;
+  error: string | null;
+}
+
 /** Compte ReLink du joueur (le jeton de session ne quitte jamais le processus principal). */
 export interface AccountState {
   loggedIn: boolean;
-  user: { id: string; pseudo: string; minecraftName: string | null; eclats: number; premium: boolean } | null;
+  user: { id: string; pseudo: string; minecraftName: string | null; minecraftUuid: string | null; minecraftVerified: boolean; eclats: number; premium: boolean } | null;
   expiresAt: string | null;
   /** Le service ReLink n'a pas répondu au dernier essai. */
   offline: boolean;

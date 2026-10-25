@@ -66,6 +66,8 @@ function decodeUser(v: unknown): AccountState["user"] {
     id,
     pseudo: str(o["pseudo"], 60) || "Joueur",
     minecraftName: /^[A-Za-z0-9_]{1,16}$/.test(String(o["minecraftName"] ?? "")) ? String(o["minecraftName"]) : null,
+    minecraftUuid: typeof o["minecraftUuid"] === "string" && /^[0-9a-f-]{32,36}$/i.test(o["minecraftUuid"]) ? o["minecraftUuid"].toLowerCase() : null,
+    minecraftVerified: o["minecraftVerified"] === true,
     eclats: typeof o["eclats"] === "number" && Number.isFinite(o["eclats"]) ? Math.max(0, Math.floor(o["eclats"])) : 0,
     premium: o["premium"] === true,
   };
@@ -357,6 +359,22 @@ export class RelinkAccount {
     } catch {
       return null;
     }
+  }
+
+  /** Identifiant public de l'application Microsoft de WeCraft (annoncé par le Worker, gardé en mémoire). */
+  private msClient: string | null | undefined;
+  async microsoftClientId(): Promise<string | null> {
+    if (this.msClient !== undefined) return this.msClient;
+    const cfg = await this.call("GET", "/launcher/auth/config");
+    const id = typeof cfg["microsoftClientId"] === "string" && /^[0-9a-f-]{36}$/i.test(cfg["microsoftClientId"]) ? cfg["microsoftClientId"] : null;
+    this.msClient = id;
+    return id;
+  }
+
+  /** Lie le compte Minecraft officiel : le Worker vérifie le jeton chez Mojang, puis l'oublie. */
+  async linkMinecraft(minecraftToken: string): Promise<AccountState> {
+    await this.call("POST", "/launcher/me/minecraft", { auth: true, json: { minecraftToken } });
+    return this.refresh();
   }
 
   /** Achat d'un skin du launcher en Éclats (débit fait par le Worker, de façon atomique). */

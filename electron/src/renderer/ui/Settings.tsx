@@ -756,7 +756,7 @@ export function Settings() {
         <div className="setrow">
           <span>
             <b>{t("Java")}</b>
-            <small>{t("Rien à installer : le launcher officiel fournit Java pour jouer, et ReLaunch télécharge le Java de Mojang (vérifié) quand Forge ou NeoForge en a besoin pour s'installer.")}</small>
+            <small>{t("Rien à installer : ReLaunch télécharge le Java de Mojang (vérifié fichier par fichier) adapté à chaque version, pour jouer comme pour installer Forge ou NeoForge.")}</small>
           </span>
         </div>
         <div className="setrow">
@@ -917,7 +917,7 @@ function AccountGroup() {
         <div className="setrow">
           <span>
             <b>{u.pseudo}</b>
-            <small>{[u.minecraftName ? `${t("Minecraft")} : ${u.minecraftName}` : t("Compte Minecraft pas encore lié (commande /link en jeu)"), `${u.eclats} ${t("éclats")}`, u.premium ? t("Premium") : "", exp ? `${t("session valable jusqu'au")} ${exp}` : ""].filter(Boolean).join(" · ")}</small>
+            <small>{[u.minecraftName ? `${t("Minecraft")} : ${u.minecraftName}${u.minecraftVerified ? "" : ` (${t("non vérifié")})`}` : t("Compte Minecraft pas encore lié"), `${u.eclats} ${t("éclats")}`, u.premium ? t("Premium") : "", exp ? `${t("session valable jusqu'au")} ${exp}` : ""].filter(Boolean).join(" · ")}</small>
           </span>
           <span className="row" style={{ gap: "8px" }}>
             <button className="btn sm" disabled={!!busy} onClick={() => act("refresh", window.wecraft.account.refresh())}>{t("Actualiser")}</button>
@@ -927,6 +927,7 @@ function AccountGroup() {
         {account.offline ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Service ReLink injoignable : informations du dernier contrôle.")}</p> : null}
         {!account.persisted ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Chiffrement système indisponible : ta session ne sera pas gardée après la fermeture de ReLaunch.")}</p> : null}
       </div>
+      <MicrosoftGroup verified={!!u.minecraftVerified} linkedName={u.minecraftName} />
       <div className="grp">
         <h3>{t("Skin Minecraft")}</h3>
         <p>{t("Le skin de ton personnage, envoyé à ReLink. Image PNG de 64 × 64 pixels.")}</p>
@@ -964,6 +965,70 @@ function AccountGroup() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Compte Minecraft officiel (Microsoft) : connexion dans le navigateur, liaison automatique au compte ReLink. */
+function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedName: string | null }) {
+  const { toast, setAccount } = useApp();
+  const [ms, setMs] = useState<import("../../shared/api").MicrosoftState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [official, setOfficial] = useState<boolean | null>(null);
+  useEffect(() => {
+    void window.wecraft.microsoft.state().then(setMs, () => undefined);
+    void window.wecraft.microsoft.openOfficial().then(setOfficial, () => setOfficial(false));
+  }, []);
+  const done = (p: Promise<import("../../shared/api").MicrosoftState>) => {
+    setBusy(true);
+    void p
+      .then((st) => {
+        setMs(st);
+        if (st.error) toast(st.error);
+        void window.wecraft.account.state().then(setAccount, () => undefined);
+      })
+      .finally(() => setBusy(false));
+  };
+  const flip = () => {
+    if (official === null) return;
+    const next = !official;
+    void window.wecraft.microsoft.setOpenOfficial(next).then((ok) => (ok ? setOfficial(next) : toast(t("Réglage non enregistré."))));
+  };
+  return (
+    <div className="grp">
+      <h3>{t("Compte Minecraft (Microsoft)")}</h3>
+      <p>{t("Nécessaire pour lancer tes instances : ReLaunch démarre le jeu lui-même et associe ton compte Minecraft officiel à ReLink. Tu ne te reconnectes que si Microsoft le redemande (environ 3 mois sans jouer, mot de passe changé).")}</p>
+      <div className="setrow">
+        <span>
+          <b>{ms?.connected ? ms.profile?.name : ms?.loginPending || busy ? t("Accepte la connexion dans ton navigateur…") : t("Non connecté")}</b>
+          <small>
+            {ms?.connected
+              ? verified && linkedName === ms.profile?.name
+                ? t("Connecté et lié à ton compte ReLink.")
+                : t("Connecté ; liaison avec ReLink au prochain lancement.")
+              : verified
+                ? `${t("Lié à ReLink")} (${linkedName ?? ""}) ${t("depuis le site : connecte-toi ici pour jouer sans le launcher officiel.")}`
+                : ms && !ms.available
+                  ? t("Connexion Microsoft pas encore disponible (application WeCraft en attente d'autorisation).")
+                  : t("Ton navigateur s'ouvre sur Microsoft. ReLaunch ne voit jamais ton mot de passe.")}
+          </small>
+        </span>
+        <span className="row" style={{ gap: "8px" }}>
+          {ms?.connected ? (
+            <button className="btn sm" disabled={busy} onClick={() => done(window.wecraft.microsoft.logout())}>{t("Se déconnecter")}</button>
+          ) : (
+            <button className="btn sm pri" disabled={busy || !!ms?.loginPending || ms?.available === false} onClick={() => done(window.wecraft.microsoft.login())}>{t("Se connecter avec Microsoft")}</button>
+          )}
+        </span>
+      </div>
+      {ms && !ms.persisted ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Chiffrement système indisponible : la connexion Microsoft ne sera pas gardée après la fermeture de ReLaunch.")}</p> : null}
+      <div className="setrow">
+        <span>
+          <b>{t("Ouvrir le launcher officiel pour jouer")}</b>
+          <small>{t("Désactivé : ReLaunch lance directement le jeu avec ton compte Microsoft. Activé : comme avant, ReLaunch prépare le profil puis ouvre le launcher officiel.")}</small>
+        </span>
+        <button className="toggle" role="switch" aria-checked={tf(official === true)} disabled={official === null} onClick={flip} aria-label={t("Ouvrir le launcher officiel pour jouer")}></button>
+      </div>
+    </div>
   );
 }
 

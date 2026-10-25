@@ -33,6 +33,11 @@ const WIN_CLOSE = "win:close";
 const WIN_STATE = "win:state";
 const RELINK_STATE = "relink:state";
 const RELINK_NOTIFICATIONS = "relink:notifications";
+const MS_STATE = "microsoft:state";
+const MS_LOGIN = "microsoft:login";
+const MS_LOGOUT = "microsoft:logout";
+const MS_GET_OFFICIAL = "microsoft:get-official";
+const MS_SET_OFFICIAL = "microsoft:set-official";
 const ACC_STATE = "account:state";
 const ACC_LOGIN = "account:login";
 const ACC_LOGOUT = "account:logout";
@@ -121,6 +126,13 @@ const api: WeCraftApi = Object.freeze({
   relink: Object.freeze({
     state: (force?: boolean) => ipcRenderer.invoke(RELINK_STATE, force === true),
     notifications: () => ipcRenderer.invoke(RELINK_NOTIFICATIONS),
+  }),
+  microsoft: Object.freeze({
+    state: () => ipcRenderer.invoke(MS_STATE),
+    login: () => ipcRenderer.invoke(MS_LOGIN),
+    logout: () => ipcRenderer.invoke(MS_LOGOUT),
+    openOfficial: () => ipcRenderer.invoke(MS_GET_OFFICIAL),
+    setOpenOfficial: (on: boolean) => ipcRenderer.invoke(MS_SET_OFFICIAL, on === true),
   }),
   account: Object.freeze({
     state: () => ipcRenderer.invoke(ACC_STATE),
