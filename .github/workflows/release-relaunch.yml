@@ -100,7 +100,7 @@ jobs:
     steps:
       # Artefact téléchargé HORS du dossier de travail et AVANT le checkout : le checkout (clean) remet ensuite
       # les fichiers du dépôt dans leur état exact, même si l'archive avait tenté d'en écraser un.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installeur
           path: ${{ runner.temp }}/out
@@ -159,12 +159,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installeur
           path: out
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: signature
           path: out
@@ -189,12 +189,12 @@ jobs:
     env:
       VERSION: ${{ needs.compilation.outputs.version }}
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installeur
           path: ${{ runner.temp }}/out
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: signature
           path: ${{ runner.temp }}/out
