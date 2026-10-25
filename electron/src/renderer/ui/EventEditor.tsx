@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { EventInfo } from "../../shared/api";
 import { useApp } from "./ctx";
+import { RelinkServersEvents } from "./Relink";
 import { t } from "./i18n";
 import { useEscapeLayer } from "./keys";
 
@@ -128,9 +129,10 @@ export function RelaunchEvents() {
           <div className="sub">{t("Events et serveurs")}</div>
         </div>
       </div>
-      {ev.length ? (
-        <div className="sect">
-          <h3>{t("Modpacks d'événements")}</h3>
+      <RelinkServersEvents />
+      <div className="sect">
+        <h3>{t("Modpacks d'événements installés")}</h3>
+        {ev.length ? (
           <div className="mp-results">
             {ev.map((x) => (
               <div key={x.id} className="card imp-row">
@@ -147,13 +149,10 @@ export function RelaunchEvents() {
               </div>
             ))}
           </div>
-        </div>
-      ) : (
-        <div className="card rl-empty">
-          <b>{t("Aucun modpack d'événement installé")}</b>
-          <p className="muted">{t("Les events et serveurs ReLaunch arriveront avec les comptes ReLink. Leurs modpacks apparaîtront ici, avec « Modifier » pour choisir tes packs de ressources et tes shaders.")}</p>
-        </div>
-      )}
+        ) : (
+          <p className="faint" style={{ fontSize: "13px" }}>{t("Aucun modpack d'événement installé sur ce PC. Leurs modpacks apparaîtront ici, avec « Modifier » pour choisir tes packs de ressources et tes shaders.")}</p>
+        )}
+      </div>
     </>
   );
 }

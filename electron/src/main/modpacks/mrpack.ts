@@ -184,7 +184,7 @@ export async function listZip(file: string): Promise<{ entries: ZipEntry[]; size
   }
 }
 
-async function readEntry(file: string, e: ZipEntry, max: number): Promise<Buffer> {
+export async function readEntry(file: string, e: ZipEntry, max: number): Promise<Buffer> {
   if (e.flags & 1 || e.usize > max || e.csize > max || e.csize === 0xffffffff || (e.method !== 0 && e.method !== 8)) throw new Error(`entrée ${e.name} illisible ou trop grosse`);
   const fh = await open(file, "r");
   try {

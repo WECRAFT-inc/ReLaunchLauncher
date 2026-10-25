@@ -657,6 +657,7 @@ export function Settings() {
             <button className="toggle" role="switch" aria-checked={tf(pref.anim !== false)} data-act="animTgl" aria-label={t("Animations")}></button>
           </div>
         </div>
+        <SkinsGroup />
         <RotationGroup />
       </>
     );
@@ -834,8 +835,8 @@ export function Settings() {
         <button className="setmaj" data-settab="maj" aria-current={tf(ui.setTab === "maj")}>
           <Ic n="downloads" />
           <span>
-            <b>{t("Mises à jour")}</b>
-            <small>{`ReLaunch ${appVer}`}</small>
+            <b>{t("Rechercher une mise à jour")}</b>
+            <small>{`${t("Version installée")} : ${appVer || "?"}`}</small>
           </span>
         </button>
         <h4>{t("Affichage")}</h4>
@@ -849,6 +850,99 @@ export function Settings() {
         <span className="ver">{`ReLaunch ${appVer}`}</span>
       </div>
       <div className="setbody">{body}</div>
+    </div>
+  );
+}
+
+/**
+ * Skins du launcher : Classique, skins installés (ReLink signés ou aperçus locaux) et catalogue ReLink.
+ * L'obtention d'un skin à débloquer (event, shop, succès, premium) demandera un compte ReLink : en attendant,
+ * seuls les skins gratuits publiés avec un fichier peuvent être installés.
+ */
+function SkinsGroup() {
+  const { pref, editPref, skins, reloadSkins, relink, toast } = useApp();
+  const [busy, setBusy] = useState<string | null>(null);
+  const cur = typeof pref["lskin"] === "string" ? (pref["lskin"] as string) : "";
+  const use = (k: string) => editPref((p) => (p["lskin"] = k || null));
+  const catalog = relink?.data?.skins ?? [];
+  const lock = (u: { event: boolean; shop: number; achievement: boolean; premium: boolean }) =>
+    [u.event ? t("event ReLaunch") : "", u.shop ? `${u.shop} ${t("crédits")}` : "", u.achievement ? t("succès") : "", u.premium ? t("premium") : ""].filter(Boolean);
+  const run = (key: string, p: Promise<{ ok: boolean; message?: string; canceled?: boolean; skin?: { key: string; manifest: { name: string } } }>) => {
+    setBusy(key);
+    void p
+      .then((r) => {
+        if (r.ok && r.skin) {
+          reloadSkins();
+          use(r.skin.key);
+          toast(`${t("Skin appliqué")} : ${r.skin.manifest.name}`);
+        } else if (!r.canceled) toast(r.message || t("Skin refusé."));
+      })
+      .finally(() => setBusy(null));
+  };
+  return (
+    <div className="grp">
+      <h3>{t("Skins du launcher")}</h3>
+      <p>{t("Un skin change tout le launcher : fond animé, typographie, barres, cadres, bouton Jouer, transitions, écran de lancement. Les skins publiés par l'équipe arrivent sans mettre à jour ReLaunch.")}</p>
+      <div className="skins">
+        <div className="skinc" aria-pressed={cur ? "false" : "true"}>
+          <span className="pv"></span>
+          <b>{t("Classique")}</b>
+          <small>{t("Le launcher de base, avec ton style et ton thème de couleurs.")}</small>
+          <span className="row">
+            <button className="btn sm" disabled={!cur} onClick={() => use("")}>
+              {cur ? t("Utiliser") : t("Utilisé")}
+            </button>
+          </span>
+        </div>
+        {skins.map((k) => (
+          <div key={k.key} className="skinc" aria-pressed={cur === k.key ? "true" : "false"}>
+            <span className="pv" style={{ backgroundImage: k.manifest.background.layers[0] ? `url("${k.base}${k.manifest.background.layers[0].image}")` : undefined, ["--c1" as string]: k.manifest.tokens["acc"] ?? "#333", ["--c2" as string]: k.manifest.tokens["night"] ?? "#111" }}></span>
+            <b>{k.manifest.name}</b>
+            <small>{[k.manifest.author, k.manifest.skinVersion ? `v${k.manifest.skinVersion}` : "", k.source === "local" ? t("aperçu local, non signé") : t("ReLink, signé")].filter(Boolean).join(" · ")}</small>
+            {k.manifest.description ? <small>{k.manifest.description}</small> : null}
+            <span className="row">
+              <button className="btn sm pri" disabled={cur === k.key} onClick={() => use(k.key)}>
+                {cur === k.key ? t("Utilisé") : t("Utiliser")}
+              </button>
+              <button
+                className="btn sm"
+                onClick={() =>
+                  void window.wecraft.skins.remove(k.key).then(() => {
+                    if (cur === k.key) use("");
+                    reloadSkins();
+                  })
+                }
+              >
+                {t("Retirer")}
+              </button>
+            </span>
+          </div>
+        ))}
+        {catalog
+          .filter((c) => !skins.some((k) => k.relinkId === c.id))
+          .map((c) => {
+            const l = lock(c.unlock);
+            return (
+              <div key={c.id} className="skinc">
+                <span className="pv"></span>
+                <b>{c.name}</b>
+                <small>{[c.desc, c.versions.liquidGlass || c.versions.mat ? [c.versions.liquidGlass ? "Liquid Glass" : "", c.versions.mat ? "Mat" : ""].filter(Boolean).join(" + ") : ""].filter(Boolean).join(" · ")}</small>
+                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")} — ${t("obtention avec un compte ReLink (bientôt)")}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
+                <span className="row">
+                  <button className="btn sm" disabled={!!l.length || !c.file || busy === c.id} onClick={() => run(c.id, window.wecraft.skins.install(c.id))}>
+                    {busy === c.id ? t("Téléchargement…") : t("Obtenir")}
+                  </button>
+                </span>
+              </div>
+            );
+          })}
+      </div>
+      <div className="row" style={{ justifyContent: "flex-start", gap: "8px" }}>
+        <button className="btn sm" disabled={busy === "local"} onClick={() => run("local", window.wecraft.skins.importLocal())}>
+          {t("Aperçu d'un fichier skin (.rlskin)…")}
+        </button>
+        <small className="faint">{t("Pour créer et tester un skin avant de l'envoyer dans le panneau d'administration.")}</small>
+      </div>
     </div>
   );
 }

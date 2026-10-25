@@ -411,7 +411,7 @@ export const SKINS: Skin[] = [
   { n: "Event S3", sk: "#d49a72", hair: "#1a1a1a", eye: "#fbbf24", shirt: "#7c2d12", pants: "#3a3a3a", shoe: "#fb923c", saved: true },
 ];
 
-export const VIEWS = ["news", "home", "wecraft", "relaunch", "welive", "live", "relink", "settings", "favorites", "discover", "instance", "pins"] as const;
+export const VIEWS = ["news", "home", "wecraft", "relaunch", "welive", "live", "relink", "settings", "favorites", "discover", "instance", "pins", "addcontent"] as const;
 export type View = (typeof VIEWS)[number];
 export const THEMES = ["phenix", "relink", "aurore", "glace"] as const;
 

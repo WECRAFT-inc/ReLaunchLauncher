@@ -1,6 +1,7 @@
 // Pages Accueil, WeCraft, Favoris, Instances épinglées et pages « bientôt ».
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { useApp } from "./ctx";
+import { HomeCarousel } from "./Relink";
 import { Ic } from "./Ic";
 import { Menu, type MenuItem } from "./Menu";
 import { Minis } from "./Bars";
@@ -59,38 +60,59 @@ export function homeBg(sel: Inst | undefined, fmt: ReturnType<typeof bgFmtOf>): 
   return { fmt, url: sel.bg };
 }
 
+/** Menu de l'accueil : seulement les favoris, les instances lancées depuis moins de 30 jours et les events. */
+export const homeList = (l: Inst[]) => orderInstances(l).filter((x) => x.fav || isRecent(x) || x.ev);
+
 export function Home() {
-  const { inst: inst0, ui, byId, setUi, pref } = useApp();
-  const inst = orderInstances(inst0);
-  const sel = byId(ui.sel) ?? inst[0];
+  const { inst: inst0, ui, setUi, pref, relink, car } = useApp();
+  const inst = homeList(inst0);
+  const hasCar = car.on && !!((relink?.data?.cards.length ?? 0) + (relink?.data?.news.length ?? 0));
+  const sel = inst.find((x) => x.id === ui.sel) ?? inst[0];
   const bg = homeBg(sel, bgFmtOf(pref));
   const large = bg.url && bg.fmt === "large";
   const bgStyle: CSSProperties | undefined = large ? { backgroundImage: `linear-gradient(90deg, rgba(8,9,14,.82), rgba(8,9,14,.35)), url("${bg.url}")` } : undefined;
+  const title = (
+    <div className="htitle">
+      <h2 className="huge" aria-label="ReLaunch">
+        RELAUNCH
+      </h2>
+      <button className="newsbtn" data-go="news" data-a="home-news">
+        <Ic n="news" />
+        {t("Info & News")}
+      </button>
+    </div>
+  );
   if (!sel) {
     return (
       <div className="home nocar">
         <div className="hmain">
-          <h2 className="huge" aria-label="ReLaunch">
-            RELAUNCH
-          </h2>
+          {title}
           <div className="playrow">
             <select id="homeSel" aria-label={t("Instance ou serveur")} disabled>
-              <option>{t("Aucune instance pour l'instant")}</option>
+              <option>{inst0.length ? t("Aucun favori ni instance lancée récemment") : t("Aucune instance pour l'instant")}</option>
             </select>
-            <button className="btn play" id="homePlay" data-act="noInst">
-              {t("Jouer")}
-            </button>
+            {inst0.length ? (
+              <button className="btn play" data-go="wecraft">
+                {t("Voir les instances")}
+              </button>
+            ) : (
+              <button className="btn play" id="homePlay" data-act="noInst">
+                {t("Jouer")}
+              </button>
+            )}
           </div>
           <span className="seldet" id="homeDet">
-            {t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}
+            {inst0.length
+              ? t("L'accueil montre tes favoris, les instances lancées ces 30 derniers jours et les events. Ajoute une étoile à une instance dans WeCraft pour la retrouver ici.")
+              : t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}
           </span>
         </div>
       </div>
     );
   }
-  const favs = inst.filter((x) => x.fav);
-  const recents = inst.filter((x) => !x.fav && isRecent(x));
-  const rest = inst.filter((x) => !x.fav && !isRecent(x));
+  const events = inst.filter((x) => x.ev);
+  const favs = inst.filter((x) => x.fav && !x.ev);
+  const recents = inst.filter((x) => !x.fav && !x.ev && isRecent(x));
   const opts = (l: Inst[]) =>
     l.map((x) => (
       <option key={x.id} value={x.id}>
@@ -98,24 +120,15 @@ export function Home() {
       </option>
     ));
   return (
-    <div className={`home nocar${large ? " has-bg" : ""} bgf-${bg.url ? bg.fmt : "none"}`} style={bgStyle}>
+    <div className={`home${hasCar ? "" : " nocar"}${large ? " has-bg" : ""} bgf-${bg.url ? bg.fmt : "none"}`} style={bgStyle}>
       <div className="hmain">
-        <span className="hmeta">
-          <button className="newsbtn" data-go="news" data-a="home-news">
-            <Ic n="news" />
-            {t("Info & News")}
-          </button>
-        </span>
         {bg.url && (bg.fmt === "mini" || bg.fmt === "reduced") ? <div className={`hbg ${bg.fmt}`} style={{ backgroundImage: `url("${bg.url}")` }} aria-hidden="true"></div> : null}
-        <h2 className="huge" aria-label="ReLaunch">
-          RELAUNCH
-        </h2>
+        {title}
         <div className="playrow">
           <select id="homeSel" aria-label={t("Instance ou serveur")} value={sel.id} onChange={(e) => setUi({ sel: e.target.value })}>
-            <optgroup label="ReLaunch · serveurs"></optgroup>
+            {events.length ? <optgroup label={t("Events")}>{opts(events)}</optgroup> : null}
             {favs.length ? <optgroup label={t("Favoris")}>{opts(favs)}</optgroup> : null}
             {recents.length ? <optgroup label={t("Lancées ces 30 derniers jours")}>{opts(recents)}</optgroup> : null}
-            {rest.length ? <optgroup label={favs.length || recents.length ? t("Autres instances") : "WeCraft · instances"}>{opts(rest)}</optgroup> : null}
           </select>
           <InstIcon icon={sel.icon} fallback={sel.c} name={sel.n} size={46} />
           <button className="btn play" data-play={sel.id} id="homePlay">
@@ -126,6 +139,7 @@ export function Home() {
           {detail(sel)}
         </span>
       </div>
+      {hasCar ? <HomeCarousel /> : null}
     </div>
   );
 }
@@ -137,7 +151,7 @@ export function instMenu(x: Inst, groups: InstGroup[], moveTo: (gid: string) => 
   return [
     { label: "Ouvrir la page de l'instance", data: { act: "openInst", id: x.id } },
     { label: "Réglages (nom, version, icône, fond)", data: { act: "instEdit", id: x.id } },
-    { label: "Modifier les mods (Découvrir)", data: { act: "mpEdit", id: x.id }, hidden: !x.mp },
+    { label: "Ajouter du contenu (mods, packs, shaders)", data: { act: "addContent", id: x.id } },
     { label: "Packs de ressources et shaders de l'événement", data: { act: "evEdit", id: x.id }, hidden: !x.ev },
     { label: "Ouvrir le dossier", data: { act: "instFolder", id: x.id } },
     "sep",

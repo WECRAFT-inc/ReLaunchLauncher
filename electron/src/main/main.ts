@@ -17,6 +17,9 @@ import { InstanceService } from "./instances/service";
 import { loaderVersionList } from "./install/loaderList";
 import { isSafeVersionId } from "./install/vanilla";
 import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLook";
+import { explainWorkerError, RelinkClient, WORKER_HOSTS } from "./relink/worker";
+import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore } from "./skins/skins";
+import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
 import { mkdir } from "node:fs/promises";
@@ -62,6 +65,8 @@ let modpacks: ModpackService | null = null;
 let presence: DiscordPresence | null = null;
 let updateEnv: UpdateEnv | null = null;
 let media: MediaStore | null = null;
+let relink: RelinkClient | null = null;
+let skins: SkinStore | null = null;
 let appLog: AppLogger | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
@@ -134,6 +139,12 @@ async function serveAsset(request: Request): Promise<Response> {
       if (u.host === "wecraft") pathname = decodeURIComponent(u.pathname);
     } catch {
       pathname = "";
+    }
+    if (skins && pathname.startsWith("/skin/")) {
+      const k = await skins.serve(pathname);
+      return k
+        ? new Response(new Uint8Array(k.data), { status: 200, headers: { "Content-Type": k.type, "X-Content-Type-Options": "nosniff", "Cache-Control": "max-age=3600", "Cross-Origin-Resource-Policy": "same-origin", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:" } })
+        : new Response("Introuvable", { status: 404 });
     }
     const r = pathname ? await media.serve(pathname) : null;
     if (r) {
@@ -224,6 +235,15 @@ async function start(): Promise<void> {
   settings = new Settings(store, configFile(env));
   instances = new InstanceService(store, env);
   media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
+  const ua = `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`;
+  relink = new RelinkClient({ dataDir: wecraftDataDir(env), userAgent: ua });
+  const rl = relink;
+  skins = new SkinStore({
+    dataDir: wecraftDataDir(env),
+    publicKey: RELINK_SIGNING_PUBLIC_KEY,
+    assetUrl: (assetId, signature) => rl.assetUrl(assetId, signature),
+    fetchBytes: (url, max) => fetchBytes(url, max, {}, { allowedHosts: WORKER_HOSTS, signal: AbortSignal.timeout(60000), headers: { "User-Agent": ua } }),
+  });
   modpacks = new ModpackService({
     media,
     log: appLog,
@@ -268,6 +288,9 @@ function createWindow(): void {
     backgroundColor: "#0A0B10",
     show: false,
     autoHideMenuBar: true,
+    // Barre de titre dessinée par l'interface (couleurs du thème) ; Windows garde l'ombre, le redimensionnement
+    // et l'ancrage (Aero Snap). Les boutons réduire / agrandir / fermer passent par les canaux win:* ci-dessous.
+    titleBarStyle: "hidden",
     icon: path.join(RENDERER_ROOT, "assets", "relaunch_logo.png"),
     webPreferences: secureWebPreferences(PRELOAD, !app.isPackaged),
   });
@@ -358,6 +381,43 @@ function registerIpc(): void {
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
     },
   });
+  handle(CHANNELS.relinkState, async (force) => (relink ? relink.refresh("stable", force === true) : { ok: false, stale: true, fetchedAt: null, error: "Indisponible.", data: null }));
+  handle(CHANNELS.relinkNotifications, async () => (relink ? relink.notifications("stable") : { items: [], error: "Indisponible." }));
+  handle(CHANNELS.skinsList, async () => (skins ? skins.list() : []));
+  handle(CHANNELS.skinsImport, async () => {
+    if (!skins) return { ok: false, message: "Indisponible." };
+    const opts = { title: "Aperçu d'un skin ReLaunch (.rlskin)", properties: ["openFile" as const], filters: [{ name: "Skin ReLaunch", extensions: ["rlskin", "zip"] }] };
+    const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
+    if (r.canceled || !r.filePaths[0]) return { ok: false, message: "", canceled: true };
+    try {
+      return { ok: true, skin: await skins.importLocal(r.filePaths[0]) };
+    } catch (e) {
+      return { ok: false, message: e instanceof SkinError ? e.message : "Fichier skin illisible." };
+    }
+  });
+  handle(CHANNELS.skinsInstall, async (relinkId) => {
+    if (!skins || !relink) return { ok: false, message: "Indisponible." };
+    const st = await relink.cached();
+    const item = st.data?.skins.find((x) => x.id === relinkId); // seulement un skin annoncé par le Worker
+    if (!item) return { ok: false, message: "Skin introuvable dans le catalogue ReLink." };
+    try {
+      return { ok: true, skin: await skins.installRemote(item) };
+    } catch (e) {
+      return { ok: false, message: e instanceof SkinError ? e.message : explainWorkerError(e) };
+    }
+  });
+  handle(CHANNELS.skinsRemove, async (key) => (skins ? skins.remove(key) : false));
+  // Boutons de la barre de titre (fenêtre principale seulement, aucune donnée reçue)
+  handle(CHANNELS.winMinimize, async () => void mainWindow?.minimize());
+  handle(CHANNELS.winMaximize, async () => {
+    if (!mainWindow) return false;
+    if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+    else if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+    return mainWindow.isMaximized();
+  });
+  handle(CHANNELS.winClose, async () => void mainWindow?.close());
+  handle(CHANNELS.winState, async () => ({ maximized: !!mainWindow?.isMaximized(), fullscreen: !!mainWindow?.isFullScreen() }));
   ipcMain.handle(CHANNELS.getInfo, async (event): Promise<AppInfo> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     const env = pathEnv();
@@ -404,6 +464,7 @@ function registerIpc(): void {
 
   ipcMain.handle(CHANNELS.updateInstall, async (event): Promise<boolean> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (relink?.policy().updatesKilled) return false; // mises à jour suspendues depuis le panneau ReLink (kill switch)
     return updater?.install() ?? false;
   });
 
@@ -499,6 +560,11 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     return modpacks ? modpacks.create(p) : { ok: false, reason: "invalid" };
   });
+  ipcMain.handle(CHANNELS.mpAddMods, async (event, id: unknown, roots: unknown): Promise<ModpackStartResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (launcher?.busy()) return { ok: false, reason: "busy" };
+    return modpacks ? modpacks.addMods(id, roots) : { ok: false, reason: "invalid" };
+  });
   ipcMain.handle(CHANNELS.mpEditInfo, async (event, id: unknown): Promise<ModpackEditInfo | null> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     return modpacks ? modpacks.editInfo(id) : null;
@@ -529,6 +595,7 @@ function registerIpc(): void {
     if (!inst || !launcher) return { ok: false, reason: "invalid" };
     if (!inst.version) return { ok: false, reason: "no-version" };
     if (modpacks?.busy()) return { ok: false, reason: "busy" }; // mods en cours de téléchargement
+    if (relink?.policy().blockLaunch) return { ok: false, reason: "maintenance" }; // maintenance décidée dans le panneau ReLink
     const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
     const ram = typeof o.ram === "number" ? o.ram : NaN;
     const started = launcher.start(

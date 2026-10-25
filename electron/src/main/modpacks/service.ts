@@ -2,7 +2,7 @@
 // L'interface n'envoie que des valeurs vérifiées ici (texte, version, loader, identifiants de projets) ;
 // les dossiers sont calculés dans le processus principal, jamais fournis par l'interface.
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, stat, unlink } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type { ModpackEditInfo, ModpackHit, ModpackJob, ModpackSearch, ModpackStartResult, PackRowView } from "../../shared/api";
 import { fetchVersionList } from "../install/vanilla";
@@ -10,9 +10,11 @@ import type { InstanceService } from "../instances/service";
 import type { MediaStore } from "../media/media";
 import type { NetOptions } from "../net/download";
 import { installMrpack } from "./mrpack";
+import { CONTENT_DIRS, planContent } from "./projects";
 import { readEventManifest } from "../events/eventLock";
 import {
   applyModpackEdit,
+  resolveModpack,
   buildModpack,
   explainModrinthError,
   MODRINTH_LOADERS,
@@ -45,6 +47,20 @@ export function cleanRoots(v: unknown): Root[] | null {
     if (seen.has(o["project_id"])) continue;
     seen.add(o["project_id"]);
     out.push({ project_id: o["project_id"], title: o["title"].slice(0, 200) });
+  }
+  return out;
+}
+
+/** Packs de ressources et shaders à ajouter à un nouveau WePack (identifiants Modrinth vérifiés). */
+export function cleanExtras(v: unknown): { project_id: string; title: string; type: "resourcepack" | "shader" }[] | null {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v) || v.length > 100) return null;
+  const out: { project_id: string; title: string; type: "resourcepack" | "shader" }[] = [];
+  for (const r of v as unknown[]) {
+    const o = (typeof r === "object" && r !== null ? r : {}) as Record<string, unknown>;
+    if (!isPid(o["project_id"]) || typeof o["title"] !== "string" || (o["type"] !== "resourcepack" && o["type"] !== "shader")) return null;
+    if (out.some((x) => x.project_id === o["project_id"])) continue;
+    out.push({ project_id: o["project_id"], title: o["title"].slice(0, 200), type: o["type"] });
   }
   return out;
 }
@@ -174,6 +190,72 @@ export class ModpackService {
     });
   }
 
+  /** Dernière version compatible de chaque pack de ressources / shader, vérifiée (SHA-512), dans le dossier de jeu. */
+  private async installExtras(gameDir: string, mc: string, extras: { project_id: string; title: string; type: "resourcepack" | "shader" }[], progress: (d: number, t: number, m: string) => void): Promise<{ done: number; warnings: string[] }> {
+    const warnings: string[] = [];
+    let done = 0;
+    for (const x of extras) {
+      try {
+        progress(done, extras.length, x.title);
+        const vs = (await this.fetch(`/project/${x.project_id}/version`, { game_versions: JSON.stringify([mc]) })) as Record<string, unknown>[];
+        const list = Array.isArray(vs) ? vs : [];
+        const best = list.find((v) => v?.["version_type"] === "release") ?? list[0];
+        if (!best || typeof best["id"] !== "string") {
+          warnings.push(`« ${x.title} » : aucune version pour Minecraft ${mc}.`);
+          continue;
+        }
+        const plan = await planContent(this.fetch, best["id"]);
+        if (plan.type !== x.type) throw new Error("type de contenu inattendu");
+        const dir = path.join(gameDir, CONTENT_DIRS[plan.type]);
+        await mkdir(dir, { recursive: true });
+        const dest = path.join(dir, plan.file);
+        if (await stat(dest).then(() => true, () => false)) continue; // déjà présent : rien n'est remplacé
+        await this.download(plan.url, dest, plan.sha512, null);
+        done++;
+      } catch (e) {
+        warnings.push(`« ${x.title} » : ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    return { done, warnings };
+  }
+
+  /**
+   * Ajoute des mods (et leurs dépendances obligatoires) dans le dossier mods/ d'une instance qui n'est ni un
+   * WePack (modifié par edit) ni un modpack d'événement. Un fichier déjà présent n'est jamais remplacé.
+   */
+  async addMods(id: unknown, roots0: unknown): Promise<ModpackStartResult> {
+    const roots = cleanRoots(roots0);
+    if (this.busy()) return { ok: false, reason: "busy" };
+    if (!roots) return { ok: false, reason: "invalid" };
+    if (!roots.length) return { ok: false, reason: "empty" };
+    const inst = this.d.instances.target(id);
+    if (!inst || !inst.version || !inst.loader || !isLoader(inst.loader)) return { ok: false, reason: "invalid" };
+    if (await readEventManifest(inst.folder)) return { ok: false, reason: "invalid" };
+    const mc = inst.version;
+    const loader = inst.loader;
+    const gameDir = inst.path;
+    return this.run(async (progress) => {
+      progress(0, 0, "Recherche des versions compatibles...");
+      const { plan, warnings } = await resolveModpack(mc, loader, roots, this.fetch);
+      const modsDir = path.join(gameDir, "mods");
+      await mkdir(modsDir, { recursive: true });
+      const present = new Set((await readdir(modsDir).catch(() => [] as string[])).map((n) => n.toLowerCase().replace(/\.disabled$/, "")));
+      const todo = plan.filter((i) => !present.has(i.filename.toLowerCase()));
+      let done = 0;
+      for (const i of todo) {
+        progress(done, todo.length, i.filename);
+        await this.download(i.url, path.join(modsDir, i.filename), i.sha512, i.sha1);
+        done++;
+      }
+      const deps = todo.filter((i) => i.dependency).length;
+      const skipped = plan.length - todo.length;
+      return {
+        summary: `${done} mod(s) ajouté(s) à « ${inst.display} »${deps ? ` (dont ${deps} dépendance(s) obligatoire(s))` : ""}${skipped ? ` ; ${skipped} déjà présent(s), non remplacé(s)` : ""}.`,
+        warnings,
+      };
+    });
+  }
+
   /** Une création ou une modification est en cours (lancement et suppression refusés pendant ce temps). */
   busy(): boolean {
     return !!this.job && this.job.phase === "en-cours";
@@ -211,11 +293,14 @@ export class ModpackService {
     }
     const mc = o["mc"];
     const loader = o["loader"];
+    const extras = cleanExtras(o["extras"]);
+    if (!extras) return { ok: false, reason: "invalid" };
     return this.run(async (progress) => {
       const r = await buildModpack(folder, name, mc, loader, roots, progress, this.fetch, this.download);
+      const ex = await this.installExtras(folder, mc, extras, progress);
       return {
-        summary: `Instance « ${path.basename(folder)} » créée avec ${r.count} mods${r.deps ? ` (dont ${r.deps} dépendances ajoutées automatiquement)` : ""}.`,
-        warnings: r.warnings,
+        summary: `Instance « ${path.basename(folder)} » créée avec ${r.count} mods${r.deps ? ` (dont ${r.deps} dépendances ajoutées automatiquement)` : ""}${ex.done ? `, ${ex.done} pack(s) de ressources ou shader(s)` : ""}.`,
+        warnings: [...r.warnings, ...ex.warnings],
       };
     });
   }

@@ -211,7 +211,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "no-version" };
+export type LaunchStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -233,6 +233,11 @@ export interface UpdateStatus {
 }
 
 /** Lot E7 : modpacks Modrinth. */
+export interface ContentExtra {
+  project_id: string;
+  title: string;
+  type: "resourcepack" | "shader";
+}
 export interface ModpackRoot {
   project_id: string;
   title: string;
@@ -412,6 +417,27 @@ export interface WeCraftApi {
     /** Fin de logs/latest.log du jeu, données sensibles masquées. */
     gameLog(id: string): Promise<{ lines: string[]; truncated: boolean; at: number | null }>;
   };
+  relink: {
+    /** Données publiques du service ReLink (cache si hors ligne). `force` : relever tout de suite. */
+    state(force?: boolean): Promise<RelinkState>;
+    /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
+    notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
+  };
+  skins: {
+    list(): Promise<InstalledSkin[]>;
+    /** Fenêtre « Ouvrir » : fichier .rlskin du PC, installé en aperçu local (non signé). */
+    importLocal(): Promise<SkinResult>;
+    /** Skin publié sur ReLink (fichier vérifié : SHA-256 + signature Ed25519). */
+    install(relinkId: string): Promise<SkinResult>;
+    remove(key: string): Promise<boolean>;
+  };
+  win: {
+    minimize(): Promise<void>;
+    /** Agrandit ou restaure (quitte d'abord le plein écran) ; renvoie l'état agrandi. */
+    maximize(): Promise<boolean>;
+    close(): Promise<void>;
+    state(): Promise<{ maximized: boolean; fullscreen: boolean }>;
+  };
   content: {
     /** Mods, packs de ressources et shaders de l'instance (lecture locale, rapide). */
     list(id: string): Promise<ContentList | null>;
@@ -455,7 +481,10 @@ export interface WeCraftApi {
     /** Versions de Minecraft (releases), la plus récente d'abord ; null si la liste est inaccessible. */
     versions(): Promise<string[] | null>;
     search(q: ModpackQuery): Promise<ModpackSearch>;
-    create(p: { name: string; mc: string; loader: string; roots: ModpackRoot[] }): Promise<ModpackStartResult>;
+    /** `extras` : packs de ressources et shaders ajoutés à l'instance après les mods (dernière version compatible). */
+    create(p: { name: string; mc: string; loader: string; roots: ModpackRoot[]; extras?: ContentExtra[] }): Promise<ModpackStartResult>;
+    /** Ajoute des mods (et leurs dépendances obligatoires) à une instance qui n'est pas un WePack. */
+    addMods(id: string, roots: ModpackRoot[]): Promise<ModpackStartResult>;
     editInfo(id: string): Promise<ModpackEditInfo | null>;
     rows(id: string | null, selected: ModpackRoot[]): Promise<PackRowView[]>;
     edit(id: string, selected: ModpackRoot[]): Promise<ModpackStartResult>;
@@ -495,3 +524,147 @@ export interface WeCraftApi {
     open(id: ExternalLinkId): Promise<boolean>;
   };
 }
+
+// ---------------------------------------------------------------- service ReLink (Worker, lecture seule)
+export interface RelinkNews {
+  id: string;
+  title: string;
+  body: string;
+  date: string;
+  tags: { label: string; color: string }[];
+  cta: string;
+  /** Page du launcher à ouvrir ("" = aucune). */
+  open: string;
+}
+export interface RelinkCard {
+  id: string;
+  title: string;
+  text: string;
+  cta: string;
+  open: string;
+  tag: string;
+}
+export interface RelinkServer {
+  id: string;
+  name: string;
+  host: string;
+  state: "online" | "offline" | "maintenance" | "unknown";
+  players: number;
+  max: number;
+  pack: string;
+  event: string;
+  desc: string;
+  version: string;
+}
+export interface RelinkEvent {
+  id: string;
+  name: string;
+  desc: string;
+  status: string;
+  start: string;
+  end: string;
+  server: string;
+  pack: string;
+}
+export interface RelinkPartner {
+  id: string;
+  name: string;
+  channel: string;
+  category: string;
+  featured: boolean;
+  live: boolean;
+  viewers: number;
+}
+export interface RelinkModpack {
+  id: string;
+  name: string;
+  desc: string;
+  mc: string;
+  loader: string;
+  version: string;
+}
+export interface RelinkSkin {
+  id: string;
+  name: string;
+  desc: string;
+  unlock: { event: boolean; shop: number; achievement: boolean; premium: boolean };
+  versions: { liquidGlass: boolean; mat: boolean };
+  followsTheme: boolean;
+  /** Fichier .rlskin publié (null tant que le Worker n'en annonce pas). */
+  file: { id: string; sha256: string; size: number; version: string } | null;
+}
+export interface RelinkNotification {
+  id: string;
+  title: string;
+  body: string;
+  open: string;
+  at: string;
+}
+export interface RelinkBootstrap {
+  generatedAt: string;
+  maintenance: { enabled: boolean; level: "info" | "warn" | "danger" | "critical"; text: string; blockLaunch: boolean };
+  updates: { kill: boolean; minVersion: string | null; blockOld: boolean; latest: string | null; paused: boolean; release: { version: string; mandatory: boolean; sha256: string } | null };
+  carousel: { count: number; autoplay: boolean; speedSeconds: number };
+  flags: string[];
+  cards: RelinkCard[];
+  news: RelinkNews[];
+  skins: RelinkSkin[];
+  modpacks: RelinkModpack[];
+  servers: RelinkServer[];
+  events: RelinkEvent[];
+  partners: RelinkPartner[];
+}
+export interface RelinkState {
+  /** Des données sont disponibles (fraîches ou en cache). */
+  ok: boolean;
+  /** Données venant du cache (le dernier relevé a échoué ou n'a pas encore eu lieu). */
+  stale: boolean;
+  fetchedAt: number | null;
+  error: string | null;
+  data: RelinkBootstrap | null;
+}
+
+// ---------------------------------------------------------------- skins du launcher (.rlskin)
+export interface SkinAnimation {
+  keyframes: Record<string, string | number>[];
+  durationMs: number;
+  iterations: number | "infinite";
+  direction: "normal" | "reverse" | "alternate" | "alternate-reverse";
+  easing: string;
+  delayMs: number;
+}
+export interface SkinVariant {
+  tokens: Record<string, string>;
+  barBackground: string | undefined;
+  cardBackground: string | undefined;
+}
+export interface SkinManifest {
+  id: string;
+  name: string;
+  author: string;
+  skinVersion: string;
+  description: string;
+  /** Garde les couleurs du thème choisi (le skin n'ajoute que le décor). */
+  followsTheme: boolean;
+  tokens: Record<string, string>;
+  fonts: { display: { file: string; family: string } | undefined; body: { file: string; family: string } | undefined };
+  background: { color: string | undefined; gradient: string | undefined; layers: { image: string; size: string; position: string; repeat: boolean; opacity: number; blend: string; animation: string | undefined }[]; overlay: "none" | "vignette" | "grain" };
+  bars: { pattern: string | undefined; patternOpacity: number; background: string | undefined; border: string | undefined; radius: number | undefined };
+  frames: { radius: number | undefined; border: string | undefined; glow: string | undefined; background: string | undefined };
+  playButton: { image: string | undefined; background: string | undefined; text: string | undefined; radius: number | undefined; animation: string | undefined };
+  transition: { type: "none" | "fade" | "slide" | "wave" | "zoom"; durationMs: number };
+  launchScreen: { image: string | undefined; text: string; animation: string | undefined };
+  animations: Record<string, SkinAnimation>;
+  variants: { liquidGlass: SkinVariant | undefined; mat: SkinVariant | undefined };
+}
+export interface InstalledSkin {
+  key: string;
+  signed: boolean;
+  source: "relink" | "local";
+  relinkId: string | null;
+  sha256: string;
+  /** Adresse app:// du dossier du skin (images, polices). */
+  base: string;
+  manifest: SkinManifest;
+}
+export type SkinResult = { ok: true; skin: InstalledSkin } | { ok: false; message: string; canceled?: boolean };

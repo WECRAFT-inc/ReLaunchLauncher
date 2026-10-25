@@ -3,6 +3,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { LaunchStatus, UpdateCheck } from "../../shared/api";
 import { Minis } from "./Bars";
 import { useApp } from "./ctx";
+import { NotifList } from "./Relink";
 import { useEscapeLayer } from "./keys";
 import { Ic } from "./Ic";
 import { detail, gById, type Inst } from "./model";
@@ -191,9 +192,7 @@ export function Drawer() {
               ✕
             </button>
           </header>
-          <div className="dbody">
-            <div className="empty">{T[2]}</div>
-          </div>
+          <div className="dbody">{ui.drawer === "news" ? <NotifList /> : <div className="empty">{T[2]}</div>}</div>
         </>
       ) : null}
     </aside>

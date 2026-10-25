@@ -5,11 +5,12 @@
 // Chaque résultat ouvre sa page (description, versions, galerie, compatibilité). Images servies par ReLaunch,
 // avec une image de remplacement si elles manquent.
 import { useEffect, useRef, useState } from "react";
-import type { ModpackJob, ModpackRoot, PackRowView, ProjectHit, ProjectType } from "../../shared/api";
+import type { ContentList, ModpackJob, ModpackRoot, PackRowView, ProjectHit, ProjectType } from "../../shared/api";
 import { useApp, type MpDraft } from "./ctx";
 import { Ic } from "./Ic";
 import { JobView, useJob } from "./Import";
-import { CATEGORY_FR } from "./model";
+import { ago, CATEGORY_FR } from "./model";
+import { InstIcon } from "./symbols";
 import { fromNow, LOADER_NAME, ProjectPage, ProjIcon, shortCount, TYPE_LABEL } from "./ProjectPage";
 import { t } from "./i18n";
 
@@ -44,9 +45,18 @@ const START_ERRORS: Record<string, string> = {
 };
 const TONES: Record<string, string> = { warn: "var(--bad)", orphan: "var(--warn)", dep: "var(--acc-2)", muted: "var(--ink-faint)" };
 
-export function Discover() {
-  const { mp, setMp, toast, show, refreshInstances, ui, setUi, inst } = useApp();
-  const [tab, setTab] = useState<ProjectType>((TABS.find((t) => t[0] === ui.dtab)?.[0] ?? "modpack") as ProjectType);
+/**
+ * Deux pages proches mais distinctes :
+ * - « Parcourir du contenu » (sans `forInst`) : catalogue complet, création rapide d'un WePack (mods, packs de
+ *   ressources, shaders) ou installation dans une instance existante ;
+ * - « Ajouter du contenu » (`forInst` = instance) : mods, packs de ressources et shaders compatibles avec CETTE
+ *   instance (pas de modpacks), installés dedans ; le panneau de droite décrit l'instance.
+ */
+export function Discover({ forInst }: { forInst?: string } = {}) {
+  const { mp, setMp, toast, show, refreshInstances, ui, setUi, inst, byId, openInstance } = useApp();
+  const fi = forInst ? (byId(forInst) ?? null) : null;
+  const tabs = fi ? TABS.filter(([k]) => k !== "modpack" && !(fi.ev && k === "mod")) : TABS;
+  const [tab, setTab] = useState<ProjectType>(fi ? (fi.ev ? "resourcepack" : "mod") : ((TABS.find((t) => t[0] === ui.dtab)?.[0] ?? "modpack") as ProjectType));
   const [versions, setVersions] = useState<string[] | null>(null);
   const [query, setQuery] = useState(ui.dq || "");
   const [sort, setSort] = useState<string | null>(null);
@@ -68,8 +78,14 @@ export function Discover() {
       setMp((d) => ({ ...(d.edit ? { ...d, edit: null } : d), selected: [], name: d.edit ? "Mon modpack" : d.name }));
     }
   });
-  const quick = useJob((s) => s.phase === "termine" && refreshInstances());
-  const editing = !!mp.edit;
+  const quick = useJob((s) => {
+    if (s.phase === "termine") {
+      refreshInstances();
+      setInfoKey((k) => k + 1);
+    }
+  });
+  const [infoKey, setInfoKey] = useState(0);
+  const editing = !fi && !!mp.edit;
   const busy = packJob.job?.phase === "en-cours" || quick.job?.phase === "en-cours";
 
   // demande venue de « Créer un WePack » (recherche, onglet) : prise une fois puis oubliée
@@ -78,8 +94,8 @@ export function Discover() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    if (mp.edit) setTab("mod");
-  }, [mp.edit]);
+    if (mp.edit && !fi) setTab("mod");
+  }, [mp.edit, fi]);
   useEffect(() => {
     void window.wecraft.modpacks.versions().then((v) => {
       setVersions(v);
@@ -88,14 +104,16 @@ export function Discover() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    if (!target && inst.length) setTarget(inst[0]!.id);
-  }, [inst, target]);
+    if (fi) setTarget(fi.id);
+    else if (!target && inst.length) setTarget(inst[0]!.id);
+  }, [inst, target, fi]);
 
   // Mods : la version et le loader sont ceux de « Mon modpack » (tout ajout doit être compatible)
-  const mc = tab === "mod" ? mp.mc : mcF;
-  const loader = tab === "mod" ? mp.loader : loaderF;
+  // Ajouter du contenu : version de l'instance pour tout, et son loader pour les mods
+  const mc = fi ? fi.v : tab === "mod" ? mp.mc : mcF;
+  const loader = fi ? (tab === "mod" ? fi.l : loaderF) : tab === "mod" ? mp.loader : loaderF;
   const search = (offset: number) => {
-    if (tab === "mod" && !mp.mc) return;
+    if (tab === "mod" && !mc) return;
     const my = ++seq.current;
     setSearching(true);
     void window.wecraft.projects.search({ type: tab, query, mc, loader, sort, offset, categories: cat ? [cat] : [] }).then((r) => {
@@ -117,6 +135,24 @@ export function Discover() {
   }, [mp.selected, mp.edit]);
 
   const selectedIds = new Set(mp.selected.map((m) => m.project_id));
+  const extraIds = new Set((mp.extras ?? []).map((m) => m.project_id));
+  const toggleExtra = (h: { id: string; title: string }) => {
+    const type = tab === "shader" ? "shader" : "resourcepack";
+    setMp((d) => ({ ...d, extras: extraIds.has(h.id) ? (d.extras ?? []).filter((m) => m.project_id !== h.id) : [...(d.extras ?? []), { project_id: h.id, title: h.title, type }] }));
+  };
+  /** Ajouter du contenu : un mod dans l'instance (WePack : ajouté au modpack ; sinon fichier + dépendances). */
+  const addModToInst = (h: { id: string; title: string }) => {
+    if (!fi) return;
+    if (fi.mp) {
+      void window.wecraft.modpacks.editInfo(fi.id).then((info) => {
+        if (!info) return toast("Les informations de ce WePack sont illisibles (wecraft_modpack.json).");
+        if (info.selected.some((m) => m.project_id === h.id)) return toast(`« ${h.title} » est déjà dans ce WePack.`);
+        void window.wecraft.modpacks.edit(fi.id, [...info.selected, { project_id: h.id, title: h.title }]).then((r) => (r.ok ? quick.follow(r.job) : toast(START_ERRORS[r.reason] ?? "Ajout impossible.")));
+      });
+    } else {
+      void window.wecraft.modpacks.addMods(fi.id, [{ project_id: h.id, title: h.title }]).then((r) => (r.ok ? quick.follow(r.job) : toast(START_ERRORS[r.reason] ?? "Ajout impossible : version ou loader de l'instance inconnu.")));
+    }
+  };
   const togglePack = (h: { id: string; title: string }) =>
     setMp((d) => ({ ...d, selected: selectedIds.has(h.id) ? d.selected.filter((m) => m.project_id !== h.id) : [...d.selected, { project_id: h.id, title: h.title }] }));
   const removeMod = (id: string) => setMp((d) => ({ ...d, selected: d.selected.filter((m) => m.project_id !== id) }));
@@ -140,7 +176,7 @@ export function Discover() {
 
   const go = () => {
     setConfirm(false);
-    const p = mp.edit ? window.wecraft.modpacks.edit(mp.edit.id, mp.selected) : window.wecraft.modpacks.create({ name: mp.name.trim(), mc: mp.mc, loader: mp.loader, roots: mp.selected });
+    const p = mp.edit ? window.wecraft.modpacks.edit(mp.edit.id, mp.selected) : window.wecraft.modpacks.create({ name: mp.name.trim(), mc: mp.mc, loader: mp.loader, roots: withShaderMods(mp), extras: mp.extras ?? [] });
     void p.then((r) => {
       if (!r.ok) return toast(r.reason === "exists" ? `Une instance « ${r.name ?? ""} » existe déjà. Choisissez un autre nom.` : START_ERRORS[r.reason]!);
       packJob.follow(r.job);
@@ -148,21 +184,35 @@ export function Discover() {
   };
   const ask = () => {
     if (!mp.edit && (!mp.name.trim() || !mp.mc)) return toast("Indiquez un nom et une version de Minecraft.");
-    if (!mp.selected.length) return toast(mp.edit ? "Un modpack doit contenir au moins un mod. Pour le supprimer, utilisez la corbeille dans WeCraft." : START_ERRORS["empty"]!);
+    if (!withShaderMods(mp).length) return toast(mp.edit ? "Un modpack doit contenir au moins un mod. Pour le supprimer, utilisez la corbeille dans WeCraft." : START_ERRORS["empty"]!);
     const oldIds = new Set((mp.edit?.old ?? []).map((m) => m.project_id));
     if (mp.edit && !mp.selected.some((m) => !oldIds.has(m.project_id))) return go();
     setConfirm(true);
   };
 
-  const panel = tab === "mod" || editing || mp.selected.length > 0;
+  const panel = !!fi || tab === "mod" || tab === "resourcepack" || tab === "shader" || editing || mp.selected.length > 0;
   return (
     <>
-      <div className="vhead">
-        <div>
-          <h2>{t("Découvrir")}</h2>
-          <div className="sub">{t("Modpacks, mods, packs de ressources et shaders de Modrinth")}</div>
+      {fi ? (
+        <div className="vhead">
+          <div className="row" style={{ justifyContent: "flex-start", gap: "12px" }}>
+            <button className="ib ipage-back" onClick={() => openInstance(fi.id)} aria-label={t("Retour à l'instance")} title={t("Retour à l'instance")}>
+              ←
+            </button>
+            <div>
+              <h2>{t("Ajouter du contenu")}</h2>
+              <div className="sub">{`${fi.n} · ${[fi.l, fi.lv].filter(Boolean).join(" ")} ${fi.v || "?"} · ${t("seuls les contenus compatibles sont proposés")}`}</div>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="vhead">
+          <div>
+            <h2>{t("Parcourir du contenu")}</h2>
+            <div className="sub">{t("Modpacks, mods, packs de ressources et shaders de Modrinth")}</div>
+          </div>
+        </div>
+      )}
       {editing ? (
         <div className="card mp-edit">
           <span>
@@ -175,7 +225,7 @@ export function Discover() {
         </div>
       ) : null}
       <div className="tabs" id="dTabs">
-        {TABS.map(([k, l]) => (
+        {tabs.map(([k, l]) => (
           <button
             key={k}
             className="chip"
@@ -192,8 +242,8 @@ export function Discover() {
           </button>
         ))}
       </div>
-      <JobView job={quick.job} />
-      {quick.job?.phase === "termine" ? (
+      {fi ? null : <JobView job={quick.job} />}
+      {quick.job?.phase === "termine" && !fi ? (
         <button className="btn sm" onClick={() => show("wecraft")}>
           {t("Voir dans WeCraft")}
         </button>
@@ -204,7 +254,11 @@ export function Discover() {
             <ProjectPage
               id={open}
               onBack={() => setOpen(null)}
-              ctx={{ inPack: selectedIds.has(open), togglePack, packMc: mp.mc, packLoader: mp.loader, target, setTarget }}
+              ctx={
+                fi
+                  ? { inPack: false, togglePack: addModToInst, packMc: fi.v, packLoader: fi.l, target: fi.id, setTarget: () => undefined, lockTarget: true, modLabels: ["✓ Ajouté", `+ Ajouter à « ${fi.n} »`], packName: `l'instance « ${fi.n} »` }
+                  : { inPack: selectedIds.has(open), togglePack, packMc: mp.mc, packLoader: mp.loader, target, setTarget, extraIn: extraIds.has(open), toggleExtra }
+              }
             />
           ) : (
             <>
@@ -217,7 +271,7 @@ export function Discover() {
                     </option>
                   ))}
                 </select>
-                {tab !== "mod" ? (
+                {tab !== "mod" && !fi ? (
                   <select aria-label={t("Version de Minecraft")} value={mcF} onChange={(e) => setMcF(e.target.value)}>
                     <option value="">{t("Toutes les versions")}</option>
                     {(versions ?? []).map((v) => (
@@ -227,7 +281,7 @@ export function Discover() {
                     ))}
                   </select>
                 ) : null}
-                {tab !== "mod" && TAB_LOADERS[tab].length ? (
+                {tab !== "mod" && TAB_LOADERS[tab].length && !(fi && tab !== "shader") ? (
                   <select aria-label={t("Loader")} value={loaderF} onChange={(e) => setLoaderF(e.target.value)}>
                     <option value="">{tab === "shader" ? "Iris et OptiFine" : "Tous les loaders"}</option>
                     {TAB_LOADERS[tab].map((l) => (
@@ -248,7 +302,7 @@ export function Discover() {
                       </option>
                     ))}
                 </select>
-                {tab === "resourcepack" || tab === "shader" ? (
+                {(tab === "resourcepack" || tab === "shader") && !fi ? (
                   <select aria-label={t("Instance où installer")} value={target} onChange={(e) => setTarget(e.target.value)}>
                     {inst.length ? null : <option value="">{t("Aucune instance")}</option>}
                     {inst.map((i) => (
@@ -259,7 +313,7 @@ export function Discover() {
                   </select>
                 ) : null}
               </div>
-              {tab === "mod" ? <small className="faint">{`Résultats compatibles avec Mon modpack : Minecraft ${mp.mc || "?"} · ${mp.loader}.`}</small> : null}
+              {fi ? <small className="faint">{`Résultats compatibles avec « ${fi.n} » : Minecraft ${fi.v || "?"}${tab === "mod" ? ` · ${fi.l}` : ""}.`}</small> : tab === "mod" ? <small className="faint">{`Résultats compatibles avec Mon modpack : Minecraft ${mp.mc || "?"} · ${mp.loader}.`}</small> : null}
               {tab === "shader" ? <small className="faint">{t("Les shaders demandent Iris (Fabric, Quilt, NeoForge) ou OptiFine dans l'instance.")}</small> : null}
               {err ? <div className="empty">{err}</div> : null}
               {!err && !hits.length && !searching ? <div className="empty">{tab === "mod" && !mp.mc ? "Liste des versions de Minecraft inaccessible : vérifiez votre connexion." : "Aucun résultat pour cette recherche."}</div> : null}
@@ -292,14 +346,27 @@ export function Discover() {
                         </span>
                       </span>
                       <span className="proj2-side">
-                        {tab === "mod" ? (
+                        {fi ? (
+                          <button className="btn sm pri" onClick={() => (tab === "mod" ? addModToInst(h) : quickInstall(h))} disabled={busy}>
+                            {t("+ Ajouter")}
+                          </button>
+                        ) : tab === "mod" ? (
                           <button className={`btn sm${on ? "" : " pri"}`} aria-pressed={on ? "true" : "false"} onClick={() => togglePack(h)} disabled={busy}>
                             {on ? "✓ Ajouté" : "+ Ajouter"}
                           </button>
-                        ) : (
+                        ) : tab === "modpack" ? (
                           <button className="btn sm pri" onClick={() => quickInstall(h)} disabled={busy}>
                             {t("+ Installer")}
                           </button>
+                        ) : (
+                          <span className="row" style={{ gap: "6px" }}>
+                            <button className={`btn sm${extraIds.has(h.id) ? "" : " pri"}`} aria-pressed={extraIds.has(h.id) ? "true" : "false"} onClick={() => toggleExtra(h)} disabled={busy} title={t("Ajouter au nouveau WePack (panneau de droite)")}>
+                              {extraIds.has(h.id) ? "✓ Ajouté" : "+ Ajouter"}
+                            </button>
+                            <button className="btn sm" onClick={() => quickInstall(h)} disabled={busy || !target} title={t("Installer dans l'instance choisie plus haut")}>
+                              {t("Installer")}
+                            </button>
+                          </span>
                         )}
                         <small>
                           <Ic n="dl" />
@@ -319,7 +386,9 @@ export function Discover() {
             </>
           )}
         </div>
-        {panel ? (
+        {panel && fi ? (
+          <InstInfoPanel id={fi.id} refresh={infoKey} job={quick.job} />
+        ) : panel ? (
           <PackPanel
             mp={mp}
             setMp={setMp}
@@ -384,6 +453,26 @@ function PackPanel(p: {
           ))}
         </div>
       </div>
+      {mp.extras?.length ? (
+        <div className="mp-rows">
+          {mp.extras.map((x) => (
+            <div key={x.project_id} className="mp-row">
+              <span>
+                {x.title}
+                <small className="faint">{x.type === "shader" ? " shader" : " pack de ressources"}</small>
+              </span>
+              <button className="ib" aria-label={`Retirer ${x.title}`} onClick={() => setMp((d) => ({ ...d, extras: (d.extras ?? []).filter((m) => m.project_id !== x.project_id) }))} disabled={busy}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {mp.extras?.some((x) => x.type === "shader") && !editing ? (
+        <small className={mp.loader === "Forge" ? "cr-bad" : "faint"}>
+          {mp.loader === "Forge" ? t("Les shaders demandent Iris (Fabric, Quilt, NeoForge) : choisis un autre loader, Forge n'est pas pris en charge ici.") : t("Iris et Sodium sont ajoutés automatiquement pour les shaders.")}
+        </small>
+      ) : null}
       <div className="mp-rows">
         {rows.length ? (
           rows.map((r) => (
@@ -400,7 +489,7 @@ function PackPanel(p: {
             </div>
           ))
         ) : (
-          <small className="faint">{t("Aucun mod pour l'instant : ajoute-en depuis l'onglet Mods.")}</small>
+          <small className="faint">{mp.extras?.length ? t("Aucun mod choisi : Iris et Sodium seront ajoutés pour les shaders.") : t("Aucun mod pour l'instant : ajoute-en depuis l'onglet Mods, ou des packs de ressources et shaders.")}</small>
         )}
       </div>
       {p.confirm ? (
@@ -431,5 +520,70 @@ function PackPanel(p: {
   );
 }
 
-export const emptyDraft = (): MpDraft => ({ name: "Mon modpack", mc: "", loader: "Fabric", selected: [] as ModpackRoot[], edit: null });
+export const emptyDraft = (): MpDraft => ({ name: "Mon modpack", mc: "", loader: "Fabric", selected: [] as ModpackRoot[], edit: null, extras: [] });
+
+/** Iris (+ Sodium) ajoutés aux mods d'un nouveau WePack qui contient des shaders (identifiants Modrinth). */
+const IRIS: ModpackRoot = { project_id: "YL57xq9U", title: "Iris Shaders" };
+const SODIUM: ModpackRoot = { project_id: "AANobbMI", title: "Sodium" };
+export function withShaderMods(mp: MpDraft): ModpackRoot[] {
+  if (mp.edit || !mp.extras?.some((x) => x.type === "shader") || mp.loader === "Forge") return mp.selected;
+  const ids = new Set(mp.selected.map((m) => m.project_id));
+  return [...mp.selected, ...[IRIS, SODIUM].filter((m) => !ids.has(m.project_id))];
+}
+
+/** Ajouter du contenu : ce qu'il faut savoir de l'instance modifiée. */
+function InstInfoPanel({ id, refresh, job }: { id: string; refresh: number; job: ModpackJob | null }) {
+  const { byId } = useApp();
+  const x = byId(id);
+  const [list, setList] = useState<ContentList | null>(null);
+  useEffect(() => {
+    void window.wecraft.content.list(id).then(setList, () => setList(null));
+  }, [id, refresh]);
+  if (!x) return null;
+  const n = (k: string) => list?.items.filter((i) => i.kind === k).length ?? 0;
+  const off = list?.items.filter((i) => i.disabled).length ?? 0;
+  return (
+    <div className="card mp-pack iinfo">
+      <span className="row" style={{ justifyContent: "flex-start", gap: "12px" }}>
+        <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={52} />
+        <span className="ic-txt">
+          <b>{x.n}</b>
+          <small className="faint">{x.ev ? t("Modpack d'événement") : x.mp ? "WePack" : x.s}</small>
+        </span>
+      </span>
+      <dl className="iinfo-dl">
+        <dt>{t("Minecraft")}</dt>
+        <dd>{x.v || "?"}</dd>
+        <dt>{t("Loader")}</dt>
+        <dd>{[x.l, x.lv].filter(Boolean).join(" ")}</dd>
+        <dt>{t("Mémoire")}</dt>
+        <dd>{x.r ? `${x.r} Go` : t("par défaut")}</dd>
+        <dt>{t("Dernière partie")}</dt>
+        <dd>{x.last ? ago(x.last) : t("jamais")}</dd>
+        <dt>{t("Mods")}</dt>
+        <dd>{list ? `${n("mod")}` : "…"}</dd>
+        <dt>{t("Packs de ressources")}</dt>
+        <dd>{list ? `${n("resourcepack")}` : "…"}</dd>
+        <dt>{t("Shaders")}</dt>
+        <dd>{list ? `${n("shader")}` : "…"}</dd>
+        {off ? (
+          <>
+            <dt>{t("Désactivés")}</dt>
+            <dd>{off}</dd>
+          </>
+        ) : null}
+      </dl>
+      {x.ev ? <small className="faint">{t("Événement : les mods sont imposés, seuls les packs de ressources et les shaders s'ajoutent.")}</small> : x.mp ? <small className="faint">{t("WePack : un mod ajouté ici entre dans le modpack, avec ses dépendances.")}</small> : <small className="faint">{t("Les dépendances obligatoires d'un mod sont ajoutées avec lui ; un fichier déjà présent n'est jamais remplacé.")}</small>}
+      <JobView job={job} />
+      <span className="row" style={{ gap: "8px" }}>
+        <button className="btn sm" data-act="openInst" data-id={x.id}>
+          {t("Voir l'instance")}
+        </button>
+        <button className="btn sm pri" data-play={x.id}>
+          {t("Jouer")}
+        </button>
+      </span>
+    </div>
+  );
+}
 export { TYPE_LABEL };

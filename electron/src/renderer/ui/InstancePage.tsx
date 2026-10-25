@@ -219,9 +219,9 @@ function ContentTab({ id, mp, ev }: { id: string; mp: boolean; ev: boolean }) {
           <Ic n="folder" />
           {t("Ouvrir le dossier")}
         </button>
-        <button className="btn pri" data-go="discover">
+        <button className="btn pri" data-act="addContent" data-id={id}>
           <Ic n="discover" />
-          {t("Parcourir du contenu")}
+          {t("Ajouter du contenu")}
         </button>
       </div>
       <div className="ic-filters">

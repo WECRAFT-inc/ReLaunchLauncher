@@ -1,6 +1,6 @@
 // État partagé de l'interface (lot E6).
 import { createContext, useContext } from "react";
-import type { ModpackEditInfo, ModpackRoot } from "../../shared/api";
+import type { ContentExtra, InstalledSkin, ModpackEditInfo, ModpackRoot, RelinkNotification, RelinkState } from "../../shared/api";
 import type { Car, HomePref, Inst, InstGroup, NavConfig, Pref, View } from "./model";
 
 /** Modpack en préparation dans Découvrir (lot E7) : création, ou modification d'un WePack existant. */
@@ -10,6 +10,8 @@ export interface MpDraft {
   loader: string;
   selected: ModpackRoot[];
   edit: ModpackEditInfo | null;
+  /** Packs de ressources et shaders ajoutés au nouveau WePack (installés après les mods). */
+  extras?: ContentExtra[];
 }
 
 export interface PopState {
@@ -84,6 +86,16 @@ export interface AppCtx {
   /** Range l'instance dans « Inactives » (groupe créé s'il n'existe pas) ou l'en sort. */
   toggleInactive: (id: string) => void;
   openInstance: (id: string, tab?: string) => void;
+  /** Service ReLink : dernier état connu (null avant la première lecture). */
+  relink: RelinkState | null;
+  refreshRelink: (force?: boolean) => void;
+  notifs: RelinkNotification[];
+  /** Identifiants déjà vus (actualités et notifications), gardés sur ce PC. */
+  seen: Set<string>;
+  markSeen: (ids: string[]) => void;
+  /** Skins installés et skin appliqué (clé, ou null = Classique). */
+  skins: InstalledSkin[];
+  reloadSkins: () => void;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);

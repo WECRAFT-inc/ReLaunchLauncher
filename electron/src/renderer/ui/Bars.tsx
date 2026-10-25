@@ -1,6 +1,7 @@
 // Barres de navigation (port de renderBars, navBtn, pinsHTML… du prototype). Même balisage, mêmes règles.
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { useApp } from "./ctx";
+import { useUnread } from "./Relink";
 import { Ic } from "./Ic";
 import { LOGO } from "./icons";
 import { barSize, dockSide, NAVINFO, pinCount, profPlace, SKINS, type Inst, type NavConfig, type Pin, type Side, type Skin } from "./model";
@@ -85,6 +86,7 @@ function cleanSeps(list: Piece[]): Piece[] {
 export function useBarsModel(): { node: ReactNode; grid: [string, string, string]; pf: boolean; dock: Side | "" } {
   const app = useApp();
   const { nav, ui, pref, byId } = app;
+  const unread = useUnread();
   const BS = barSize(nav);
   const BV = `${BS.v}px`;
   const BH = `${BS.h}px`;
@@ -115,6 +117,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
   const drawerBtn = (id: string, tip: string, icon: string) => (
     <button key={k(id)} className="nb" data-act="drawer" data-drawer={id} data-a={`nav-${id}`} data-tip={tip} aria-label={tip} aria-pressed={ui.drawer === id ? "true" : "false"}>
       <Ic n={icon} />
+      {id === "news" && unread ? <span className="cnt">{unread > 9 ? "9+" : unread}</span> : null}
     </button>
   );
   const utils = (): ReactNode[] => [
