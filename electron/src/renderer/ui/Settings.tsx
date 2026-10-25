@@ -993,14 +993,16 @@ function BetaRow() {
  * seuls les skins gratuits publiés avec un fichier peuvent être installés.
  */
 function SkinsGroup() {
-  const { pref, editPref, skins, reloadSkins, relink, toast, account } = useApp();
+  const { pref, editPref, skins, reloadSkins, relink, toast, account, setAccount } = useApp();
   const owned = new Set(account?.launcherSkins ?? []);
+  const [code, setCode] = useState("");
+  const eclats = account?.user?.eclats ?? 0;
   const [busy, setBusy] = useState<string | null>(null);
   const cur = typeof pref["lskin"] === "string" ? (pref["lskin"] as string) : "";
   const use = (k: string) => editPref((p) => (p["lskin"] = k || null));
   const catalog = relink?.data?.skins ?? [];
   const lock = (u: { event: boolean; shop: number; achievement: boolean; premium: boolean }) =>
-    [u.event ? t("event ReLaunch") : "", u.shop ? `${u.shop} ${t("crédits")}` : "", u.achievement ? t("succès") : "", u.premium ? t("premium") : ""].filter(Boolean);
+    [u.event ? t("event ReLaunch") : "", u.shop ? `${u.shop} ${t("éclats")}` : "", u.achievement ? t("succès") : "", u.premium ? t("premium") : ""].filter(Boolean);
   const run = (key: string, p: Promise<{ ok: boolean; message?: string; canceled?: boolean; skin?: { key: string; manifest: { name: string } } }>) => {
     setBusy(key);
     void p
@@ -1012,6 +1014,27 @@ function SkinsGroup() {
         } else if (!r.canceled) toast(r.message || t("Skin refusé."));
       })
       .finally(() => setBusy(null));
+  };
+  /** Achat ou code : le compte est relu, puis le skin débloqué s'installe s'il a un fichier publié. */
+  const unlocked = (key: string, p: Promise<import("../../shared/api").AccountResult & { skinId?: string }>, skinId?: string) => {
+    setBusy(key);
+    void p
+      .then((r) => {
+        if (!r.ok) {
+          if (!r.canceled) toast(r.message);
+          return;
+        }
+        setAccount(r.state);
+        if (r.message) toast(r.message);
+        const id = skinId ?? r.skinId;
+        const item = catalog.find((c) => c.id === id);
+        if (item?.file) run(item.id, window.wecraft.skins.install(item.id));
+      })
+      .finally(() => setBusy((b) => (b === key ? null : b)));
+  };
+  const buy = (c: { id: string; name: string; unlock: { shop: number } }) => {
+    if (!window.confirm(`${t("Acheter")} « ${c.name} » ${t("pour")} ${c.unlock.shop} ${t("éclats")} ? ${t("Tu en as")} ${eclats}.`)) return;
+    unlocked(`buy-${c.id}`, window.wecraft.account.buySkin(c.id), c.id);
   };
   return (
     <div className="grp">
@@ -1061,16 +1084,43 @@ function SkinsGroup() {
                 <span className="pv"></span>
                 <b>{c.name}</b>
                 <small>{[c.desc, c.versions.liquidGlass || c.versions.mat ? [c.versions.liquidGlass ? "Liquid Glass" : "", c.versions.mat ? "Mat" : ""].filter(Boolean).join(" + ") : ""].filter(Boolean).join(" · ")}</small>
-                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${account?.loggedIn ? "" : ` — ${t("connecte-toi à ReLink")}`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
+                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${!account?.loggedIn ? ` — ${t("connecte-toi à ReLink")}` : c.unlock.shop > 0 ? "" : ` — ${t("avec un code ou offert par l'équipe")}`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
                 <span className="row">
-                  <button className="btn sm" disabled={!!l.length || !c.file || busy === c.id} onClick={() => run(c.id, window.wecraft.skins.install(c.id))}>
-                    {busy === c.id ? t("Téléchargement…") : t("Obtenir")}
-                  </button>
+                  {l.length && c.unlock.shop > 0 && account?.loggedIn ? (
+                    <button className="btn sm pri" disabled={!!busy || eclats < c.unlock.shop} title={eclats < c.unlock.shop ? `${t("Il te manque")} ${c.unlock.shop - eclats} ${t("éclats")}` : ""} onClick={() => buy(c)}>
+                      {busy === `buy-${c.id}` ? t("Achat…") : `${t("Acheter")} · ${c.unlock.shop} ${t("éclats")}`}
+                    </button>
+                  ) : (
+                    <button className="btn sm" disabled={!!l.length || !c.file || busy === c.id} onClick={() => run(c.id, window.wecraft.skins.install(c.id))}>
+                      {busy === c.id ? t("Téléchargement…") : t("Obtenir")}
+                    </button>
+                  )}
                 </span>
               </div>
             );
           })}
       </div>
+      {account?.loggedIn ? (
+        <div className="setrow">
+          <span>
+            <b>{t("Code de déblocage")}</b>
+            <small>{`${t("Reçu pendant un event, pour un succès ou d'un partenaire.")} ${t("Tes éclats")} : ${eclats}`}</small>
+          </span>
+          <span className="row" style={{ gap: "8px" }}>
+            <input type="text" className="mono" value={code} maxLength={20} placeholder="ABCD-EFGH-JKLM" aria-label={t("Code de déblocage")} onChange={(e) => setCode(e.target.value)} style={{ width: "160px" }} />
+            <button
+              className="btn sm pri"
+              disabled={!!busy || code.replace(/[^A-Za-z0-9]/g, "").length !== 12}
+              onClick={() => {
+                unlocked("code", window.wecraft.account.redeemCode(code));
+                setCode("");
+              }}
+            >
+              {busy === "code" ? t("Vérification…") : t("Débloquer")}
+            </button>
+          </span>
+        </div>
+      ) : null}
       <div className="row" style={{ justifyContent: "flex-start", gap: "8px" }}>
         <button className="btn sm" disabled={busy === "local"} onClick={() => run("local", window.wecraft.skins.importLocal())}>
           {t("Aperçu d'un fichier skin (.rlskin)…")}

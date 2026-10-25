@@ -436,6 +436,10 @@ export interface WeCraftApi {
     removeMinecraftSkin(): Promise<AccountResult>;
     /** Image du skin Minecraft actuel (data:), ou null. */
     minecraftSkinImage(): Promise<string | null>;
+    /** Achète un skin du launcher avec des Éclats. */
+    buySkin(relinkId: string): Promise<AccountResult>;
+    /** Débloque un skin avec un code (event, succès, partenaire…). */
+    redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
   };
   skins: {
     list(): Promise<InstalledSkin[]>;
@@ -663,7 +667,7 @@ export interface AccountState {
   persisted: boolean;
   error: string | null;
 }
-export type AccountResult = { ok: true; state: AccountState } | { ok: false; message: string; canceled?: boolean };
+export type AccountResult = { ok: true; state: AccountState; message?: string } | { ok: false; message: string; canceled?: boolean };
 
 export interface RelinkState {
   /** Des données sont disponibles (fraîches ou en cache). */

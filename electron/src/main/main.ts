@@ -454,6 +454,24 @@ function registerIpc(): void {
     }
   });
   handle(CHANNELS.accountSkinImage, async () => (account ? account.minecraftSkinImage() : null));
+  handle(CHANNELS.accountBuySkin, async (relinkId) => {
+    if (!account || typeof relinkId !== "string") return { ok: false, message: "Indisponible." };
+    try {
+      const r = await account.buySkin(relinkId);
+      return { ok: true, state: r.state, message: r.message };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Achat impossible pour le moment." };
+    }
+  });
+  handle(CHANNELS.accountRedeem, async (code) => {
+    if (!account || typeof code !== "string" || code.length > 40) return { ok: false, message: "Code invalide." };
+    try {
+      const r = await account.redeemCode(code);
+      return { ok: true, state: r.state, skinId: r.skinId, skinName: r.skinName, message: `« ${r.skinName} » débloqué.` };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Code refusé pour le moment." };
+    }
+  });
   handle(CHANNELS.mpOfficialInstalled, async () => (modpacks ? modpacks.officialInstalled() : []));
   handle(CHANNELS.mpInstallOfficial, async (relinkId) => {
     if (!modpacks || !relink) return { ok: false, reason: "invalid" };

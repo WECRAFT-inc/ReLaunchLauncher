@@ -358,6 +358,24 @@ export class RelinkAccount {
     }
   }
 
+  /** Achat d'un skin du launcher en Éclats (débit fait par le Worker, de façon atomique). */
+  async buySkin(skinId: string): Promise<{ state: AccountState; message: string }> {
+    if (!/^[A-Za-z0-9_-]{1,100}$/.test(skinId)) throw new AccountError("Skin inconnu.");
+    const r = await this.call("POST", `/launcher/skins/${encodeURIComponent(skinId)}/buy`, { auth: true, json: {} });
+    const spent = typeof r["spent"] === "number" ? r["spent"] : 0;
+    const left = typeof r["eclats"] === "number" ? r["eclats"] : null;
+    return { state: await this.refresh(), message: `Skin débloqué pour ${spent} éclats${left !== null ? ` (il t'en reste ${left})` : ""}.` };
+  }
+
+  /** Code de déblocage (12 lettres et chiffres). */
+  async redeemCode(code: string): Promise<{ state: AccountState; skinId: string; skinName: string }> {
+    const c = String(code).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (c.length !== 12) throw new AccountError("Code invalide (12 lettres et chiffres, ex. ABCD-EFGH-JKLM).");
+    const r = await this.call("POST", "/launcher/skins/redeem", { auth: true, json: { code: c } });
+    const skinId = typeof r["skinId"] === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(r["skinId"]) ? r["skinId"] : "";
+    return { state: await this.refresh(), skinId, skinName: str(r["skinName"], 60) || skinId };
+  }
+
   /** Skins du launcher que le joueur possède (offerts, gagnés), d'après le dernier état connu. */
   async owns(skinId: string): Promise<boolean> {
     await this.load();

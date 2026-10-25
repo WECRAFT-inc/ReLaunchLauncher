@@ -40,6 +40,8 @@ const ACC_REFRESH = "account:refresh";
 const ACC_SKIN_UP = "account:skin-upload";
 const ACC_SKIN_RM = "account:skin-remove";
 const ACC_SKIN_IMG = "account:skin-image";
+const ACC_BUY = "account:buy-skin";
+const ACC_REDEEM = "account:redeem-code";
 const SKINS_LIST = "skins:list";
 const SKINS_IMPORT = "skins:import-local";
 const SKINS_INSTALL = "skins:install";
@@ -126,6 +128,8 @@ const api: WeCraftApi = Object.freeze({
     uploadMinecraftSkin: (model: "classic" | "slim") => ipcRenderer.invoke(ACC_SKIN_UP, model === "slim" ? "slim" : "classic"),
     removeMinecraftSkin: () => ipcRenderer.invoke(ACC_SKIN_RM),
     minecraftSkinImage: () => ipcRenderer.invoke(ACC_SKIN_IMG),
+    buySkin: (relinkId: string) => ipcRenderer.invoke(ACC_BUY, relinkId),
+    redeemCode: (code: string) => ipcRenderer.invoke(ACC_REDEEM, code),
   }),
   skins: Object.freeze({
     list: () => ipcRenderer.invoke(SKINS_LIST),
