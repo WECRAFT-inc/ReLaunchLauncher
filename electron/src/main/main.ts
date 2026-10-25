@@ -1,7 +1,7 @@
 // Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -19,6 +19,7 @@ import { isSafeVersionId } from "./install/vanilla";
 import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLook";
 import { explainWorkerError, RelinkClient, WORKER_HOSTS } from "./relink/worker";
 import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore } from "./skins/skins";
+import { AccountError, RelinkAccount } from "./relink/account";
 import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
@@ -67,6 +68,7 @@ let updateEnv: UpdateEnv | null = null;
 let media: MediaStore | null = null;
 let relink: RelinkClient | null = null;
 let skins: SkinStore | null = null;
+let account: RelinkAccount | null = null;
 let appLog: AppLogger | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
@@ -238,6 +240,15 @@ async function start(): Promise<void> {
   media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
   const ua = `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`;
   relink = new RelinkClient({ dataDir: wecraftDataDir(env), userAgent: ua });
+  account = new RelinkAccount({
+    dataDir: wecraftDataDir(env),
+    userAgent: ua,
+    secrets: safeStorage,
+    openExternal: async (url) => {
+      if (!url.startsWith("https://discord.com/oauth2/authorize?")) throw new Error("Adresse de connexion refusée.");
+      await shell.openExternal(url);
+    },
+  });
   const rl = relink;
   skins = new SkinStore({
     dataDir: wecraftDataDir(env),
@@ -384,6 +395,41 @@ function registerIpc(): void {
   });
   handle(CHANNELS.relinkState, async (force) => (relink ? relink.refresh("stable", force === true) : { ok: false, stale: true, fetchedAt: null, error: "Indisponible.", data: null }));
   handle(CHANNELS.relinkNotifications, async () => (relink ? relink.notifications("stable") : { items: [], error: "Indisponible." }));
+  const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
+  handle(CHANNELS.accountState, async () => (account ? account.state() : noAccount));
+  handle(CHANNELS.accountLogin, async () => {
+    if (!account) return noAccount;
+    const st = await account.login();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus(); // retour dans ReLaunch après l'accord sur Discord
+    }
+    return st;
+  });
+  handle(CHANNELS.accountLogout, async () => (account ? account.logout() : noAccount));
+  handle(CHANNELS.accountRefresh, async () => (account ? account.refresh() : noAccount));
+  handle(CHANNELS.accountSkinUpload, async (model) => {
+    if (!account) return { ok: false, message: "Indisponible." };
+    const opts = { title: "Skin Minecraft (PNG 64 × 64)", properties: ["openFile" as const], filters: [{ name: "Image PNG", extensions: ["png"] }] };
+    const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
+    if (r.canceled || !r.filePaths[0]) return { ok: false, message: "", canceled: true };
+    try {
+      const st = await stat(r.filePaths[0]);
+      if (!st.isFile() || st.size > 64 * 1024) return { ok: false, message: "Image trop lourde (64 Ko maximum)." };
+      return { ok: true, state: await account.uploadMinecraftSkin(await readFile(r.filePaths[0]), model === "slim" ? "slim" : "classic") };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Image illisible." };
+    }
+  });
+  handle(CHANNELS.accountSkinRemove, async () => {
+    if (!account) return { ok: false, message: "Indisponible." };
+    try {
+      return { ok: true, state: await account.removeMinecraftSkin() };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Suppression impossible." };
+    }
+  });
+  handle(CHANNELS.accountSkinImage, async () => (account ? account.minecraftSkinImage() : null));
   handle(CHANNELS.skinsList, async () => (skins ? skins.list() : []));
   handle(CHANNELS.skinsImport, async () => {
     if (!skins) return { ok: false, message: "Indisponible." };
@@ -401,6 +447,10 @@ function registerIpc(): void {
     const st = await relink.cached();
     const item = st.data?.skins.find((x) => x.id === relinkId); // seulement un skin annoncé par le Worker
     if (!item) return { ok: false, message: "Skin introuvable dans le catalogue ReLink." };
+    const u = item.unlock;
+    if ((u.event || u.shop > 0 || u.achievement || u.premium) && !(await account?.owns(item.id))) {
+      return { ok: false, message: (await account?.state())?.loggedIn ? "Tu ne possèdes pas encore ce skin : débloque-le (event, boutique, succès…) puis réessaie." : "Connecte-toi à ReLink pour obtenir ce skin." };
+    }
     try {
       return { ok: true, skin: await skins.installRemote(item) };
     } catch (e) {
@@ -608,6 +658,9 @@ function registerIpc(): void {
     if (!inst.version) return { ok: false, reason: "no-version" };
     if (modpacks?.busy()) return { ok: false, reason: "busy" }; // mods en cours de téléchargement
     if (relink?.policy().blockLaunch) return { ok: false, reason: "maintenance" }; // maintenance décidée dans le panneau ReLink
+    // Compte ReLink obligatoire ; si le service est injoignable, le jeu se lance quand même (serveurs d'event fermés)
+    const gate = account ? await account.launchGate() : "offline";
+    if (gate === "login") return { ok: false, reason: "login" };
     const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
     const ram = typeof o.ram === "number" ? o.ram : NaN;
     const started = launcher.start(
@@ -625,7 +678,7 @@ function registerIpc(): void {
       await settings?.setRam(ram);
       await instances?.rememberRam(id, ram);
     }
-    return started;
+    return started.ok && gate === "offline" ? { ...started, offline: true } : started;
   });
 
   ipcMain.handle(CHANNELS.launchStatus, async (event, job: unknown): Promise<LaunchStatus | null> => {

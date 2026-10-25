@@ -823,12 +823,7 @@ export function Settings() {
       </>
     );
   } else {
-    body = (
-      <div className="grp">
-        <h3>{t("Compte ReLink")}</h3>
-        <p>{t("Les comptes ReLink ne sont pas encore disponibles.")}</p>
-      </div>
-    );
+    body = <AccountGroup />;
   }
   return (
     <div className="setwin">
@@ -852,6 +847,113 @@ export function Settings() {
       </div>
       <div className="setbody">{body}</div>
     </div>
+  );
+}
+
+/** Compte ReLink : connexion Discord (navigateur), compte, skin Minecraft. Le jeton reste dans le processus principal. */
+function AccountGroup() {
+  const { account, setAccount, toast } = useApp();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [img, setImg] = useState<string | null>(null);
+  const [model, setModel] = useState<"classic" | "slim">("classic");
+  const sha = account?.minecraftSkin?.sha256 ?? "";
+  useEffect(() => {
+    if (account?.minecraftSkin) setModel(account.minecraftSkin.model);
+  }, [account?.minecraftSkin]);
+  useEffect(() => {
+    setImg(null);
+    if (sha) void window.wecraft.account.minecraftSkinImage().then(setImg, () => setImg(null));
+  }, [sha]);
+  const act = (key: string, p: Promise<import("../../shared/api").AccountState>) => {
+    setBusy(key);
+    void p.then(
+      (a) => {
+        setAccount(a);
+        if (a.error && key !== "refresh") toast(a.error);
+      },
+      () => toast(t("Action impossible pour le moment.")),
+    ).finally(() => setBusy(null));
+  };
+  const skinAct = (key: string, p: Promise<import("../../shared/api").AccountResult>, ok: string) => {
+    setBusy(key);
+    void p.then(
+      (r) => {
+        if (r.ok) {
+          setAccount(r.state);
+          toast(ok);
+        } else if (!r.canceled) toast(r.message);
+      },
+      () => toast(t("Action impossible pour le moment.")),
+    ).finally(() => setBusy(null));
+  };
+  if (!account) return <div className="grp"><h3>{t("Compte ReLink")}</h3><p className="faint">{t("Chargement…")}</p></div>;
+  if (!account.loggedIn) {
+    return (
+      <div className="grp">
+        <h3>{t("Compte ReLink")}</h3>
+        <p>{t("Un compte ReLink est nécessaire pour jouer, obtenir des skins, utiliser la boutique et envoyer ton skin Minecraft.")}</p>
+        <div className="card updcard">
+          <span className="updcard-ic"><Ic n="relink" /></span>
+          <span className="updcard-txt">
+            <b>{account.loginPending || busy === "login" ? t("Accepte la connexion dans ton navigateur…") : t("Se connecter avec Discord")}</b>
+            <small>{t("Ton navigateur s'ouvre sur Discord. ReLaunch ne voit jamais ton mot de passe : il reçoit seulement ta session ReLink, chiffrée sur ce PC.")}</small>
+          </span>
+          <button className="btn pri updcard-btn" disabled={busy === "login" || account.loginPending} onClick={() => act("login", window.wecraft.account.login())}>
+            {busy === "login" || account.loginPending ? t("En attente…") : t("Se connecter")}
+          </button>
+        </div>
+        {account.error ? <p className="faint" style={{ fontSize: "12.5px" }}>{account.error}</p> : null}
+        <p className="faint" style={{ fontSize: "12.5px" }}>{t("Sans connexion internet, le jeu se lance quand même, mais les serveurs d'event refusent l'accès tant que ta session ReLink n'est pas vérifiée.")}</p>
+      </div>
+    );
+  }
+  const u = account.user!;
+  const exp = account.expiresAt ? new Date(account.expiresAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "";
+  return (
+    <>
+      <div className="grp">
+        <h3>{t("Compte ReLink")}</h3>
+        <div className="setrow">
+          <span>
+            <b>{u.pseudo}</b>
+            <small>{[u.minecraftName ? `${t("Minecraft")} : ${u.minecraftName}` : t("Compte Minecraft pas encore lié (commande /link en jeu)"), `${u.eclats} ${t("éclats")}`, exp ? `${t("session valable jusqu'au")} ${exp}` : ""].filter(Boolean).join(" · ")}</small>
+          </span>
+          <span className="row" style={{ gap: "8px" }}>
+            <button className="btn sm" disabled={!!busy} onClick={() => act("refresh", window.wecraft.account.refresh())}>{t("Actualiser")}</button>
+            <button className="btn sm" disabled={!!busy} onClick={() => act("logout", window.wecraft.account.logout())}>{t("Se déconnecter")}</button>
+          </span>
+        </div>
+        {account.offline ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Service ReLink injoignable : informations du dernier contrôle.")}</p> : null}
+        {!account.persisted ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Chiffrement système indisponible : ta session ne sera pas gardée après la fermeture de ReLaunch.")}</p> : null}
+      </div>
+      <div className="grp">
+        <h3>{t("Skin Minecraft")}</h3>
+        <p>{t("Le skin de ton personnage, envoyé à ReLink. Image PNG de 64 × 64 pixels.")}</p>
+        <div className="setrow">
+          <span style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+            {img ? <img src={img} alt={t("Ton skin Minecraft")} width={64} height={64} style={{ imageRendering: "pixelated", borderRadius: "6px", background: "rgba(255,255,255,.06)" }} /> : <span className="faint">{account.minecraftSkin ? t("Aperçu indisponible") : t("Aucun skin envoyé")}</span>}
+            <span>
+              <b>{t("Modèle")}</b>
+              <span className="chips" style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                {(
+                  [
+                    ["classic", t("Classique (bras larges)")],
+                    ["slim", t("Fin (bras de 3 pixels)")],
+                  ] as const
+                ).map((m) => (
+                  <button key={m[0]} className="chip" aria-pressed={tf(model === m[0])} onClick={() => setModel(m[0])}>{m[1]}</button>
+                ))}
+              </span>
+            </span>
+          </span>
+          <span className="row" style={{ gap: "8px" }}>
+            <button className="btn sm pri" disabled={!!busy} onClick={() => skinAct("skin", window.wecraft.account.uploadMinecraftSkin(model), t("Skin Minecraft envoyé."))}>{busy === "skin" ? t("Envoi…") : t("Choisir une image…")}</button>
+            {account.minecraftSkin ? <button className="btn sm" disabled={!!busy} onClick={() => skinAct("rmskin", window.wecraft.account.removeMinecraftSkin(), t("Skin Minecraft retiré."))}>{t("Retirer")}</button> : null}
+          </span>
+        </div>
+        <p className="faint" style={{ fontSize: "12.5px" }}>{t("Visible en jeu sur les serveurs et avec les mods qui lisent les skins ReLink.")}</p>
+      </div>
+    </>
   );
 }
 
@@ -891,7 +993,8 @@ function BetaRow() {
  * seuls les skins gratuits publiés avec un fichier peuvent être installés.
  */
 function SkinsGroup() {
-  const { pref, editPref, skins, reloadSkins, relink, toast } = useApp();
+  const { pref, editPref, skins, reloadSkins, relink, toast, account } = useApp();
+  const owned = new Set(account?.launcherSkins ?? []);
   const [busy, setBusy] = useState<string | null>(null);
   const cur = typeof pref["lskin"] === "string" ? (pref["lskin"] as string) : "";
   const use = (k: string) => editPref((p) => (p["lskin"] = k || null));
@@ -952,13 +1055,13 @@ function SkinsGroup() {
         {catalog
           .filter((c) => !skins.some((k) => k.relinkId === c.id))
           .map((c) => {
-            const l = lock(c.unlock);
+            const l = owned.has(c.id) ? [] : lock(c.unlock);
             return (
               <div key={c.id} className="skinc">
                 <span className="pv"></span>
                 <b>{c.name}</b>
                 <small>{[c.desc, c.versions.liquidGlass || c.versions.mat ? [c.versions.liquidGlass ? "Liquid Glass" : "", c.versions.mat ? "Mat" : ""].filter(Boolean).join(" + ") : ""].filter(Boolean).join(" · ")}</small>
-                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")} — ${t("obtention avec un compte ReLink (bientôt)")}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
+                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${account?.loggedIn ? "" : ` — ${t("connecte-toi à ReLink")}`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
                 <span className="row">
                   <button className="btn sm" disabled={!!l.length || !c.file || busy === c.id} onClick={() => run(c.id, window.wecraft.skins.install(c.id))}>
                     {busy === c.id ? t("Téléchargement…") : t("Obtenir")}

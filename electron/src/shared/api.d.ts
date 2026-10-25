@@ -211,7 +211,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" };
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -423,6 +423,18 @@ export interface WeCraftApi {
     /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
     notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
   };
+  account: {
+    state(): Promise<AccountState>;
+    /** Ouvre Discord dans le navigateur ; se termine quand le joueur a répondu (5 min au plus). */
+    login(): Promise<AccountState>;
+    logout(): Promise<AccountState>;
+    refresh(): Promise<AccountState>;
+    /** Fenêtre « Ouvrir » : PNG 64 × 64 envoyé comme skin Minecraft. */
+    uploadMinecraftSkin(model: "classic" | "slim"): Promise<AccountResult>;
+    removeMinecraftSkin(): Promise<AccountResult>;
+    /** Image du skin Minecraft actuel (data:), ou null. */
+    minecraftSkinImage(): Promise<string | null>;
+  };
   skins: {
     list(): Promise<InstalledSkin[]>;
     /** Fenêtre « Ouvrir » : fichier .rlskin du PC, installé en aperçu local (non signé). */
@@ -617,6 +629,24 @@ export interface RelinkBootstrap {
   events: RelinkEvent[];
   partners: RelinkPartner[];
 }
+/** Compte ReLink du joueur (le jeton de session ne quitte jamais le processus principal). */
+export interface AccountState {
+  loggedIn: boolean;
+  user: { id: string; pseudo: string; minecraftName: string | null; eclats: number } | null;
+  expiresAt: string | null;
+  /** Le service ReLink n'a pas répondu au dernier essai. */
+  offline: boolean;
+  /** Une connexion par Discord attend la réponse du navigateur. */
+  loginPending: boolean;
+  /** Skins du launcher possédés (offerts, gagnés en event…). */
+  launcherSkins: string[];
+  minecraftSkin: { model: "classic" | "slim"; sha256: string } | null;
+  /** false : pas de chiffrement système disponible, la session n'est pas gardée après fermeture. */
+  persisted: boolean;
+  error: string | null;
+}
+export type AccountResult = { ok: true; state: AccountState } | { ok: false; message: string; canceled?: boolean };
+
 export interface RelinkState {
   /** Des données sont disponibles (fraîches ou en cache). */
   ok: boolean;

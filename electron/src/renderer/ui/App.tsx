@@ -2,7 +2,7 @@
 // visuelle D8) et le pont vers le processus principal (ancien app.ts). Aucune donnée lue dans un fichier n'est
 // insérée comme HTML : React l'affiche toujours comme du texte.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as RMouseEvent, type RefObject } from "react";
-import type { AppInfo, DeleteResult, InstalledSkin, InstanceList, RelinkNotification, RelinkState, SettingResult, ThemeKey, UpdateCheck } from "../../shared/api";
+import type { AccountState, AppInfo, DeleteResult, InstalledSkin, InstanceList, RelinkNotification, RelinkState, SettingResult, ThemeKey, UpdateCheck } from "../../shared/api";
 import { useBarsModel } from "./Bars";
 import { Ctx, useApp, type AppCtx, type Ui } from "./ctx";
 import {
@@ -85,6 +85,7 @@ const START_ERRORS = {
   invalid: "Instance introuvable : la liste a peut-être changé. Réessayez.",
   "no-version": "Version de Minecraft inconnue pour cette instance : réglez-la d'abord.",
   maintenance: "Lancement suspendu : maintenance en cours annoncée par ReLaunch.",
+  login: "Connecte-toi à ReLink pour jouer (Réglages > Compte ReLink).",
 } as const;
 const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
   invalid: "Instance introuvable : la liste a peut-être changé.",
@@ -150,6 +151,7 @@ export function App() {
   const [notifs, setNotifs] = useState<RelinkNotification[]>([]);
   const [seen, setSeen] = useState<Set<string>>(() => new Set(load<string[]>("rl-seen", [])));
   const [skinList, setSkinList] = useState<InstalledSkin[]>([]);
+  const [account, setAccount] = useState<AccountState | null>(null);
   const markSeen = useCallback((ids: string[]) => {
     setSeen((s0) => {
       if (ids.every((i) => s0.has(i))) return s0;
@@ -163,6 +165,13 @@ export function App() {
   }, []);
   const reloadSkins = useCallback(() => {
     void window.wecraft.skins?.list().then(setSkinList, () => undefined);
+  }, []);
+  useEffect(() => {
+    // compte ReLink : état enregistré tout de suite, puis relu auprès du service
+    void window.wecraft.account?.state().then((a) => {
+      setAccount(a);
+      if (a.loggedIn) void window.wecraft.account.refresh().then(setAccount, () => undefined);
+    }, () => undefined);
   }, []);
   useEffect(() => {
     refreshRelink();
@@ -488,8 +497,10 @@ export function App() {
       .then((res) => {
         if (!res.ok) {
           toast(START_ERRORS[res.reason], 4000);
+          if (res.reason === "login") setUi({ view: "settings", setTab: "compte" });
           return;
         }
+        if (res.offline) toast("Service ReLink injoignable : le jeu se lance, mais les serveurs d'event refuseront la connexion tant que ta session ReLink n'est pas vérifiée.", 7000);
         setDefaultRamState(r);
         setLaunchUi({ box: true, name: req.name || "Lancement", status: null, error: null });
         pollJob(res.job);
@@ -1008,6 +1019,8 @@ export function App() {
     markSeen,
     skins: skinList,
     reloadSkins,
+    account,
+    setAccount,
   };
 
   const extras: ExtrasProps = { toastMsg, tip, launchUi, setLaunchUi, ram, setRam, startLaunch, upd, setUpd, job };

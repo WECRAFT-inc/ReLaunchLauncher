@@ -1,6 +1,6 @@
 // État partagé de l'interface (lot E6).
 import { createContext, useContext } from "react";
-import type { ContentExtra, InstalledSkin, ModpackEditInfo, ModpackRoot, RelinkNotification, RelinkState } from "../../shared/api";
+import type { AccountState, ContentExtra, InstalledSkin, ModpackEditInfo, ModpackRoot, RelinkNotification, RelinkState } from "../../shared/api";
 import type { Car, HomePref, Inst, InstGroup, NavConfig, Pref, View } from "./model";
 
 /** Modpack en préparation dans Découvrir (lot E7) : création, ou modification d'un WePack existant. */
@@ -96,6 +96,9 @@ export interface AppCtx {
   /** Skins installés et skin appliqué (clé, ou null = Classique). */
   skins: InstalledSkin[];
   reloadSkins: () => void;
+  /** Compte ReLink (null tant qu'il n'est pas lu). */
+  account: AccountState | null;
+  setAccount: (a: AccountState) => void;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);

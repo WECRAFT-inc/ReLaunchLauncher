@@ -33,6 +33,13 @@ const WIN_CLOSE = "win:close";
 const WIN_STATE = "win:state";
 const RELINK_STATE = "relink:state";
 const RELINK_NOTIFICATIONS = "relink:notifications";
+const ACC_STATE = "account:state";
+const ACC_LOGIN = "account:login";
+const ACC_LOGOUT = "account:logout";
+const ACC_REFRESH = "account:refresh";
+const ACC_SKIN_UP = "account:skin-upload";
+const ACC_SKIN_RM = "account:skin-remove";
+const ACC_SKIN_IMG = "account:skin-image";
 const SKINS_LIST = "skins:list";
 const SKINS_IMPORT = "skins:import-local";
 const SKINS_INSTALL = "skins:install";
@@ -107,6 +114,15 @@ const api: WeCraftApi = Object.freeze({
   relink: Object.freeze({
     state: (force?: boolean) => ipcRenderer.invoke(RELINK_STATE, force === true),
     notifications: () => ipcRenderer.invoke(RELINK_NOTIFICATIONS),
+  }),
+  account: Object.freeze({
+    state: () => ipcRenderer.invoke(ACC_STATE),
+    login: () => ipcRenderer.invoke(ACC_LOGIN),
+    logout: () => ipcRenderer.invoke(ACC_LOGOUT),
+    refresh: () => ipcRenderer.invoke(ACC_REFRESH),
+    uploadMinecraftSkin: (model: "classic" | "slim") => ipcRenderer.invoke(ACC_SKIN_UP, model === "slim" ? "slim" : "classic"),
+    removeMinecraftSkin: () => ipcRenderer.invoke(ACC_SKIN_RM),
+    minecraftSkinImage: () => ipcRenderer.invoke(ACC_SKIN_IMG),
   }),
   skins: Object.freeze({
     list: () => ipcRenderer.invoke(SKINS_LIST),
