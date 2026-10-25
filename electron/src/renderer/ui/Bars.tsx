@@ -5,6 +5,7 @@ import { Ic } from "./Ic";
 import { LOGO } from "./icons";
 import { barSize, dockSide, initials, NAVINFO, pinCount, profPlace, SKINS, type Inst, type NavConfig, type Pin, type Side, type Skin } from "./model";
 import { t } from "./i18n";
+import { coverVars, IconFace } from "./symbols";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 type Piece = { kind: "sep" | "spacer" | "el"; key: string; node: ReactNode };
@@ -32,7 +33,7 @@ export function Minis({ g, byId }: { g: Extract<Pin, { t: "g" }>; byId: (id: str
         .reverse()
         .map((x, k) => {
           const pos = xs.length - 1 - k;
-          const st: Css = { "--c1": x.c[0], "--c2": x.c[1] };
+          const st: Css = coverVars(x);
           return (
             <i key={pos} className={`l${pos}`} style={st}>
               {pos === 0 ? <span>{initials(g.name) || "G"}</span> : null}
@@ -130,10 +131,10 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
   const pinItem = (id: string): ReactNode => {
     const x = byId(id);
     if (!x) return null;
-    const st: Css = { "--c1": x.c[0], "--c2": x.c[1] };
+    const st: Css = coverVars(x);
     return (
       <button key={k(`pin-${id}`)} className="nb rec" draggable="true" data-pin-drag={`i:${id}`} data-pin-drop={`i:${id}`} data-play={id} data-a={`pin-${id}`} data-tip={`Lancer ${x.n}`} aria-label={`Lancer ${x.n}`} style={st}>
-        {initials(x.n)}
+        <IconFace x={x} size={Math.round(BS.b * 0.9)} />
       </button>
     );
   };

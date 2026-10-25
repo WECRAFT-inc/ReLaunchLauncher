@@ -405,3 +405,25 @@ export const CATEGORY_FR: Record<string, string> = {
   high: "Exigeant", screenshot: "Captures", "audio": "Audio", blocks: "Blocs", "core-shaders": "Core shaders", entities: "Entités", environment: "Environnement",
   fonts: "Polices", gui: "Interface", items: "Objets", locale: "Langue", models: "Modèles", "16x": "16x", "32x": "32x", "64x": "64x", "128x": "128x", "256x": "256x", "512x+": "512x+",
 };
+
+/** Ordre des listes d'instances : favoris d'abord, puis épinglées, puis le reste (ordre d'origine gardé). */
+export function orderInstances(list: Inst[], nav: NavConfig): Inst[] {
+  const rank = (x: Inst) => (x.fav ? 0 : isPinned(nav, x.id) ? 1 : 2);
+  return list.map((x, i) => ({ x, i })).sort((a, b) => rank(a.x) - rank(b.x) || a.i - b.i).map(({ x }) => x);
+}
+
+/** Groupes d'instances de la page WeCraft (affichage seulement, gardés sur ce PC). */
+export interface InstGroup {
+  id: string;
+  name: string;
+  ids: string[];
+}
+export function loadGroups(): InstGroup[] {
+  const v = load<unknown>("rl-igroups", []);
+  return (Array.isArray(v) ? v : [])
+    .filter((g): g is InstGroup => !!g && typeof (g as InstGroup).id === "string" && typeof (g as InstGroup).name === "string" && Array.isArray((g as InstGroup).ids))
+    .map((g) => ({ id: g.id, name: g.name.slice(0, 40), ids: g.ids.filter((x) => typeof x === "string") }));
+}
+export function saveGroups(g: InstGroup[]): void {
+  store("rl-igroups", g);
+}

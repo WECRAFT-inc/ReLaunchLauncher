@@ -91,3 +91,22 @@ export function InstIcon({ icon, fallback, name, size = 40, className = "" }: { 
     </span>
   );
 }
+
+/** Couleurs d'une instance (celles de son icône si elle en a une), pour les éléments à fond dégradé. */
+export function coverVars(x: { c: [string, string]; icon: InstanceIcon | null }): Css {
+  const c = x.icon?.kind === "gen" ? x.icon.c : x.c;
+  return { "--c1": c[0], "--c2": c[1] };
+}
+
+/** Contenu d'un élément dégradé existant (épingles, tuiles, groupes) : image, symbole ou initiales. */
+export function IconFace({ x, size }: { x: { n: string; icon: InstanceIcon | null }; size: number }) {
+  if (x.icon?.kind === "file")
+    return (
+      <>
+        <img className="face-img" src={x.icon.url} alt="" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
+        <span>{initials(x.n) || "W"}</span>
+      </>
+    );
+  if (x.icon?.kind === "gen" && x.icon.sym && SYMBOLS[x.icon.sym]) return <SymbolSvg sym={x.icon.sym} size={Math.round(size * 0.6)} />;
+  return <span>{initials(x.n) || "W"}</span>;
+}

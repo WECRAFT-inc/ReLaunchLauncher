@@ -5,11 +5,12 @@ import { Minis } from "./Bars";
 import { useApp } from "./ctx";
 import { useEscapeLayer } from "./keys";
 import { Ic } from "./Ic";
-import { detail, gById, initials, type Inst } from "./model";
+import { detail, gById, type Inst } from "./model";
 import { t } from "./i18n";
+import { coverVars, IconFace } from "./symbols";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
-const cover = (x: Inst): Css => ({ "--c1": x.c[0], "--c2": x.c[1] });
+const cover = (x: Inst): Css => coverVars(x);
 
 export function Pop() {
   const { ui, nav, byId, editNav, setUi } = useApp();
@@ -95,7 +96,9 @@ export function Pop() {
               .filter((x): x is Inst => !!x)
               .map((x) => (
                 <div key={x.id} className="pitem" draggable="true" data-pin-drag={`i:${x.id}`} data-pin-drop={`i:${x.id}`} data-a={`pgi-${x.id}`}>
-                  <span className="cover" style={cover(x)}></span>
+                  <span className="cover" style={cover(x)}>
+                    <IconFace x={x} size={34} />
+                  </span>
                   <span style={{ minWidth: 0 }}>
                     <b>{x.n}</b>
                     <small>{detail(x)}</small>
@@ -135,7 +138,7 @@ export function Pop() {
                   return (
                     <button key={p.id} className="ptile" draggable="true" data-pin-drag={`i:${x.id}`} data-pin-drop={`i:${x.id}`} data-play={x.id} data-a={`pt-${x.id}`}>
                       <span className="cover" style={cover(x)}>
-                        <span>{initials(x.n)}</span>
+                        <IconFace x={x} size={52} />
                       </span>
                       <small>{x.n}</small>
                     </button>

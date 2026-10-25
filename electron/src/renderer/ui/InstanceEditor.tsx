@@ -43,7 +43,10 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
     setShots(null);
     setBusy(false);
     void window.wecraft.modpacks.versions().then((v) => setVersions(v));
-  }, [x]);
+    // seulement à l'ouverture (ou pour une autre instance) : la liste des instances est relue toutes les
+    // quelques secondes et ne doit jamais effacer ce qui est en train d'être modifié
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [x?.id]);
 
   useEffect(() => {
     if (!x || loader === "Vanilla" || !mc) {
@@ -62,7 +65,8 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
     return () => {
       alive = false;
     };
-  }, [x, loader, mc]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [x?.id, loader, mc]);
 
   if (!x) return null;
   // comme Python : la version du loader est gardée si la version de Minecraft et le loader ne changent pas

@@ -6,6 +6,7 @@ import { useApp } from "./ctx";
 import { BASE_THEMES, cleanRotation, ROT_FADES, ROT_INTERVALS, THEME_COLORS, THEME_NAMES, type BaseTheme } from "./theme";
 import { Ic } from "./Ic";
 import { LogsTab } from "./Logs";
+import { coverVars, IconFace } from "./symbols";
 import { BARSIZES, dockSide, NAVINFO, occupied, pinCount, PRESETS, profPlace, type NavConfig, type Side } from "./model";
 import { LANGS, t } from "./i18n";
 
@@ -119,7 +120,9 @@ function PinChip({ id }: { id: string }) {
   if (!x) return null;
   return (
     <span className="pinchip" draggable="true" data-pin-drag={`i:${id}`} data-pin-drop={`i:${id}`} data-a={`pc-${id}`}>
-      <i style={{ "--c1": x.c[0], "--c2": x.c[1] } as Css}></i>
+      <i style={coverVars(x)}>
+        <IconFace x={x} size={18} />
+      </i>
       {x.n}
       <button data-act="pin" data-id={id} aria-label={`Retirer ${x.n}`}>
         ✕
@@ -929,19 +932,58 @@ function ShadersGroup() {
       <div className="ie-row">
         <label className="field">
           <span className="lbl strong">{t("Shader préféré")}</span>
-          <input type="text" list="rl-shaders" maxLength={120} defaultValue={p.primary ?? ""} placeholder="Complementary Reimagined" disabled={!p.on} onBlur={(e) => save({ ...p, primary: e.target.value.trim() || null })} />
+          <ComboInput value={p.primary ?? ""} options={known} placeholder="Complementary Reimagined" disabled={!p.on} onCommit={(v) => save({ ...p, primary: v || null })} />
         </label>
         <label className="field">
           <span className="lbl strong">{t("Shader secondaire")}</span>
-          <input type="text" list="rl-shaders" maxLength={120} defaultValue={p.secondary ?? ""} placeholder="BSL" disabled={!p.on} onBlur={(e) => save({ ...p, secondary: e.target.value.trim() || null })} />
+          <ComboInput value={p.secondary ?? ""} options={known} placeholder="BSL" disabled={!p.on} onCommit={(v) => save({ ...p, secondary: v || null })} />
         </label>
       </div>
-      <datalist id="rl-shaders">
-        {known.map((k) => (
-          <option key={k} value={k} />
-        ))}
-      </datalist>
       <small className="faint">{known.length ? t("Shaders trouvés dans tes instances : {n}.", { n: known.length }) : t("Aucun shader trouvé dans tes instances pour l'instant (Découvrir > Shaders).")}</small>
     </div>
+  );
+}
+
+/** Champ avec suggestions : 8 lignes visibles au plus, barre de défilement pour le reste, filtrées par le texte. */
+function ComboInput({ value, options, placeholder, disabled, onCommit }: { value: string; options: string[]; placeholder: string; disabled: boolean; onCommit: (v: string) => void }) {
+  const [text, setText] = useState(value);
+  const [open, setOpen] = useState(false);
+  useEffect(() => setText(value), [value]);
+  const needle = text.trim().toLowerCase();
+  const list = options.filter((o) => !needle || o.toLowerCase().includes(needle));
+  const commit = (v: string) => {
+    setText(v);
+    setOpen(false);
+    if (v.trim() !== value) onCommit(v.trim());
+  };
+  return (
+    <span className="combo">
+      <input
+        type="text"
+        maxLength={120}
+        value={text}
+        placeholder={placeholder}
+        disabled={disabled}
+        onChange={(e) => (setText(e.target.value), setOpen(true))}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => commit(text), 120)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit(text);
+          if (e.key === "Escape" && open) {
+            e.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      />
+      {open && !disabled && list.length ? (
+        <span className="combo-list" role="listbox">
+          {list.map((o) => (
+            <button key={o} type="button" role="option" aria-selected={o === text ? "true" : "false"} onMouseDown={(e) => e.preventDefault()} onClick={() => commit(o)}>
+              {o}
+            </button>
+          ))}
+        </span>
+      ) : null}
+    </span>
   );
 }
