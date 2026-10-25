@@ -6,6 +6,7 @@ import type { ModpackJob } from "../../shared/api";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { useEscapeLayer } from "./keys";
+import { t } from "./i18n";
 
 /** Suit une opération de modpack (téléchargements réels) jusqu'à sa fin. */
 export function useJob(onDone: (j: ModpackJob) => void) {
@@ -73,8 +74,8 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
     <div className="overlay" data-a="m-import" data-name="Importer" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="impTitle" style={{ width: "min(560px,100%)" }}>
         <header>
-          <h3 id="impTitle">Importer</h3>
-          <button className="xbtn" aria-label="Fermer" onClick={onClose}>
+          <h3 id="impTitle">{t("Importer")}</h3>
+          <button className="xbtn" aria-label={t("Fermer")} onClick={onClose}>
             ✕
           </button>
         </header>
@@ -84,11 +85,11 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
               <Ic n="upload" />
             </span>
             <span className="imp-txt">
-              <b>Fichier .mrpack (Modrinth)</b>
-              <small className="muted">Modpack exporté depuis Modrinth, Prism ou un autre launcher. Chaque fichier est téléchargé et vérifié (SHA-512) dans une nouvelle instance.</small>
+              <b>{t("Fichier .mrpack (Modrinth)")}</b>
+              <small className="muted">{t("Modpack exporté depuis Modrinth, Prism ou un autre launcher. Chaque fichier est téléchargé et vérifié (SHA-512) dans une nouvelle instance.")}</small>
             </span>
             <button className="btn sm pri" onClick={pick} disabled={busy}>
-              Choisir un fichier
+              {t("Choisir un fichier")}
             </button>
           </div>
           <JobView job={job} />
@@ -100,7 +101,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
                 show("wecraft");
               }}
             >
-              Voir dans WeCraft
+              {t("Voir dans WeCraft")}
             </button>
           ) : null}
           <div className="card imp-row">
@@ -108,7 +109,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
               <Ic n="import" />
             </span>
             <span className="imp-txt">
-              <b>Prism, CurseForge et Modrinth</b>
+              <b>{t("Prism, CurseForge et Modrinth")}</b>
               <small className="muted">{`Rien à copier : leurs instances sont détectées là où elles sont (lecture seule). Détectées : ${count("Prism")} Prism, ${count("CurseForge")} CurseForge, ${count("Modrinth")} Modrinth.`}</small>
             </span>
             <button
@@ -118,7 +119,7 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
                 toast("Dossiers des autres launchers relus.");
               }}
             >
-              Rechercher à nouveau
+              {t("Rechercher à nouveau")}
             </button>
           </div>
         </div>

@@ -20,6 +20,7 @@ import type { LaunchPhase, LaunchStatus } from "../../shared/api";
 import type { LoaderName } from "../instances/formats";
 import type { NetOptions } from "../net/download";
 import { closeOfficialLauncher, openOfficialLauncher, type CloseResult } from "./officialLauncher";
+import { applyShaderPrefs, type ShaderPrefs } from "./shaders";
 import { setProfile, type ProfileDeps } from "./profiles";
 
 export type { LaunchPhase, LaunchStatus };
@@ -55,6 +56,8 @@ export interface LaunchDeps {
   log?: (line: string) => void;
   /** Launcher officiel ouvert avec le profil prêt (statut Discord « Prépare… », lot E9). */
   onOpened?: (t: LaunchTarget) => void;
+  /** Shaders préférés (Réglages > Jeu) appliqués à l'instance avant l'ouverture. */
+  shaders?: () => Promise<ShaderPrefs>;
 }
 
 export interface Installers {
@@ -180,6 +183,13 @@ export class LaunchService {
     await setProfile(d.mcDir, t.profileName, launchId, t.gameDir, opts.ram, d.profile);
     s.profile = t.profileName;
     this.deps.log?.(`Profil écrit : ${t.profileName} → ${launchId}`);
+    if (d.shaders) {
+      const note = await applyShaderPrefs(t.gameDir, await d.shaders().catch(() => ({ on: false, primary: null, secondary: null })));
+      if (note) {
+        s.notes.push(note);
+        this.deps.log?.(note);
+      }
+    }
 
     // 4) ouvrir le launcher officiel
     s.phase = "ouverture";

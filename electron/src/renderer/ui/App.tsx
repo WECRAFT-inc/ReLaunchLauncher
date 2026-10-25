@@ -35,6 +35,7 @@ import {
 import { DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
 import { handleEscape, useEscapeLayer } from "./keys";
 import { BASE_THEMES, cleanRotation, previewRotation, useThemeRotation } from "./theme";
+import { setLang } from "./i18n";
 import { moveNav, playFlip, Settings, snapPos } from "./Settings";
 import { Discover, emptyDraft } from "./Discover";
 import { CreateModal } from "./Create";
@@ -257,6 +258,9 @@ export function App() {
     applyingSaved.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Langue de l'interface : appliquée avant le rendu des pages (sans redémarrer)
+  setLang(pref.lang);
 
   // Thème dégradé automatique (affichage seulement) et animations réduites
   const rot = useMemo(() => cleanRotation(pref["rot"]), [pref]);
@@ -739,6 +743,9 @@ export function App() {
         break;
       case "pref":
         editPref((p) => (p[a.dataset["k"]!] = !p[a.dataset["k"]!]));
+        break;
+      case "lang":
+        editPref((p) => (p.lang = a.dataset["v"] === "en" ? "en" : "fr"));
         break;
       case "imgsTgl":
         editPref((p) => (p.imgs = p.imgs === false));

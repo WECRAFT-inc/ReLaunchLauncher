@@ -9,6 +9,7 @@ import { JobView, useJob } from "./Import";
 import { MdView } from "./MdView";
 import { CATEGORY_FR } from "./model";
 import { useEscapeLayer } from "./keys";
+import { t } from "./i18n";
 
 export const TYPE_LABEL: Record<ProjectType, string> = { modpack: "Modpack", mod: "Mod", resourcepack: "Pack de ressources", shader: "Shader" };
 const SIDE: Record<string, string> = { required: "requis", optional: "facultatif", unsupported: "non pris en charge" };
@@ -160,7 +161,7 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
     return (
       <div className="pj">
         <button className="btn sm" onClick={onBack}>
-          ← Retour aux résultats
+          {t("← Retour aux résultats")}
         </button>
         <div className="empty">{err}</div>
       </div>
@@ -169,9 +170,9 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
     return (
       <div className="pj">
         <button className="btn sm" onClick={onBack}>
-          ← Retour aux résultats
+          {t("← Retour aux résultats")}
         </button>
-        <div className="empty">Chargement de la page…</div>
+        <div className="empty">{t("Chargement de la page…")}</div>
       </div>
     );
 
@@ -192,8 +193,8 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
     if (type === "resourcepack" || type === "shader")
       return (
         <span className="pj-target">
-          <select value={ctx.target} onChange={(e) => ctx.setTarget(e.target.value)} aria-label="Instance où installer">
-            <option value="">Choisir l'instance…</option>
+          <select value={ctx.target} onChange={(e) => ctx.setTarget(e.target.value)} aria-label={t("Instance où installer")}>
+            <option value="">{t("Choisir l'instance…")}</option>
             {inst.map((i) => (
               <option key={i.id} value={i.id}>
                 {`${i.n} (${i.v || "?"})`}
@@ -202,7 +203,7 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
           </select>
           <button className="btn pri" disabled={!best || !ctx.target} onClick={() => best && installVersion(best)}>
             <Ic n="dl" />
-            Installer
+            {t("Installer")}
           </button>
         </span>
       );
@@ -212,7 +213,7 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
   return (
     <div className="pj">
       <button className="btn sm" onClick={onBack}>
-        ← Retour aux résultats
+        {t("← Retour aux résultats")}
       </button>
       <div className="pj-head card">
         <ProjIcon src={p.icon} title={p.title} size={84} />
@@ -244,7 +245,7 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
           {p.page ? (
             <button className="btn sm" onClick={() => void window.wecraft.projects.openLink(p.page!)}>
               <Ic n="ext" />
-              Page Modrinth
+              {t("Page Modrinth")}
             </button>
           ) : null}
         </div>
@@ -253,14 +254,14 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
       <JobView job={job} />
       {job?.phase === "termine" ? (
         <button className="btn sm" onClick={() => show("wecraft")}>
-          Voir dans WeCraft
+          {t("Voir dans WeCraft")}
         </button>
       ) : null}
       <div className="pj-grid">
         <div className="pj-main">
           <div className="chips pj-tabs" role="tablist">
             <button className="chip" role="tab" aria-pressed={tab === "desc" ? "true" : "false"} onClick={() => setTab("desc")}>
-              Description
+              {t("Description")}
             </button>
             <button className="chip" role="tab" aria-pressed={tab === "versions" ? "true" : "false"} onClick={() => setTab("versions")}>
               {`Versions${versions ? ` (${versions.length}${versions.length === 100 ? "+" : ""})` : ""}`}
@@ -285,8 +286,8 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
                 </label>
               ) : null}
               {vErr ? <div className="empty">{vErr}</div> : null}
-              {!versions && !vErr ? <small className="faint">Chargement des versions…</small> : null}
-              {versions && !versions.length ? <div className="empty">Aucune version publiée pour ce filtre.</div> : null}
+              {!versions && !vErr ? <small className="faint">{t("Chargement des versions…")}</small> : null}
+              {versions && !versions.length ? <div className="empty">{t("Aucune version publiée pour ce filtre.")}</div> : null}
               {versions?.map((v) => {
                 const has = !!v.file && installed.includes(v.file.name);
                 return (
@@ -320,22 +321,22 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
         </div>
         <aside className="pj-side">
           <div className="card">
-            <h4>Compatibilité</h4>
+            <h4>{t("Compatibilité")}</h4>
             <dl>
-              <dt>Minecraft</dt>
+              <dt>{t("Minecraft")}</dt>
               <dd>{mcSummary(p.mcVersions)}</dd>
               <dt>{type === "shader" ? "Nécessite" : "Loaders"}</dt>
               <dd>{p.loaders.map((l) => LOADER_NAME[l] ?? l).join(", ") || "non renseigné"}</dd>
-              <dt>Client</dt>
+              <dt>{t("Client")}</dt>
               <dd>{p.clientSide ? SIDE[p.clientSide] : "non renseigné"}</dd>
-              <dt>Serveur</dt>
+              <dt>{t("Serveur")}</dt>
               <dd>{p.serverSide ? SIDE[p.serverSide] : "non renseigné"}</dd>
             </dl>
           </div>
           <div className="card">
-            <h4>Informations</h4>
+            <h4>{t("Informations")}</h4>
             <dl>
-              <dt>Licence</dt>
+              <dt>{t("Licence")}</dt>
               <dd>
                 {p.license ? (
                   p.license.token ? (
@@ -349,15 +350,15 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
                   "non renseignée"
                 )}
               </dd>
-              <dt>Publié</dt>
+              <dt>{t("Publié")}</dt>
               <dd>{frDate(p.published)}</dd>
-              <dt>Mis à jour</dt>
+              <dt>{t("Mis à jour")}</dt>
               <dd>{frDate(p.updated)}</dd>
             </dl>
           </div>
           {p.links.length ? (
             <div className="card pj-links">
-              <h4>Liens</h4>
+              <h4>{t("Liens")}</h4>
               {p.links.map((l) => (
                 <button key={l.token} className="btn sm" onClick={() => void window.wecraft.projects.openLink(l.token)}>
                   <Ic n="ext" />

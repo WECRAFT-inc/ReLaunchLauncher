@@ -10,6 +10,7 @@ import { IconEditor } from "./IconEditor";
 import { useEscapeLayer } from "./keys";
 import type { Inst } from "./model";
 import { InstIcon } from "./symbols";
+import { t } from "./i18n";
 
 type Loader = (typeof CREATE_LOADERS)[number];
 
@@ -95,8 +96,8 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
       <div className="overlay" data-a="m-inst" data-name="Réglages de l'instance" onClick={(e) => e.target === e.currentTarget && onClose()}>
         <div className="modal" role="dialog" aria-modal="true" aria-labelledby="ieTitle" style={{ width: "min(640px,100%)" }}>
           <header>
-            <h3 id="ieTitle">Réglages de l'instance</h3>
-            <button className="xbtn" aria-label="Fermer" onClick={onClose}>
+            <h3 id="ieTitle">{t("Réglages de l'instance")}</h3>
+            <button className="xbtn" aria-label={t("Fermer")} onClick={onClose}>
               ✕
             </button>
           </header>
@@ -105,25 +106,25 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
               <InstIcon icon={icon.view} fallback={x.c} name={name || x.n} size={88} />
               <span className="col">
                 <button className="btn sm" onClick={() => setEditIcon(true)}>
-                  Changer l'icône
+                  {t("Changer l'icône")}
                 </button>
                 {icon.view ? (
                   <button className="btn sm" onClick={() => setIcon({ choice: null, view: null, changed: true })}>
-                    ✕ Icône par défaut
+                    {t("✕ Icône par défaut")}
                   </button>
                 ) : null}
               </span>
             </div>
             <label className="field">
-              <span className="lbl strong">Nom affiché</span>
+              <span className="lbl strong">{t("Nom affiché")}</span>
               <input type="text" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
-              <small className="faint">Seul le nom affiché change : le dossier de l'instance n'est pas renommé. Champ vide = nom d'origine.</small>
+              <small className="faint">{t("Seul le nom affiché change : le dossier de l'instance n'est pas renommé. Champ vide = nom d'origine.")}</small>
             </label>
             <div className="ie-row">
               <label className="field">
-                <span className="lbl strong">Version de Minecraft</span>
+                <span className="lbl strong">{t("Version de Minecraft")}</span>
                 <select value={mc} onChange={(e) => setMc(e.target.value)}>
-                  {mc ? null : <option value="">Choisir…</option>}
+                  {mc ? null : <option value="">{t("Choisir…")}</option>}
                   {versionList.map((v) => (
                     <option key={v} value={v}>
                       {v}
@@ -132,7 +133,7 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
                 </select>
               </label>
               <label className="field">
-                <span className="lbl strong">Mémoire</span>
+                <span className="lbl strong">{t("Mémoire")}</span>
                 <select value={ram ?? ""} onChange={(e) => setRam(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">{`Par défaut (${defaultRam} Go)`}</option>
                   {Array.from({ length: 16 }, (_, i) => i + 1).map((n) => (
@@ -144,7 +145,7 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
               </label>
             </div>
             <div className="field">
-              <span className="lbl strong">Loader</span>
+              <span className="lbl strong">{t("Loader")}</span>
               <div className="chips">
                 {CREATE_LOADERS.map((l) => (
                   <button key={l} className="chip" aria-pressed={loader === l ? "true" : "false"} onClick={() => setLoader(l)}>
@@ -170,21 +171,21 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
               ) : null}
             </div>
             <div className="field">
-              <span className="lbl strong">Image de fond</span>
+              <span className="lbl strong">{t("Image de fond")}</span>
               <div className="ie-bg">
                 <span className="ie-bgprev" style={bg ? { backgroundImage: `url("${bg}")` } : {}}>
-                  {bg ? null : <small className="faint">Aucune</small>}
+                  {bg ? null : <small className="faint">{t("Aucune")}</small>}
                 </span>
                 <span className="col">
                   <button className="btn sm" onClick={() => void window.wecraft.instances.screenshots(x.id).then(setShots)}>
-                    Choisir une capture
+                    {t("Choisir une capture")}
                   </button>
                   <button className="btn sm" onClick={() => setBackground("import")}>
-                    Importer une image
+                    {t("Importer une image")}
                   </button>
                   {bg ? (
                     <button className="btn sm" onClick={() => setBackground("clear")}>
-                      ✕ Aucun fond
+                      {t("✕ Aucun fond")}
                     </button>
                   ) : null}
                 </span>
@@ -197,15 +198,15 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
                     ))}
                   </div>
                 ) : (
-                  <small className="faint">Aucune capture d'écran dans cette instance (touche F2 en jeu).</small>
+                  <small className="faint">{t("Aucune capture d'écran dans cette instance (touche F2 en jeu).")}</small>
                 )
               ) : null}
-              <small className="faint">L'image est copiée dans les réglages de ReLaunch : elle reste valable si l'instance ou ReLaunch changent de place.</small>
+              <small className="faint">{t("L'image est copiée dans les réglages de ReLaunch : elle reste valable si l'instance ou ReLaunch changent de place.")}</small>
             </div>
           </div>
           <div className="mfoot">
             <button className="btn" onClick={onClose}>
-              Annuler
+              {t("Annuler")}
             </button>
             <button className="btn pri" onClick={() => void save()} disabled={!canSave}>
               {busy ? "Enregistrement…" : "Enregistrer"}

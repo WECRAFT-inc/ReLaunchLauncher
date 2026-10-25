@@ -1,11 +1,13 @@
 // Page Réglages (port de RENDER.settings, mini, pinMgr… du prototype), même balisage.
-import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { ShaderPrefsView } from "../../shared/api";
 import { Minis } from "./Bars";
 import { useApp } from "./ctx";
 import { BASE_THEMES, cleanRotation, ROT_FADES, ROT_INTERVALS, THEME_COLORS, THEME_NAMES, type BaseTheme } from "./theme";
 import { Ic } from "./Ic";
 import { LogsTab } from "./Logs";
 import { BARSIZES, dockSide, NAVINFO, occupied, pinCount, PRESETS, profPlace, type NavConfig, type Side } from "./model";
+import { LANGS, t } from "./i18n";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 
@@ -149,12 +151,12 @@ function PinMgr() {
     <>
       {head}
       <div className="grp fbody" data-a="pin-settings">
-        <p>Choisis où elles s'affichent. Glisse une instance sur une autre pour créer un groupe, puis donne-lui un nom.</p>
+        <p>{t("Choisis où elles s'affichent. Glisse une instance sur une autre pour créer un groupe, puis donne-lui un nom.")}</p>
         <div className="layouts" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
           {modes.map((m) => (
             <button key={m[0]} className="lay" data-act="pinMode" data-m={m[0]} aria-pressed={tf(nav.pinMode === m[0])}>
               <PinMini m={m[0]} />
-              {m[1]}
+              {t(m[1])}
               <span className="faint" style={{ fontWeight: 500, fontSize: "11px" }}>
                 {m[2]}
               </span>
@@ -165,8 +167,8 @@ function PinMgr() {
           <>
             <div className="setrow">
               <span>
-                <b>Bord</b>
-                <small>Les bords occupés par la barre d'action sont bloqués</small>
+                <b>{t("Bord")}</b>
+                <small>{t("Les bords occupés par la barre d'action sont bloqués")}</small>
               </span>
               <span className="chips">
                 {sides.map((sd) => {
@@ -188,8 +190,8 @@ function PinMgr() {
             </div>
             <div className="setrow">
               <span>
-                <b>Position sur le bord</b>
-                <small>La barre ne prend pas tout le côté</small>
+                <b>{t("Position sur le bord")}</b>
+                <small>{t("La barre ne prend pas tout le côté")}</small>
               </span>
               <span className="chips">
                 {(
@@ -220,7 +222,7 @@ function PinMgr() {
                   type="text"
                   data-gname={p.id}
                   value={p.name}
-                  aria-label="Nom du groupe"
+                  aria-label={t("Nom du groupe")}
                   draggable="false"
                   onChange={(e) => {
                     const v = e.target.value;
@@ -236,21 +238,21 @@ function PinMgr() {
                   ))}
                 </span>
                 <button className="btn sm" data-act="dissolve" data-gid={p.id}>
-                  Dissoudre
+                  {t("Dissoudre")}
                 </button>
               </div>
             ),
           )}
           <select
             id="pinAdd"
-            aria-label="Épingler une instance"
+            aria-label={t("Épingler une instance")}
             value=""
             onChange={(e) => {
               const v = e.target.value;
               if (v) editNav((nv) => void nv.pins.push({ t: "i", id: v }), { pins: true });
             }}
           >
-            <option value="">+ Épingler…</option>
+            <option value="">{t("+ Épingler…")}</option>
             <optgroup label="WeCraft">
               {inst
                 .filter((p) => !nav.pins.some((q) => (q.t === "i" ? q.id === p.id : q.items.includes(p.id))))
@@ -329,8 +331,8 @@ function NavTab() {
   return (
     <>
       <div className="grp">
-        <h3>Configurations prêtes</h3>
-        <p>Un point de départ en un clic. Tu peux tout modifier ensuite.</p>
+        <h3>{t("Configurations prêtes")}</h3>
+        <p>{t("Un point de départ en un clic. Tu peux tout modifier ensuite.")}</p>
         <div className="presets">
           {(
             [
@@ -353,9 +355,9 @@ function NavTab() {
         </div>
       </div>
       <div className="grp" data-a="bar-size">
-        <h3>Taille des barres</h3>
-        <p>Épaisseur des barres de navigation et taille de leurs boutons.</p>
-        <div className="chips" role="radiogroup" aria-label="Taille des barres">
+        <h3>{t("Taille des barres")}</h3>
+        <p>{t("Épaisseur des barres de navigation et taille de leurs boutons.")}</p>
+        <div className="chips" role="radiogroup" aria-label={t("Taille des barres")}>
           {Object.keys(BARSIZES).map((k) => (
             <button key={k} className="chip" role="radio" data-act="barSize" data-v={k} aria-checked={tf((nav.size || "m") === k)} aria-pressed={tf((nav.size || "m") === k)}>
               {BARSIZES[k]!.l}
@@ -368,43 +370,43 @@ function NavTab() {
         <div className="grp fbody" data-a="orga-body">
           <div className="setrow">
             <span>
-              <b>Nombre de barres</b>
-              <small>Une seule barre, ou deux barres pour répartir les boutons</small>
+              <b>{t("Nombre de barres")}</b>
+              <small>{t("Une seule barre, ou deux barres pour répartir les boutons")}</small>
             </span>
             <span className="chips">
               <button className="chip" data-act="navCount" data-n="1" aria-pressed={tf(nav.mode === "single")}>
-                1 barre
+                {t("1 barre")}
               </button>
               <button className="chip" data-act="navCount" data-n="2" aria-pressed={tf(nav.mode === "double")}>
-                2 barres
+                {t("2 barres")}
               </button>
             </span>
           </div>
           {nav.mode === "single" ? (
             <>
-              <p>Le logo (blanc) ouvre l'accueil. Ton profil (orange) reste en haut à droite.</p>
+              <p>{t("Le logo (blanc) ouvre l'accueil. Ton profil (orange) reste en haut à droite.")}</p>
               <div className="layouts">{singles.map((x) => layBtn({ mode: "single", single: x[0], h: "top", v: "left", junction: "logo" }, x[1]))}</div>
             </>
           ) : (
             <>
               <div className="setrow">
                 <span>
-                  <b>Barres reliées en angle</b>
+                  <b>{t("Barres reliées en angle")}</b>
                   <small>{J ? "Les deux barres se rejoignent dans un coin, par le logo ou ton profil" : "Chaque barre reste sur son bord, sans toucher l'autre"}</small>
                 </span>
-                <button className="toggle" role="switch" aria-checked={tf(J)} data-act="navJoin" aria-label="Barres reliées en angle"></button>
+                <button className="toggle" role="switch" aria-checked={tf(J)} data-act="navJoin" aria-label={t("Barres reliées en angle")}></button>
               </div>
               {J ? (
                 <div className="layouts">{joinedL.map((c) => layBtn(c, `${FR[c.h]} + ${FR[c.v].toLowerCase()}`, `jonction : ${c.junction === "logo" ? "logo" : "profil"}`))}</div>
               ) : (
                 <>
-                  <p>En haut et en bas, à gauche et à droite, ou sur deux bords voisins sans se toucher. Le logo est sur la première barre.</p>
+                  <p>{t("En haut et en bas, à gauche et à droite, ou sur deux bords voisins sans se toucher. Le logo est sur la première barre.")}</p>
                   <div className="layouts">{freeL.map((c) => layBtn(c, `${FR[c.h]} + ${FR[c.v].toLowerCase()}`))}</div>
                 </>
               )}
             </>
           )}
-          <h3 style={{ marginTop: "8px" }}>Sections</h3>
+          <h3 style={{ marginTop: "8px" }}>{t("Sections")}</h3>
           <p>
             {"Choisis ce qui s'affiche et dans quel ordre. Glisse une ligne ou utilise les flèches. Tout ce qui suit « Espace flexible » va au bout de la barre ; Réglages reste toujours en dernier." +
               (nav.mode === "double" ? " Indique sur quelle barre placer chaque section." : "")}
@@ -453,11 +455,11 @@ function NavTab() {
                     <Ic n={it.sep ? "sep" : x.id} />
                   </span>
                   <span className="lb">
-                    {it.l}
-                    {it.d ? <small>{it.d}</small> : null}
+                    {t(it.l)}
+                    {it.d ? <small>{t(it.d)}</small> : null}
                   </span>
                   {nav.mode === "double" ? (
-                    <span className="hv" role="group" aria-label="Barre">
+                    <span className="hv" role="group" aria-label={t("Barre")}>
                       <button data-act="navBar" data-i={i} data-b="h" aria-pressed={tf(x.bar === "h")}>
                         {FR[nav.h]}
                       </button>
@@ -473,10 +475,10 @@ function NavTab() {
                     <span className="mv"></span>
                   ) : (
                     <span className="mv">
-                      <button data-act="navUp" data-i={i} aria-label="Monter" disabled={i === 0}>
+                      <button data-act="navUp" data-i={i} aria-label={t("Monter")} disabled={i === 0}>
                         ↑
                       </button>
-                      <button data-act="navDown" data-i={i} aria-label="Descendre" disabled={i >= nav.items.length - 2}>
+                      <button data-act="navDown" data-i={i} aria-label={t("Descendre")} disabled={i >= nav.items.length - 2}>
                         ↓
                       </button>
                     </span>
@@ -487,7 +489,7 @@ function NavTab() {
           </div>
           <div className="row" style={{ justifyContent: "flex-start" }}>
             <button className="btn sm" data-act="navReset">
-              Réinitialiser
+              {t("Réinitialiser")}
             </button>
           </div>
         </div>
@@ -560,7 +562,7 @@ export function Settings() {
   const mb = (m: [string, string, string]) => (
     <button key={m[0]} data-settab={m[0]} aria-current={tf(ui.setTab === m[0])}>
       <Ic n={m[2]} />
-      {m[1]}
+      {t(m[1])}
     </button>
   );
   const ramRef = useRef<HTMLInputElement>(null);
@@ -572,8 +574,8 @@ export function Settings() {
     body = (
       <>
         <div className="grp">
-          <h3>Style de l'interface</h3>
-          <p>Les quatre thèmes de couleur existent dans les deux styles.</p>
+          <h3>{t("Style de l'interface")}</h3>
+          <p>{t("Les quatre thèmes de couleur existent dans les deux styles.")}</p>
           <div className="styles">
             {(
               [
@@ -597,8 +599,8 @@ export function Settings() {
           </div>
         </div>
         <div className="grp">
-          <h3>Thème de couleurs</h3>
-          <p>La couleur d'accent de toute l'appli.</p>
+          <h3>{t("Thème de couleurs")}</h3>
+          <p>{t("La couleur d'accent de toute l'appli.")}</p>
           <div className="themes">
             {(
               [
@@ -619,8 +621,8 @@ export function Settings() {
           </div>
         </div>
         <div className="grp">
-          <h3>Fond</h3>
-          <p>Le fond derrière les pages du launcher.</p>
+          <h3>{t("Fond")}</h3>
+          <p>{t("Le fond derrière les pages du launcher.")}</p>
           <div className="bgopts">
             {(
               [
@@ -637,20 +639,20 @@ export function Settings() {
           </div>
         </div>
         <div className="grp">
-          <h3>Images et animations</h3>
+          <h3>{t("Images et animations")}</h3>
           <div className="setrow">
             <span>
-              <b>Images de fond</b>
-              <small>Fonds choisis pour les instances (et, plus tard, images des événements). Désactivées : fond du thème. Réglage propre à ce PC, il ne change rien pour les autres joueurs.</small>
+              <b>{t("Images de fond")}</b>
+              <small>{t("Fonds choisis pour les instances (et, plus tard, images des événements). Désactivées : fond du thème. Réglage propre à ce PC, il ne change rien pour les autres joueurs.")}</small>
             </span>
-            <button className="toggle" role="switch" aria-checked={tf(pref.imgs !== false)} data-act="imgsTgl" aria-label="Images de fond"></button>
+            <button className="toggle" role="switch" aria-checked={tf(pref.imgs !== false)} data-act="imgsTgl" aria-label={t("Images de fond")}></button>
           </div>
           <div className="setrow">
             <span>
-              <b>Animations</b>
-              <small>Transitions et fondus de l'interface. Toujours réduites si Windows demande de réduire les animations.</small>
+              <b>{t("Animations")}</b>
+              <small>{t("Transitions et fondus de l'interface. Toujours réduites si Windows demande de réduire les animations.")}</small>
             </span>
-            <button className="toggle" role="switch" aria-checked={tf(pref.anim !== false)} data-act="animTgl" aria-label="Animations"></button>
+            <button className="toggle" role="switch" aria-checked={tf(pref.anim !== false)} data-act="animTgl" aria-label={t("Animations")}></button>
           </div>
         </div>
         <RotationGroup />
@@ -664,13 +666,13 @@ export function Settings() {
     body = (
       <>
         <div className="grp">
-          <h3>Encarts d'actualité</h3>
+          <h3>{t("Encarts d'actualité")}</h3>
           <p>Les encarts s'affichent en bas à droite de l'accueil. Toutes les actualités restent aussi dans Info &amp; News et le menu cloche.</p>
         </div>
         <div className="setrow">
           <span>
-            <b>Encarts affichés en même temps</b>
-            <small>1 grand ou jusqu'à 5 plus petits</small>
+            <b>{t("Encarts affichés en même temps")}</b>
+            <small>{t("1 grand ou jusqu'à 5 plus petits")}</small>
           </span>
           <span className="chips">
             {[1, 2, 3, 4, 5].map((k) => (
@@ -682,19 +684,19 @@ export function Settings() {
         </div>
         <div className="setrow">
           <span>
-            <b>Défilement automatique</b>
+            <b>{t("Défilement automatique")}</b>
             <small>Encarts de l'accueil et actualité à la une d'Info &amp; News · pause au survol</small>
           </span>
-          <button className="toggle" role="switch" aria-checked={tf(car.auto)} data-act="carAuto" aria-label="Défilement automatique"></button>
+          <button className="toggle" role="switch" aria-checked={tf(car.auto)} data-act="carAuto" aria-label={t("Défilement automatique")}></button>
         </div>
         {car.auto ? (
           <div className="setrow">
             <span>
-              <b>Vitesse</b>
-              <small>Temps passé sur chaque position</small>
+              <b>{t("Vitesse")}</b>
+              <small>{t("Temps passé sur chaque position")}</small>
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: "220px" }}>
-              <input type="range" min="3" max="15" step="1" defaultValue={car.speed} id="carSpd" aria-label="Vitesse du défilement" onInput={(e) => app.editCar((c) => (c.speed = Number((e.target as HTMLInputElement).value)))} />
+              <input type="range" min="3" max="15" step="1" defaultValue={car.speed} id="carSpd" aria-label={t("Vitesse du défilement")} onInput={(e) => app.editCar((c) => (c.speed = Number((e.target as HTMLInputElement).value)))} />
               <b id="carSpdV" style={{ fontFamily: "var(--f-mono)", minWidth: "44px", textAlign: "right" }}>
                 {`${car.speed} s`}
               </b>
@@ -702,21 +704,21 @@ export function Settings() {
           </div>
         ) : null}
         <div className="grp" style={{ marginTop: "6px" }}>
-          <h3>Démarrage</h3>
+          <h3>{t("Démarrage")}</h3>
         </div>
         <div className="setrow">
           <span>
-            <b>Bouton « Reprendre »</b>
-            <small>Relance la dernière instance ou le dernier serveur</small>
+            <b>{t("Bouton « Reprendre »")}</b>
+            <small>{t("Relance la dernière instance ou le dernier serveur")}</small>
           </span>
-          <button className="toggle" role="switch" aria-checked={tf(home.resume)} data-act="resumeTgl" aria-label="Bouton Reprendre"></button>
+          <button className="toggle" role="switch" aria-checked={tf(home.resume)} data-act="resumeTgl" aria-label={t("Bouton Reprendre")}></button>
         </div>
         <label className="setrow">
           <span>
-            <b>Ouvrir l'appli sur</b>
-            <small>Page affichée au démarrage</small>
+            <b>{t("Ouvrir l'appli sur")}</b>
+            <small>{t("Page affichée au démarrage")}</small>
           </span>
-          <select id="startSel" aria-label="Page de démarrage" value={pref.start} onChange={(e) => app.editPref((p) => (p.start = e.target.value))}>
+          <select id="startSel" aria-label={t("Page de démarrage")} value={pref.start} onChange={(e) => app.editPref((p) => (p.start = e.target.value))}>
             {(
               [
                 ["home", "Accueil"],
@@ -737,27 +739,28 @@ export function Settings() {
     body = (
       <>
         <div className="grp">
-          <h3>Mémoire par défaut</h3>
+          <h3>{t("Mémoire par défaut")}</h3>
           <div className="setrow">
-            <input type="range" min="1" max="16" step="1" ref={ramRef} defaultValue={defaultRam} id="ramR" aria-label="Mémoire allouée" onInput={(e) => app.setDefaultRam(Number((e.target as HTMLInputElement).value))} />
+            <input type="range" min="1" max="16" step="1" ref={ramRef} defaultValue={defaultRam} id="ramR" aria-label={t("Mémoire allouée")} onInput={(e) => app.setDefaultRam(Number((e.target as HTMLInputElement).value))} />
             <b id="ramV" style={{ minWidth: "52px", textAlign: "right", fontFamily: "var(--f-mono)" }}>
               {`${defaultRam} Go`}
             </b>
           </div>
         </div>
+        <ShadersGroup />
         <div className="setrow">
           <span>
-            <b>Java</b>
-            <small>Rien à installer : le launcher officiel fournit Java pour jouer, et ReLaunch télécharge le Java de Mojang (vérifié) quand Forge ou NeoForge en a besoin pour s'installer.</small>
+            <b>{t("Java")}</b>
+            <small>{t("Rien à installer : le launcher officiel fournit Java pour jouer, et ReLaunch télécharge le Java de Mojang (vérifié) quand Forge ou NeoForge en a besoin pour s'installer.")}</small>
           </span>
         </div>
         <div className="setrow">
           <span>
-            <b>Dossier de données</b>
+            <b>{t("Dossier de données")}</b>
             <small>%APPDATA%\.wecraft</small>
           </span>
           <button className="btn sm" data-act="folder">
-            Ouvrir
+            {t("Ouvrir")}
           </button>
         </div>
       </>
@@ -767,8 +770,21 @@ export function Settings() {
       <>
         <div className="setrow">
           <span>
-            <b>Recliquer sur la section ouverte</b>
-            <small>Par exemple, recliquer sur Favoris quand Favoris est déjà affiché</small>
+            <b>{t("Langue")}</b>
+            <small>{t("Langue de l'interface. Les textes pas encore traduits restent en français.")}</small>
+          </span>
+          <span className="chips">
+            {LANGS.map(([k, l]) => (
+              <button key={k} className="chip" data-act="lang" data-v={k} aria-pressed={tf((pref.lang ?? "fr") === k)} lang={k}>
+                {l}
+              </button>
+            ))}
+          </span>
+        </div>
+        <div className="setrow">
+          <span>
+            <b>{t("Recliquer sur la section ouverte")}</b>
+            <small>{t("Par exemple, recliquer sur Favoris quand Favoris est déjà affiché")}</small>
           </span>
           <span className="chips">
             {(
@@ -786,18 +802,18 @@ export function Settings() {
         </div>
         <div className="setrow">
           <span>
-            <b>Statut Discord</b>
-            <small>Affiche le jeu en cours sur ton profil Discord (désactivé par défaut ; l'appli Discord doit être ouverte)</small>
+            <b>{t("Statut Discord")}</b>
+            <small>{t("Affiche le jeu en cours sur ton profil Discord (désactivé par défaut ; l'appli Discord doit être ouverte)")}</small>
           </span>
-          <button className="toggle" role="switch" aria-checked={tf(app.discordOn)} data-act="discord" aria-label="Statut Discord"></button>
+          <button className="toggle" role="switch" aria-checked={tf(app.discordOn)} data-act="discord" aria-label={t("Statut Discord")}></button>
         </div>
         <div className="setrow">
           <span>
-            <b>Mises à jour</b>
-            <small>Vérifiées au démarrage ; installées seulement si elles sont signées par l'auteur</small>
+            <b>{t("Mises à jour")}</b>
+            <small>{t("Vérifiées au démarrage ; installées seulement si elles sont signées par l'auteur")}</small>
           </span>
           <button className="btn sm" data-act="updCheck">
-            Rechercher
+            {t("Rechercher")}
           </button>
         </div>
       </>
@@ -805,21 +821,21 @@ export function Settings() {
   } else {
     body = (
       <div className="grp">
-        <h3>Compte ReLink</h3>
-        <p>Les comptes ReLink ne sont pas encore disponibles.</p>
+        <h3>{t("Compte ReLink")}</h3>
+        <p>{t("Les comptes ReLink ne sont pas encore disponibles.")}</p>
       </div>
     );
   }
   return (
     <div className="setwin">
       <div className="setnav">
-        <h4>Affichage</h4>
+        <h4>{t("Affichage")}</h4>
         {menu.slice(0, 3).map(mb)}
-        <h4>Jeu</h4>
+        <h4>{t("Jeu")}</h4>
         {menu.slice(3, 5).map(mb)}
-        <h4>Diagnostic</h4>
+        <h4>{t("Diagnostic")}</h4>
         {mb(menu[5]!)}
-        <h4>Compte</h4>
+        <h4>{t("Compte")}</h4>
         {mb(menu[6]!)}
         <span className="ver">{`ReLaunch ${appVer}`}</span>
       </div>
@@ -848,19 +864,19 @@ function RotationGroup() {
   );
   return (
     <div className="grp">
-      <h3>Thème dégradé automatique</h3>
+      <h3>{t("Thème dégradé automatique")}</h3>
       <div className="setrow">
         <span>
-          <b>Rotation des thèmes</b>
-          <small>Passe d'un thème à l'autre avec un fondu des couleurs. Le thème enregistré reste celui choisi plus haut.</small>
+          <b>{t("Rotation des thèmes")}</b>
+          <small>{t("Passe d'un thème à l'autre avec un fondu des couleurs. Le thème enregistré reste celui choisi plus haut.")}</small>
         </span>
-        <button className="toggle" role="switch" aria-checked={tf(rot.on)} data-act="rotTgl" aria-label="Rotation des thèmes"></button>
+        <button className="toggle" role="switch" aria-checked={tf(rot.on)} data-act="rotTgl" aria-label={t("Rotation des thèmes")}></button>
       </div>
       <div className="rot-list">
         {rot.list.map((t, i) => row(t as BaseTheme, true, i))}
         {others.map((t) => row(t, false, -1))}
       </div>
-      {rot.list.length < 2 ? <small className="cr-bad">Choisis au moins deux thèmes pour la rotation.</small> : null}
+      {rot.list.length < 2 ? <small className="cr-bad">{t("Choisis au moins deux thèmes pour la rotation.")}</small> : null}
       <div className="rot-opts">
         <span className="chips">
           {ROT_INTERVALS.map((n) => (
@@ -877,9 +893,55 @@ function RotationGroup() {
           ))}
         </span>
         <button className="btn sm" data-act="rotPreview">
-          Aperçu
+          {t("Aperçu")}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Shaders préférés : appliqués au lancement aux instances qui ont un mod de shaders (Iris, Oculus, OptiFine). */
+function ShadersGroup() {
+  const { toast } = useApp();
+  const [p, setP] = useState<ShaderPrefsView | null>(null);
+  const [known, setKnown] = useState<string[]>([]);
+  useEffect(() => {
+    void window.wecraft.settings.shaders().then((r) => {
+      setP(r.prefs);
+      setKnown(r.known);
+    });
+  }, []);
+  const save = (next: ShaderPrefsView) => {
+    setP(next);
+    void window.wecraft.settings.setShaders(next).then((ok) => !ok && toast(t("Réglage non enregistré.")));
+  };
+  if (!p) return null;
+  return (
+    <div className="grp">
+      <h3>{t("Shaders préférés")}</h3>
+      <div className="setrow">
+        <span>
+          <b>{t("Choisir le shader au lancement")}</b>
+          <small>{t("Parmi les shaders présents dans l'instance : le préféré, sinon le secondaire, sinon le choix déjà enregistré est gardé. Rien n'est téléchargé ni supprimé.")}</small>
+        </span>
+        <button className="toggle" role="switch" aria-checked={tf(p.on)} aria-label={t("Choisir le shader au lancement")} onClick={() => save({ ...p, on: !p.on })}></button>
+      </div>
+      <div className="ie-row">
+        <label className="field">
+          <span className="lbl strong">{t("Shader préféré")}</span>
+          <input type="text" list="rl-shaders" maxLength={120} defaultValue={p.primary ?? ""} placeholder="Complementary Reimagined" disabled={!p.on} onBlur={(e) => save({ ...p, primary: e.target.value.trim() || null })} />
+        </label>
+        <label className="field">
+          <span className="lbl strong">{t("Shader secondaire")}</span>
+          <input type="text" list="rl-shaders" maxLength={120} defaultValue={p.secondary ?? ""} placeholder="BSL" disabled={!p.on} onBlur={(e) => save({ ...p, secondary: e.target.value.trim() || null })} />
+        </label>
+      </div>
+      <datalist id="rl-shaders">
+        {known.map((k) => (
+          <option key={k} value={k} />
+        ))}
+      </datalist>
+      <small className="faint">{known.length ? t("Shaders trouvés dans tes instances : {n}.", { n: known.length }) : t("Aucun shader trouvé dans tes instances pour l'instant (Découvrir > Shaders).")}</small>
     </div>
   );
 }

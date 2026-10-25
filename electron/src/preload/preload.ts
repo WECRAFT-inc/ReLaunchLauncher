@@ -8,6 +8,8 @@ const GET_INFO = "app:get-info";
 const RENDERED = "app:rendered";
 const OPEN_DATA_DIR = "app:open-data-dir";
 const SET_RAM = "settings:set-ram";
+const SHADERS_GET = "settings:shaders-get";
+const SHADERS_SET = "settings:shaders-set";
 const UPDATE_CHECK = "update:check";
 const UPDATE_INSTALL = "update:install";
 const UPDATE_STATUS = "update:status";
@@ -59,6 +61,8 @@ const api: WeCraftApi = Object.freeze({
   settings: Object.freeze({
     setTheme: (theme: ThemeKey) => ipcRenderer.invoke(SET_THEME, theme),
     setRam: (ram: number) => ipcRenderer.invoke(SET_RAM, ram),
+    shaders: () => ipcRenderer.invoke(SHADERS_GET),
+    setShaders: (p: unknown) => ipcRenderer.invoke(SHADERS_SET, p),
   }),
   instances: Object.freeze({
     list: (rescan?: boolean) => ipcRenderer.invoke(LIST_INSTANCES, rescan === true),

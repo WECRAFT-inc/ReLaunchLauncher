@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { LogEntry } from "../../shared/api";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
+import { t } from "./i18n";
 
 const SHOWN = 500;
 const LEVEL: Record<LogEntry["level"], string> = { error: "Erreur", warn: "Avertissement", info: "Info" };
@@ -80,15 +81,15 @@ export function LogsTab() {
             </button>
           ))}
         </span>
-        <select value={origin} onChange={(e) => setOrigin(e.target.value)} aria-label="Origine">
-          <option value="">Toutes les origines</option>
+        <select value={origin} onChange={(e) => setOrigin(e.target.value)} aria-label={t("Origine")}>
+          <option value="">{t("Toutes les origines")}</option>
           {origins.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
           ))}
         </select>
-        <input type="search" placeholder="Rechercher dans les journaux" aria-label="Rechercher dans les journaux" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input type="search" placeholder={t("Rechercher dans les journaux")} aria-label={t("Rechercher dans les journaux")} value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="row logs-acts">
         <button className="btn sm" onClick={load} disabled={loading}>
@@ -98,24 +99,24 @@ export function LogsTab() {
           {`Copier la sélection${sel.size ? ` (${sel.size})` : ""}`}
         </button>
         <button className="btn sm" onClick={() => copy(filtered.map(({ e }) => e))} disabled={!filtered.length}>
-          Copier ce qui est affiché
+          {t("Copier ce qui est affiché")}
         </button>
         <button className="btn sm" onClick={() => void window.wecraft.logs.openDir()}>
           <Ic n="folder" />
-          Ouvrir le dossier des logs
+          {t("Ouvrir le dossier des logs")}
         </button>
       </div>
-      {data?.truncated ? <small className="faint">Seule la fin des journaux est lue (les plus anciennes lignes sont dans les fichiers).</small> : null}
-      <small className="faint">* niveau déduit du message (journaux de lancement et de mises à jour, écrits sans niveau).</small>
+      {data?.truncated ? <small className="faint">{t("Seule la fin des journaux est lue (les plus anciennes lignes sont dans les fichiers).")}</small> : null}
+      <small className="faint">{t("* niveau déduit du message (journaux de lancement et de mises à jour, écrits sans niveau).")}</small>
       {!data ? (
-        <div className="empty">Lecture des journaux…</div>
+        <div className="empty">{t("Lecture des journaux…")}</div>
       ) : !filtered.length ? (
         <div className="empty">{data.entries.length ? "Aucune ligne ne correspond." : "Aucun journal pour l'instant."}</div>
       ) : (
         <div className="logs-list" role="list">
           {filtered.slice(0, SHOWN).map(({ e, i }) => (
             <label key={i} className={`log-row ${e.level}`} role="listitem">
-              <input type="checkbox" checked={sel.has(i)} onChange={() => toggle(i)} aria-label="Sélectionner la ligne" />
+              <input type="checkbox" checked={sel.has(i)} onChange={() => toggle(i)} aria-label={t("Sélectionner la ligne")} />
               <time>{fmt(e.time)}</time>
               <span className={`log-lv ${e.level}`}>{`${LEVEL[e.level]}${e.guessed ? "*" : ""}`}</span>
               <span className="log-or">{e.origin}</span>

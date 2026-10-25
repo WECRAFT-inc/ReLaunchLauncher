@@ -6,6 +6,7 @@ import { useApp } from "./ctx";
 import { useEscapeLayer } from "./keys";
 import { Ic } from "./Ic";
 import { detail, gById, initials, type Inst } from "./model";
+import { t } from "./i18n";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 const cover = (x: Inst): Css => ({ "--c1": x.c[0], "--c2": x.c[1] });
@@ -58,12 +59,12 @@ export function Pop() {
     queueMicrotask(() => setUi({ pop: null }));
   }
   return (
-    <div className="pop" id="pop" hidden={!pop || (pop.kind === "group" && !g)} data-a="pin-pop" data-name="Épingles" role="dialog" aria-label="Instances épinglées" ref={ref}>
+    <div className="pop" id="pop" hidden={!pop || (pop.kind === "group" && !g)} data-a="pin-pop" data-name="Épingles" role="dialog" aria-label={t("Instances épinglées")} ref={ref}>
       {pop && pop.kind === "group" && g ? (
         <>
           <div className="phead">
             {pop.back ? (
-              <button className="ib" data-act="popBack" aria-label="Retour">
+              <button className="ib" data-act="popBack" aria-label={t("Retour")}>
                 ←
               </button>
             ) : null}
@@ -72,7 +73,7 @@ export function Pop() {
               id="popName"
               ref={nameRef}
               defaultValue={g.name}
-              aria-label="Nom du groupe"
+              aria-label={t("Nom du groupe")}
               onInput={(e) => {
                 const v = (e.target as HTMLInputElement).value;
                 editNav((n) => {
@@ -84,7 +85,7 @@ export function Pop() {
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
             />
-            <button className="ib" data-act="closePop" aria-label="Fermer">
+            <button className="ib" data-act="closePop" aria-label={t("Fermer")}>
               ✕
             </button>
           </div>
@@ -101,9 +102,9 @@ export function Pop() {
                   </span>
                   <span className="acts">
                     <button className="btn sm pri" data-play={x.id}>
-                      Jouer
+                      {t("Jouer")}
                     </button>
-                    <button className="ib" data-act="ungroup" data-id={x.id} aria-label="Sortir du groupe" title="Sortir du groupe">
+                    <button className="ib" data-act="ungroup" data-id={x.id} aria-label={t("Sortir du groupe")} title={t("Sortir du groupe")}>
                       ↗
                     </button>
                   </span>
@@ -111,17 +112,17 @@ export function Pop() {
               ))}
           </div>
           <div className="pfoot">
-            <small>Glisse une instance hors du groupe pour l'en sortir.</small>
+            <small>{t("Glisse une instance hors du groupe pour l'en sortir.")}</small>
             <button className="btn sm" data-act="dissolve" data-gid={g.id}>
-              Dissoudre
+              {t("Dissoudre")}
             </button>
           </div>
         </>
       ) : pop ? (
         <>
           <div className="phead">
-            <b>Instances épinglées</b>
-            <button className="ib" data-act="closePop" aria-label="Fermer">
+            <b>{t("Instances épinglées")}</b>
+            <button className="ib" data-act="closePop" aria-label={t("Fermer")}>
               ✕
             </button>
           </div>
@@ -151,11 +152,11 @@ export function Pop() {
               })
             ) : (
               <span className="faint" style={{ fontSize: "12.5px", gridColumn: "1/-1" }}>
-                Aucune épingle pour l'instant.
+                {t("Aucune épingle pour l'instant.")}
               </span>
             )}
           </div>
-          <small className="faint">Glisse une instance sur une autre pour créer un groupe.</small>
+          <small className="faint">{t("Glisse une instance sur une autre pour créer un groupe.")}</small>
         </>
       ) : null}
     </div>
@@ -173,7 +174,7 @@ export function Drawer() {
   const { ui } = useApp();
   const T = ui.drawer ? DRAWERS[ui.drawer] : undefined;
   return (
-    <aside className={`drawer${ui.drawer === "staff" ? " staff" : ""}`} id="drawer" hidden={!T} aria-label="Panneau latéral" data-name={T ? T[1] : "Panneau"} {...(T ? { "data-a": `drawer-${ui.drawer}` } : {})}>
+    <aside className={`drawer${ui.drawer === "staff" ? " staff" : ""}`} id="drawer" hidden={!T} aria-label={t("Panneau latéral")} data-name={T ? T[1] : "Panneau"} {...(T ? { "data-a": `drawer-${ui.drawer}` } : {})}>
       {T ? (
         <>
           <header>
@@ -181,7 +182,7 @@ export function Drawer() {
               <Ic n={T[0]} />
               {T[1]}
             </h3>
-            <button className="xbtn" data-act="closeDrawer" aria-label="Fermer">
+            <button className="xbtn" data-act="closeDrawer" aria-label={t("Fermer")}>
               ✕
             </button>
           </header>
@@ -217,7 +218,7 @@ export function LaunchBox({ st, onClose, onAnswer }: { st: LaunchUi; onClose: ()
     <div className="launch" id="launchBox" hidden={!st.box} data-a="launch">
       <div className="row">
         <b id="lName">{st.name || "Lancement"}</b>
-        <button className="xbtn" id="lClose" aria-label="Fermer" style={{ width: "28px", height: "28px", fontSize: "13px" }} onClick={onClose}>
+        <button className="xbtn" id="lClose" aria-label={t("Fermer")} style={{ width: "28px", height: "28px", fontSize: "13px" }} onClick={onClose}>
           ✕
         </button>
       </div>
@@ -229,10 +230,10 @@ export function LaunchBox({ st, onClose, onAnswer }: { st: LaunchUi; onClose: ()
       </small>
       <div className="row" id="lAsk" hidden={s?.phase !== "accord"} style={{ justifyContent: "flex-end", gap: "8px" }}>
         <button className="btn sm" id="lNo" onClick={() => onAnswer(false)}>
-          Annuler le lancement
+          {t("Annuler le lancement")}
         </button>
         <button className="btn sm danger" id="lForce" onClick={() => onAnswer(true)}>
-          Forcer la fermeture
+          {t("Forcer la fermeture")}
         </button>
       </div>
     </div>
@@ -255,8 +256,8 @@ export function RamDialog({ open, name, ram, onCancel, onGo }: { open: boolean; 
     <div className="overlay" id="ramOv" hidden={!open} data-a="m-ram" data-name="Lancer" onClick={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="ramTitle" style={{ width: "min(420px,100%)" }}>
         <header>
-          <h3 id="ramTitle">Mémoire (RAM)</h3>
-          <button className="xbtn" id="ramClose" aria-label="Fermer" style={{ width: "28px", height: "28px", fontSize: "13px" }} onClick={onCancel}>
+          <h3 id="ramTitle">{t("Mémoire (RAM)")}</h3>
+          <button className="xbtn" id="ramClose" aria-label={t("Fermer")} style={{ width: "28px", height: "28px", fontSize: "13px" }} onClick={onCancel}>
             ✕
           </button>
         </header>
@@ -265,22 +266,22 @@ export function RamDialog({ open, name, ram, onCancel, onGo }: { open: boolean; 
             {name}
           </small>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <input type="range" id="ramRange" min="1" max="16" step="1" value={value} aria-label="Mémoire en Go" style={{ flex: 1 }} onChange={(e) => setValue(Number(e.target.value))} />
+            <input type="range" id="ramRange" min="1" max="16" step="1" value={value} aria-label={t("Mémoire en Go")} style={{ flex: 1 }} onChange={(e) => setValue(Number(e.target.value))} />
             <b id="ramVal" style={{ minWidth: "52px", textAlign: "right" }}>
               {`${value} Go`}
             </b>
           </div>
           <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "13px" }}>
             <input type="checkbox" id="ramRepair" checked={repair} onChange={(e) => setRepair(e.target.checked)} />
-            <span>Réparer : tout réinstaller avant de lancer</span>
+            <span>{t("Réparer : tout réinstaller avant de lancer")}</span>
           </label>
         </div>
         <div className="mfoot">
           <button className="btn" id="ramCancel" onClick={onCancel}>
-            Annuler
+            {t("Annuler")}
           </button>
           <button className="btn pri" id="ramGo" ref={goRef} onClick={() => onGo(value, repair)}>
-            Lancer
+            {t("Lancer")}
           </button>
         </div>
       </div>
@@ -335,8 +336,8 @@ export function UpdateDialog({ check, onClose }: { check: Extract<UpdateCheck, {
     <div className="overlay" id="updOv" hidden={!check} data-a="m-update" data-name="Mise à jour">
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="updTitle" style={{ width: "min(460px,100%)" }}>
         <header>
-          <h3 id="updTitle">Mise à jour disponible</h3>
-          <button className="xbtn" id="updClose" aria-label="Fermer" style={{ width: "28px", height: "28px", fontSize: "13px" }} onClick={close}>
+          <h3 id="updTitle">{t("Mise à jour disponible")}</h3>
+          <button className="xbtn" id="updClose" aria-label={t("Fermer")} style={{ width: "28px", height: "28px", fontSize: "13px" }} onClick={close}>
             ✕
           </button>
         </header>
@@ -356,7 +357,7 @@ export function UpdateDialog({ check, onClose }: { check: Extract<UpdateCheck, {
         </div>
         <div className="mfoot">
           <button className="btn" id="updLater" disabled={busy} onClick={close}>
-            Plus tard
+            {t("Plus tard")}
           </button>
           <button className="btn pri" id="updGo" disabled={busy} onClick={go}>
             {check && !check.auto ? "Voir la mise à jour" : "Mettre à jour"}
@@ -379,7 +380,7 @@ export function Notice({ lines, onClose }: { lines: string[]; onClose: () => voi
         ))}
       </p>
       <button className="btn sm" type="button" id="wc-notice-close" onClick={onClose}>
-        Compris
+        {t("Compris")}
       </button>
     </div>
   );
@@ -395,21 +396,20 @@ export function DiscordAsk({ open, onAnswer }: { open: boolean; onAnswer: (on: b
     <div className="overlay" id="discordOv" hidden={!open} data-a="m-discord" data-name="Statut Discord">
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="dcTitle" style={{ width: "min(460px,100%)" }}>
         <header>
-          <h3 id="dcTitle">Statut Discord</h3>
+          <h3 id="dcTitle">{t("Statut Discord")}</h3>
         </header>
         <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: "12px" }}>
-          <p style={{ fontSize: "13.5px" }}>Afficher sur votre profil Discord ce que vous faites dans ReLaunch ?</p>
+          <p style={{ fontSize: "13.5px" }}>{t("Afficher sur votre profil Discord ce que vous faites dans ReLaunch ?")}</p>
           <p className="muted" style={{ fontSize: "13px" }}>
-            Vos amis Discord verraient le nom de l'instance lancée, sa version de Minecraft, son loader et la durée de jeu. Ce réglage se change à tout moment dans Paramètres, Comportement. La question
-            sera reposée après chaque mise à jour.
+            {t("Vos amis Discord verraient le nom de l'instance lancée, sa version de Minecraft, son loader et la durée de jeu. Ce réglage se change à tout moment dans Paramètres, Comportement. La question sera reposée après chaque mise à jour.")}
           </p>
         </div>
         <div className="mfoot">
           <button className="btn" ref={noRef} onClick={() => onAnswer(false)}>
-            Non
+            {t("Non")}
           </button>
           <button className="btn pri" onClick={() => onAnswer(true)}>
-            Oui, afficher
+            {t("Oui, afficher")}
           </button>
         </div>
       </div>

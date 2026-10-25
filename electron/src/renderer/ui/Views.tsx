@@ -4,6 +4,7 @@ import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { InstIcon } from "./symbols";
 import { ago, detail, isPinned, SC, type Inst } from "./model";
+import { t } from "./i18n";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 /** Couverture : fond choisi pour l'instance (si les images de fond sont activées), sinon dégradé. */
@@ -28,12 +29,12 @@ export function Soon({ title, sub, text }: { title: string; sub: string; text: s
     <>
       <div className="vhead">
         <div>
-          <h2>{title}</h2>
-          <div className="sub">{sub}</div>
+          <h2>{t(title)}</h2>
+          <div className="sub">{t(sub)}</div>
         </div>
       </div>
       <div className="card rl-empty">
-        <b>Pas encore disponible</b>
+        <b>{t("Pas encore disponible")}</b>
         <p className="muted">{text}</p>
       </div>
     </>
@@ -61,15 +62,15 @@ export function Home() {
             RELAUNCH
           </h2>
           <div className="playrow">
-            <select id="homeSel" aria-label="Instance ou serveur" disabled>
-              <option>Aucune instance pour l'instant</option>
+            <select id="homeSel" aria-label={t("Instance ou serveur")} disabled>
+              <option>{t("Aucune instance pour l'instant")}</option>
             </select>
             <button className="btn play" id="homePlay" data-act="noInst">
-              Jouer
+              {t("Jouer")}
             </button>
           </div>
           <span className="seldet" id="homeDet">
-            Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).
+            {t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}
           </span>
         </div>
       </div>
@@ -81,14 +82,14 @@ export function Home() {
         <span className="hmeta">
           <button className="newsbtn" data-go="news" data-a="home-news">
             <Ic n="news" />
-            Info &amp; News
+            {t("Info & News")}
           </button>
         </span>
         <h2 className="huge" aria-label="ReLaunch">
           RELAUNCH
         </h2>
         <div className="playrow">
-          <select id="homeSel" aria-label="Instance ou serveur" value={sel.id} onChange={(e) => setUi({ sel: e.target.value })}>
+          <select id="homeSel" aria-label={t("Instance ou serveur")} value={sel.id} onChange={(e) => setUi({ sel: e.target.value })}>
             <optgroup label="ReLaunch · serveurs"></optgroup>
             <optgroup label="WeCraft · instances">
               {inst.map((x) => (
@@ -99,7 +100,7 @@ export function Home() {
             </optgroup>
           </select>
           <button className="btn play" data-play={sel.id} id="homePlay">
-            Jouer
+            {t("Jouer")}
           </button>
         </div>
         <span className="seldet" id="homeDet">
@@ -130,29 +131,29 @@ export function Wecraft() {
       <div className="vhead">
         <div>
           <h2>WeCraft</h2>
-          <div className="sub">Ton launcher Minecraft : instances, modpacks et outils</div>
+          <div className="sub">{t("Ton launcher Minecraft : instances, modpacks et outils")}</div>
         </div>
       </div>
       <div className="qa">
         <button className="btn" data-act="create">
           <Ic n="create" />
-          Créer un WePack<small>Nouvelle instance personnalisée</small>
+          {t("Créer un WePack")}<small>{t("Nouvelle instance personnalisée")}</small>
         </button>
         <button className="btn" data-act="import">
           <Ic n="import" />
-          Importer une instance<small>Prism, CurseForge, Modrinth</small>
+          {t("Importer une instance")}<small>Prism, CurseForge, Modrinth</small>
         </button>
         <button className="btn" data-go="discover">
           <Ic n="discover" />
-          Parcourir les modpacks<small>Catalogue de contenus</small>
+          {t("Parcourir les modpacks")}<small>{t("Catalogue de contenus")}</small>
         </button>
       </div>
       <div className="sect">
-        <h3>Dernières instances lancées</h3>
+        <h3>{t("Dernières instances lancées")}</h3>
         <div className="hscroll">
           {recent.length ? null : (
             <span className="faint" style={{ fontSize: "13px" }}>
-              Aucune instance lancée pour l'instant.
+              {t("Aucune instance lancée pour l'instant.")}
             </span>
           )}
           {recent.map((x) => (
@@ -165,7 +166,7 @@ export function Wecraft() {
               <span className="row">
                 <button className="btn sm pri" data-play={x.id}>
                   <Ic n="play" />
-                  Jouer
+                  {t("Jouer")}
                 </button>
                 <PinBtn id={x.id} />
               </span>
@@ -174,7 +175,7 @@ export function Wecraft() {
         </div>
       </div>
       <div className="sect">
-        <h3>Toutes les instances</h3>
+        <h3>{t("Toutes les instances")}</h3>
         <div className="toolbar">
           <div className="chips" id="wcSrc">
             {SRC_CHIPS.map((s) => (
@@ -183,19 +184,19 @@ export function Wecraft() {
               </button>
             ))}
           </div>
-          <input type="search" id="wcQ" placeholder="Rechercher une instance" aria-label="Rechercher une instance" value={ui.wcQ} onChange={(e) => setUi({ wcQ: e.target.value })} />
+          <input type="search" id="wcQ" placeholder={t("Rechercher une instance")} aria-label={t("Rechercher une instance")} value={ui.wcQ} onChange={(e) => setUi({ wcQ: e.target.value })} />
         </div>
         <div className="tablewrap">
           <table>
             <thead>
               <tr>
                 <th></th>
-                <th>Instance</th>
-                <th>Version</th>
-                <th>Loader</th>
-                <th>Mods</th>
-                <th>Mémoire</th>
-                <th>Source</th>
+                <th>{t("Instance")}</th>
+                <th>{t("Version")}</th>
+                <th>{t("Loader")}</th>
+                <th>{t("Mods")}</th>
+                <th>{t("Mémoire")}</th>
+                <th>{t("Source")}</th>
                 <th></th>
               </tr>
             </thead>
@@ -203,7 +204,7 @@ export function Wecraft() {
               {rows.map((i) => (
                 <tr key={i.id} data-a={`inst-${i.id}`}>
                   <td>
-                    <button className="star" data-act="fav" data-id={i.id} aria-pressed={i.fav ? "true" : "false"} aria-label="Favori">
+                    <button className="star" data-act="fav" data-id={i.id} aria-pressed={i.fav ? "true" : "false"} aria-label={t("Favori")}>
                       ★
                     </button>
                   </td>
@@ -225,19 +226,19 @@ export function Wecraft() {
                   <td>
                     <span className="row" style={{ justifyContent: "flex-end" }}>
                       <PinBtn id={i.id} />
-                      <button className="ib" data-act="instEdit" data-id={i.id} aria-label={`Réglages de ${i.n}`} title="Réglages (nom, version, loader, RAM, icône, fond)">
+                      <button className="ib" data-act="instEdit" data-id={i.id} aria-label={`Réglages de ${i.n}`} title={t("Réglages (nom, version, loader, RAM, icône, fond)")}>
                         ⚙
                       </button>
                       {i.mp ? (
-                        <button className="ib" data-act="mpEdit" data-id={i.id} aria-label={`Modifier les mods de ${i.n}`} title="Modifier les mods (Découvrir)">
+                        <button className="ib" data-act="mpEdit" data-id={i.id} aria-label={`Modifier les mods de ${i.n}`} title={t("Modifier les mods (Découvrir)")}>
                           ✎
                         </button>
                       ) : null}
-                      <button className="ib" data-act="del" data-id={i.id} aria-label={`Supprimer ${i.n}`} title="Supprimer (corbeille)">
+                      <button className="ib" data-act="del" data-id={i.id} aria-label={`Supprimer ${i.n}`} title={t("Supprimer (corbeille)")}>
                         🗑
                       </button>
                       <button className="btn sm pri" data-play={i.id}>
-                        Jouer
+                        {t("Jouer")}
                       </button>
                     </span>
                   </td>
@@ -262,15 +263,15 @@ export function Wecraft() {
         </div>
         <div className="confirm gl" id="delBox" hidden={!del}>
           <span style={{ fontSize: "13.5px" }}>
-            Supprimer <b id="delName">{del?.n ?? ""}</b> ? Le dossier et tout son contenu (mods, mondes, captures) partent à la corbeille de Windows.
+            {t("Supprimer")} <b id="delName">{del?.n ?? ""}</b> ? Le dossier et tout son contenu (mods, mondes, captures) partent à la corbeille de Windows.
             <span id="delSrc">{del && del.s !== "WeCraft" ? ` Cette instance vient de ${del.s} : elle disparaîtra aussi de ${del.s}.` : ""}</span>
           </span>
           <span className="row">
             <button className="btn sm" data-act="delNo" ref={noRef}>
-              Annuler
+              {t("Annuler")}
             </button>
             <button className="btn sm danger" data-act="delYes">
-              Supprimer
+              {t("Supprimer")}
             </button>
           </span>
         </div>
@@ -286,7 +287,7 @@ export function Favorites() {
     <>
       <div className="vhead">
         <div>
-          <h2>Favoris</h2>
+          <h2>{t("Favoris")}</h2>
           <div className="sub">{`${f.length} instances et serveurs épinglés`}</div>
         </div>
       </div>
@@ -299,7 +300,7 @@ export function Favorites() {
               </div>
               <span className="row">
                 <b>{x.n}</b>
-                <button className="star" data-act="fav" data-id={x.id} aria-pressed="true" aria-label="Retirer des favoris">
+                <button className="star" data-act="fav" data-id={x.id} aria-pressed="true" aria-label={t("Retirer des favoris")}>
                   ★
                 </button>
               </span>
@@ -307,7 +308,7 @@ export function Favorites() {
               <span className="row">
                 <button className="btn sm pri" data-play={x.id}>
                   <Ic n="play" />
-                  Jouer
+                  {t("Jouer")}
                 </button>
                 <PinBtn id={x.id} />
               </span>
@@ -315,7 +316,7 @@ export function Favorites() {
           ))}
         </div>
       ) : (
-        <div className="empty">Aucun favori. Clique sur l'étoile d'une instance dans WeCraft pour l'épingler.</div>
+        <div className="empty">{t("Aucun favori. Clique sur l'étoile d'une instance dans WeCraft pour l'épingler.")}</div>
       )}
     </>
   );

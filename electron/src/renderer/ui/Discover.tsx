@@ -11,6 +11,7 @@ import { Ic } from "./Ic";
 import { JobView, useJob } from "./Import";
 import { CATEGORY_FR } from "./model";
 import { fromNow, LOADER_NAME, ProjectPage, ProjIcon, shortCount, TYPE_LABEL } from "./ProjectPage";
+import { t } from "./i18n";
 
 export { CATEGORY_FR };
 
@@ -158,8 +159,8 @@ export function Discover() {
     <>
       <div className="vhead">
         <div>
-          <h2>Découvrir</h2>
-          <div className="sub">Modpacks, mods, packs de ressources et shaders de Modrinth</div>
+          <h2>{t("Découvrir")}</h2>
+          <div className="sub">{t("Modpacks, mods, packs de ressources et shaders de Modrinth")}</div>
         </div>
       </div>
       {editing ? (
@@ -169,7 +170,7 @@ export function Discover() {
             <small className="faint">{` (${mp.edit!.mc} · ${mp.edit!.loader}) : version et loader restent ceux du modpack`}</small>
           </span>
           <button className="btn sm" onClick={() => setMp(() => ({ name: "Mon modpack", mc: versions?.[0] ?? mp.mc, loader: "Fabric", selected: [], edit: null }))} disabled={busy}>
-            Quitter la modification
+            {t("Quitter la modification")}
           </button>
         </div>
       ) : null}
@@ -187,14 +188,14 @@ export function Discover() {
               setOpen(null);
             }}
           >
-            {l}
+            {t(l)}
           </button>
         ))}
       </div>
       <JobView job={quick.job} />
       {quick.job?.phase === "termine" ? (
         <button className="btn sm" onClick={() => show("wecraft")}>
-          Voir dans WeCraft
+          {t("Voir dans WeCraft")}
         </button>
       ) : null}
       <div className={panel ? "mp-grid" : ""}>
@@ -208,8 +209,8 @@ export function Discover() {
           ) : (
             <>
               <div className="toolbar dtools">
-                <input type="search" placeholder={`Rechercher des ${TABS.find((t) => t[0] === tab)![1].toLowerCase()}…`} aria-label="Rechercher" value={query} onChange={(e) => setQuery(e.target.value)} style={{ flex: 1, minWidth: "200px" }} />
-                <select aria-label="Trier par" value={sort ?? ""} onChange={(e) => setSort(e.target.value || null)}>
+                <input type="search" placeholder={`Rechercher des ${TABS.find((t) => t[0] === tab)![1].toLowerCase()}…`} aria-label={t("Rechercher")} value={query} onChange={(e) => setQuery(e.target.value)} style={{ flex: 1, minWidth: "200px" }} />
+                <select aria-label={t("Trier par")} value={sort ?? ""} onChange={(e) => setSort(e.target.value || null)}>
                   {SORTS.map(([l, v]) => (
                     <option key={l} value={v ?? ""}>
                       {`Trier : ${l}`}
@@ -217,8 +218,8 @@ export function Discover() {
                   ))}
                 </select>
                 {tab !== "mod" ? (
-                  <select aria-label="Version de Minecraft" value={mcF} onChange={(e) => setMcF(e.target.value)}>
-                    <option value="">Toutes les versions</option>
+                  <select aria-label={t("Version de Minecraft")} value={mcF} onChange={(e) => setMcF(e.target.value)}>
+                    <option value="">{t("Toutes les versions")}</option>
                     {(versions ?? []).map((v) => (
                       <option key={v} value={v}>
                         {v}
@@ -227,7 +228,7 @@ export function Discover() {
                   </select>
                 ) : null}
                 {tab !== "mod" && TAB_LOADERS[tab].length ? (
-                  <select aria-label="Loader" value={loaderF} onChange={(e) => setLoaderF(e.target.value)}>
+                  <select aria-label={t("Loader")} value={loaderF} onChange={(e) => setLoaderF(e.target.value)}>
                     <option value="">{tab === "shader" ? "Iris et OptiFine" : "Tous les loaders"}</option>
                     {TAB_LOADERS[tab].map((l) => (
                       <option key={l} value={l}>
@@ -236,8 +237,8 @@ export function Discover() {
                     ))}
                   </select>
                 ) : null}
-                <select aria-label="Catégorie" value={cat} onChange={(e) => setCat(e.target.value)}>
-                  <option value="">Toutes les catégories</option>
+                <select aria-label={t("Catégorie")} value={cat} onChange={(e) => setCat(e.target.value)}>
+                  <option value="">{t("Toutes les catégories")}</option>
                   {TAB_CATS[tab]
                     .map((k) => [k, CATEGORY_FR[k] ?? k] as const)
                     .sort((a, b) => a[1].localeCompare(b[1], "fr"))
@@ -248,8 +249,8 @@ export function Discover() {
                     ))}
                 </select>
                 {tab === "resourcepack" || tab === "shader" ? (
-                  <select aria-label="Instance où installer" value={target} onChange={(e) => setTarget(e.target.value)}>
-                    {inst.length ? null : <option value="">Aucune instance</option>}
+                  <select aria-label={t("Instance où installer")} value={target} onChange={(e) => setTarget(e.target.value)}>
+                    {inst.length ? null : <option value="">{t("Aucune instance")}</option>}
                     {inst.map((i) => (
                       <option key={i.id} value={i.id}>
                         {`Installer dans : ${i.n}`}
@@ -259,7 +260,7 @@ export function Discover() {
                 ) : null}
               </div>
               {tab === "mod" ? <small className="faint">{`Résultats compatibles avec Mon modpack : Minecraft ${mp.mc || "?"} · ${mp.loader}.`}</small> : null}
-              {tab === "shader" ? <small className="faint">Les shaders demandent Iris (Fabric, Quilt, NeoForge) ou OptiFine dans l'instance.</small> : null}
+              {tab === "shader" ? <small className="faint">{t("Les shaders demandent Iris (Fabric, Quilt, NeoForge) ou OptiFine dans l'instance.")}</small> : null}
               {err ? <div className="empty">{err}</div> : null}
               {!err && !hits.length && !searching ? <div className="empty">{tab === "mod" && !mp.mc ? "Liste des versions de Minecraft inaccessible : vérifiez votre connexion." : "Aucun résultat pour cette recherche."}</div> : null}
               {!err && total ? <small className="faint">{`${total.toLocaleString("fr-FR")} résultats`}</small> : null}
@@ -297,7 +298,7 @@ export function Discover() {
                           </button>
                         ) : (
                           <button className="btn sm pri" onClick={() => quickInstall(h)} disabled={busy}>
-                            + Installer
+                            {t("+ Installer")}
                           </button>
                         )}
                         <small>
@@ -360,12 +361,12 @@ function PackPanel(p: {
     <div className="card mp-pack">
       <h3>{editing ? "Mon modpack (modification)" : "Mon modpack"}</h3>
       <label className="field">
-        Nom
-        <input type="text" value={mp.name} readOnly={editing} onChange={(e) => setMp((d) => ({ ...d, name: e.target.value }))} aria-label="Nom du modpack" />
+        {t("Nom")}
+        <input type="text" value={mp.name} readOnly={editing} onChange={(e) => setMp((d) => ({ ...d, name: e.target.value }))} aria-label={t("Nom du modpack")} />
       </label>
       <label className="field">
-        Version de Minecraft
-        <select value={mp.mc} disabled={editing || !versions} onChange={(e) => setMp((d) => ({ ...d, mc: e.target.value }))} aria-label="Version de Minecraft">
+        {t("Version de Minecraft")}
+        <select value={mp.mc} disabled={editing || !versions} onChange={(e) => setMp((d) => ({ ...d, mc: e.target.value }))} aria-label={t("Version de Minecraft")}>
           {(versions ?? (mp.mc ? [mp.mc] : [])).map((v) => (
             <option key={v} value={v}>
               {v}
@@ -374,7 +375,7 @@ function PackPanel(p: {
         </select>
       </label>
       <div className="field">
-        Loader
+        {t("Loader")}
         <div className="chips">
           {MOD_LOADERS.map((l) => (
             <button key={l} className="chip" aria-pressed={mp.loader === l ? "true" : "false"} disabled={editing} onClick={() => setMp((d) => ({ ...d, loader: l }))}>
@@ -399,16 +400,16 @@ function PackPanel(p: {
             </div>
           ))
         ) : (
-          <small className="faint">Aucun mod pour l'instant : ajoute-en depuis l'onglet Mods.</small>
+          <small className="faint">{t("Aucun mod pour l'instant : ajoute-en depuis l'onglet Mods.")}</small>
         )}
       </div>
       {p.confirm ? (
         <div className="mp-notice">
           <p>{`Chaque mod choisi est téléchargé dans sa dernière version sortie compatible avec Minecraft ${mp.mc} (${mp.loader}), en version stable si possible.`}</p>
-          <p className="muted">Pour utiliser une autre version d'un mod, il faudra la chercher vous-même (bouton de la page Modrinth), puis la déposer dans le dossier « mods » de l'instance à la place du fichier d'origine.</p>
+          <p className="muted">{t("Pour utiliser une autre version d'un mod, il faudra la chercher vous-même (bouton de la page Modrinth), puis la déposer dans le dossier « mods » de l'instance à la place du fichier d'origine.")}</p>
           <span className="row" style={{ justifyContent: "flex-end", gap: "8px" }}>
             <button className="btn sm" onClick={() => p.setConfirm(false)}>
-              Annuler
+              {t("Annuler")}
             </button>
             <button className="btn sm pri" onClick={p.go}>
               {editing ? "Enregistrer" : "Créer l'instance"}
@@ -423,7 +424,7 @@ function PackPanel(p: {
       <JobView job={p.job} />
       {p.job?.phase === "termine" ? (
         <button className="btn sm" onClick={p.onSeeAll}>
-          Voir dans WeCraft
+          {t("Voir dans WeCraft")}
         </button>
       ) : null}
     </div>

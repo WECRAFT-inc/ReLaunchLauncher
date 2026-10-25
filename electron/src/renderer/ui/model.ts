@@ -111,6 +111,8 @@ export interface Pref {
   imgs?: boolean;
   /** Animations et transitions ; false = réduites (respecte aussi le réglage d'accessibilité du système). */
   anim?: boolean;
+  /** Langue de l'interface (français par défaut, langue de secours). */
+  lang?: "fr" | "en";
   [k: string]: unknown;
 }
 export function loadPref(): Pref {

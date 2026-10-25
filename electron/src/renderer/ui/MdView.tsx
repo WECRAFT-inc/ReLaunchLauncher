@@ -3,6 +3,7 @@
 // par ReLaunch (app://), remplacées par leur texte si elles ne se chargent pas.
 import type { ReactNode } from "react";
 import type { MdBlock, MdInline } from "../../shared/api";
+import { t } from "./i18n";
 
 function Img({ src, alt }: { src: string | null; alt: string }) {
   if (!src) return alt ? <span className="md-alt">{`[image : ${alt}]`}</span> : null;
@@ -55,7 +56,7 @@ export function Inlines({ c }: { c: MdInline[] }): ReactNode {
             key={i}
             href="#"
             className="md-a"
-            title="Ouvrir dans le navigateur"
+            title={t("Ouvrir dans le navigateur")}
             onClick={(e) => {
               e.preventDefault();
               void window.wecraft.projects.openLink(n.token!);
@@ -73,7 +74,7 @@ export function Inlines({ c }: { c: MdInline[] }): ReactNode {
 }
 
 export function MdView({ blocks }: { blocks: MdBlock[] }) {
-  if (!blocks.length) return <p className="faint">Aucune description fournie par l'auteur.</p>;
+  if (!blocks.length) return <p className="faint">{t("Aucune description fournie par l'auteur.")}</p>;
   return (
     <div className="md">
       {blocks.map((b, i) => {

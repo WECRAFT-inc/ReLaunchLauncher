@@ -4,6 +4,7 @@ import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { LOGO } from "./icons";
 import { barSize, dockSide, initials, NAVINFO, pinCount, profPlace, SKINS, type Inst, type NavConfig, type Pin, type Side, type Skin } from "./model";
+import { t } from "./i18n";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 type Piece = { kind: "sep" | "spacer" | "el"; key: string; node: ReactNode };
@@ -108,22 +109,22 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
     </button>
   );
   const utils = (): ReactNode[] => [
-    drawerBtn("news", "Nouveautés et notifications", "bell"),
-    <button key={k("live")} className="nb" data-go="live" data-a="nav-live" data-tip="Diffusion Partenaires · 0 lives" aria-label="Diffusion Partenaires" {...(current("live") ? { "aria-current": "page" as const } : {})}>
+    drawerBtn("news", t("Nouveautés et notifications"), "bell"),
+    <button key={k("live")} className="nb" data-go="live" data-a="nav-live" data-tip={t("Diffusion Partenaires · 0 lives")} aria-label={t("Diffusion Partenaires")} {...(current("live") ? { "aria-current": "page" as const } : {})}>
       <Ic n="live" />
     </button>,
     drawerBtn("downloads", "Download Manager", "downloads"),
-    drawerBtn("friends", "Amis", "friends"),
+    drawerBtn("friends", t("Amis"), "friends"),
   ];
   const logo = () =>
     goBtn(
       "nb logo",
       "home",
       "nav-logo",
-      "Accueil",
+      t("Accueil"),
       <img src={LOGO} alt="" />,
     );
-  const prof = () => goBtn("nb prof", "relink", "nav-profile", "Compte ReLink", <Head skin={SKINS[ui.skin] ?? SKINS[0]!} size={Math.round(BS.b * 0.48)} />);
+  const prof = () => goBtn("nb prof", "relink", "nav-profile", t("Compte ReLink"), <Head skin={SKINS[ui.skin] ?? SKINS[0]!} size={Math.round(BS.b * 0.48)} />);
   const sepEl = (o: "v" | "h") => <span key={k("s")} className={o === "v" ? "sepv" : "seph"}></span>;
 
   const pinItem = (id: string): ReactNode => {
@@ -156,7 +157,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
             kind: "el",
             key: k("ps"),
             node: (
-              <button key={k("ps")} className="nb" data-act="openSection" data-popbtn="1" data-a="nav-pins" data-tip="Instances épinglées" aria-label="Instances épinglées">
+              <button key={k("ps")} className="nb" data-act="openSection" data-popbtn="1" data-a="nav-pins" data-tip={t("Instances épinglées")} aria-label={t("Instances épinglées")}>
                 <Ic n="pins" />
                 {n ? <span className="cnt">{n}</span> : null}
               </button>
@@ -166,13 +167,13 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
       }
       return [];
     }
-    if (it.view) return [{ kind: "el", key: k(id), node: goBtn("nb", it.view, `nav-${id}`, it.l, <Ic n={id} />, it.rl) }];
+    if (it.view) return [{ kind: "el", key: k(id), node: goBtn("nb", it.view, `nav-${id}`, t(it.l), <Ic n={id} />, it.rl) }];
     return [
       {
         kind: "el",
         key: k(id),
         node: (
-          <button key={k(id)} className="nb" data-act={it.act} data-a={`nav-${id}`} data-tip={it.l} aria-label={it.l}>
+          <button key={k(id)} className="nb" data-act={it.act} data-a={`nav-${id}`} data-tip={t(it.l)} aria-label={t(it.l)}>
             <Ic n={id} />
           </button>
         ),
@@ -197,7 +198,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
         data-name="Navigation"
         {...(zone && key !== "bar-corner" ? { "data-pin-zone": "1" } : {})}
         style={{ gridArea: area, margin: mg.join("px ") + "px", borderWidth: bw.join("px ") + "px", borderRadius: rad.join("px ") + "px" }}
-        aria-label="Navigation"
+        aria-label={t("Navigation")}
       >
         {inner}
       </nav>
@@ -289,7 +290,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
     const dh = ds === "top" || ds === "bottom" ? "h" : "v";
     html.push(
       <div key="dock" className={`dock ${dh} s-${ds} a-${nav.dock.align}`} data-a="pin-dock" data-name="Épingles" data-pin-zone="1">
-        {pinCount(nav) ? pins().map((p) => p.node) : <span className="dockhint">Épingle une instance pour la voir ici</span>}
+        {pinCount(nav) ? pins().map((p) => p.node) : <span className="dockhint">{t("Épingle une instance pour la voir ici")}</span>}
       </div>,
     );
   }

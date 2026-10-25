@@ -111,6 +111,13 @@ export type BackgroundResult = { ok: true; url: string | null } | { ok: false; m
 export type IconImportResult = { ok: true; key: string; ext: string; width: number; height: number; url: string } | { ok: false; message?: string; canceled?: true };
 export type MakeIconResult = { ok: true; icon: IconChoice; url: string } | { ok: false; message: string };
 
+export interface ShaderPrefsView {
+  /** Appliquer au lancement (sinon rien ne change dans les instances). */
+  on: boolean;
+  primary: string | null;
+  secondary: string | null;
+}
+
 export interface LogEntry {
   time: string;
   level: "error" | "warn" | "info";
@@ -314,6 +321,9 @@ export interface WeCraftApi {
     setTheme(theme: ThemeKey): Promise<SettingResult>;
     /** RAM proposée par défaut au lancement (1 à 16 Go), clé « ram » de launcher_config.json. */
     setRam(ram: number): Promise<boolean>;
+    /** Shaders préférés et noms des packs trouvés dans les instances (pour les proposer). */
+    shaders(): Promise<{ prefs: ShaderPrefsView; known: string[] }>;
+    setShaders(p: ShaderPrefsView): Promise<boolean>;
   };
   instances: {
     /** `rescan` : relire aussi les autres launchers tout de suite (sinon au plus toutes les 60 s). */

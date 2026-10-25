@@ -5,6 +5,8 @@ export const CHANNELS = {
   rendered: "app:rendered",
   openDataDir: "app:open-data-dir",
   setRam: "settings:set-ram",
+  shadersGet: "settings:shaders-get",
+  shadersSet: "settings:shaders-set",
   updateCheck: "update:check",
   updateInstall: "update:install",
   updateStatus: "update:status",

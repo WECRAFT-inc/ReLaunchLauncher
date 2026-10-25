@@ -4,6 +4,14 @@
 import type { SettingResult, ThemeKey } from "../shared/api";
 import path from "node:path";
 import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "./storage/jsonStore";
+import type { ShaderPrefs } from "./launch/shaders";
+
+/** Préférences de shaders vérifiées (noms courts, sans chemin). */
+export function cleanShaderPrefs(v: unknown): ShaderPrefs {
+  const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+  const name = (x: unknown) => (typeof x === "string" && x.trim() && !/[\\/:*?"<>|\x00-\x1f]/.test(x) ? x.trim().slice(0, 120) : null);
+  return { on: o["on"] === true, primary: name(o["primary"]), secondary: name(o["secondary"]) };
+}
 
 export const THEME_KEYS: readonly ThemeKey[] = ["phenix", "relink", "aurore", "glace"];
 
@@ -50,6 +58,22 @@ export class Settings {
   async setDiscord(on: boolean, askedVersion?: string): Promise<boolean> {
     try {
       await this.store.update(this.file, (data) => ({ ...data, discord: on, ...(askedVersion ? { discord_asked_version: askedVersion } : {}) }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Shaders préférés (clé « relaunch_shaders », propre à ReLaunch ; ignorée par la version Python). */
+  async shaders(): Promise<ShaderPrefs> {
+    const v = (await this.store.read(this.file))?.["relaunch_shaders"];
+    return cleanShaderPrefs(v);
+  }
+
+  async setShaders(p: unknown): Promise<boolean> {
+    const v = cleanShaderPrefs(p);
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_shaders: v }));
       return true;
     } catch {
       return false;

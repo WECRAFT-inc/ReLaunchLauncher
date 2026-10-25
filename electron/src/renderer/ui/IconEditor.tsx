@@ -6,6 +6,7 @@ import type { IconChoice, InstanceIcon } from "../../shared/api";
 import { useEscapeLayer } from "./keys";
 import { load, store } from "./model";
 import { InstIcon, PALETTES, randomIcon, SYMBOLS, SymbolSvg } from "./symbols";
+import { t } from "./i18n";
 
 type Imported = { key: string; ext: string; width: number; height: number; url: string };
 type Gen = { c: [string, string]; sym: string | null };
@@ -107,8 +108,8 @@ export function IconEditor({
     <div className="overlay" hidden={!open} data-a="m-icon" data-name="Éditeur d'icônes" onClick={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="modal ied" role="dialog" aria-modal="true" aria-labelledby="iedTitle">
         <header>
-          <h3 id="iedTitle">Éditeur d'icônes</h3>
-          <button className="xbtn" aria-label="Fermer" onClick={onCancel}>
+          <h3 id="iedTitle">{t("Éditeur d'icônes")}</h3>
+          <button className="xbtn" aria-label={t("Fermer")} onClick={onCancel}>
             ✕
           </button>
         </header>
@@ -116,7 +117,7 @@ export function IconEditor({
           <div className="ied-left">
             <div className="ied-prev card">
               {mode === "file" && img ? (
-                <div className="ied-crop" style={{ width: `${BOX}px`, height: `${BOX}px`, ...cropStyle(img, crop, BOX) }} onPointerDown={down} onPointerMove={move} onPointerUp={() => (drag.current = null)} aria-label="Cadrage : faites glisser l'image" role="img"></div>
+                <div className="ied-crop" style={{ width: `${BOX}px`, height: `${BOX}px`, ...cropStyle(img, crop, BOX) }} onPointerDown={down} onPointerMove={move} onPointerUp={() => (drag.current = null)} aria-label={t("Cadrage : faites glisser l'image")} role="img"></div>
               ) : (
                 <InstIcon icon={preview} fallback={fallback} name={name} size={BOX} className="big" />
               )}
@@ -128,23 +129,23 @@ export function IconEditor({
                 </span>
               ) : (
                 <label className="field ied-zoom">
-                  Zoom
-                  <input type="range" min="1" max="4" step="0.05" value={crop.zoom} onChange={(e) => setCrop((c) => ({ ...c, zoom: Number(e.target.value) }))} aria-label="Zoom" />
+                  {t("Zoom")}
+                  <input type="range" min="1" max="4" step="0.05" value={crop.zoom} onChange={(e) => setCrop((c) => ({ ...c, zoom: Number(e.target.value) }))} aria-label={t("Zoom")} />
                 </label>
               )}
             </div>
             <button className="btn" onClick={() => (setGen(randomIcon()), setMode("gen"))}>
-              ↻ Aléatoire
+              {t("↻ Aléatoire")}
             </button>
             <button className="btn" onClick={importImg}>
-              Importer une image
+              {t("Importer une image")}
             </button>
             {recents.length ? (
               <div className="ied-recents">
-                <b>Récents</b>
+                <b>{t("Récents")}</b>
                 <span>
                   {recents.map((r, i) => (
-                    <button key={i} className="ib" aria-label="Icône récente" onClick={() => (setGen(r), setMode("gen"))}>
+                    <button key={i} className="ib" aria-label={t("Icône récente")} onClick={() => (setGen(r), setMode("gen"))}>
                       <InstIcon icon={{ kind: "gen", c: r.c, sym: r.sym }} fallback={fallback} name={name} size={30} />
                     </button>
                   ))}
@@ -153,7 +154,7 @@ export function IconEditor({
             ) : null}
           </div>
           <div className="ied-right">
-            <h4>Arrière-plan</h4>
+            <h4>{t("Arrière-plan")}</h4>
             <div className="ied-pals">
               {PALETTES.map((p) => (
                 <button
@@ -166,9 +167,9 @@ export function IconEditor({
                 ></button>
               ))}
             </div>
-            <h4>Symbole</h4>
+            <h4>{t("Symbole")}</h4>
             <div className="ied-syms">
-              <button className="ied-sym" aria-pressed={mode === "gen" && !gen.sym ? "true" : "false"} onClick={() => (setGen((g) => ({ ...g, sym: null })), setMode("gen"))} title="Initiales du nom">
+              <button className="ied-sym" aria-pressed={mode === "gen" && !gen.sym ? "true" : "false"} onClick={() => (setGen((g) => ({ ...g, sym: null })), setMode("gen"))} title={t("Initiales du nom")}>
                 <b>Aa</b>
               </button>
               {Object.entries(SYMBOLS).map(([k, s]) => (
@@ -182,11 +183,11 @@ export function IconEditor({
         <div className="mfoot ied-foot">
           <small className="muted">{msg || (mode === "file" ? "Faites glisser l'image pour la cadrer, puis réglez le zoom." : "Mélange un dégradé et un symbole, ou importe ta propre image.")}</small>
           <span className="row">
-            <button className="btn" onClick={() => onSave(null, null)} title="Revenir à l'icône par défaut">
-              Par défaut
+            <button className="btn" onClick={() => onSave(null, null)} title={t("Revenir à l'icône par défaut")}>
+              {t("Par défaut")}
             </button>
             <button className="btn" onClick={onCancel}>
-              Annuler
+              {t("Annuler")}
             </button>
             <button className="btn pri" onClick={save} disabled={busy}>
               {busy ? "Enregistrement…" : "Enregistrer l'icône"}

@@ -20,6 +20,7 @@ import { registerLookIpc, registerProjectIpc } from "./ipcLook";
 import { LinkStore } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
 import { mkdir } from "node:fs/promises";
+import { knownShaderPacks } from "./launch/shaders";
 import { MediaStore, type ImageOps } from "./media/media";
 import { ModpackService } from "./modpacks/service";
 import { DiscordPresence, discordClientId } from "./discord/presence";
@@ -241,6 +242,7 @@ async function start(): Promise<void> {
     },
     xmcl: loadXmcl,
     log: launchLog,
+    shaders: () => (settings ? settings.shaders() : Promise.resolve({ on: false, primary: null, secondary: null })),
     onOpened: (t) => void presence?.launching(t.profileName.replace(/^WECRAFT - /, ""), t.mc, t.loader),
     close: (o) => closeOfficialLauncher(o, { platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
     open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
@@ -305,6 +307,12 @@ function registerIpc(): void {
         throw e;
       }
     });
+  handle(CHANNELS.shadersGet, async () => {
+    const prefs = settings ? await settings.shaders() : { on: false, primary: null, secondary: null };
+    const list = instances ? (await instances.list()).instances.map((i) => instances!.target(i.id)?.path).filter((p): p is string => !!p) : [];
+    return { prefs, known: await knownShaderPacks(list) };
+  });
+  handle(CHANNELS.shadersSet, async (p) => (settings ? settings.setShaders(p) : false));
   handle(CHANNELS.logsRead, async () => readLogs(logSources(wecraftDataDir(pathEnv()))));
   handle(CHANNELS.logsOpenDir, async () => {
     const dir = path.join(wecraftDataDir(pathEnv()), "logs"); // dossier fixe, jamais fourni par l'interface
