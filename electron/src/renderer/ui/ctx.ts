@@ -32,6 +32,9 @@ export interface Ui {
   drawer: string | null;
   skin: number;
   rlTab: string;
+  /** Découvrir : recherche et onglet demandés en ouvrant la page (fenêtre « Créer un WePack »). */
+  dq: string;
+  dtab: string;
 }
 
 export interface AppCtx {

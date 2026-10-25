@@ -4,12 +4,12 @@
 import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import type { DeleteResult, InstanceView, SettingResult } from "../../shared/api";
+import type { DeleteResult, InstanceEdit, InstanceView, SettingResult } from "../../shared/api";
 import type { PathEnv } from "../paths";
 import { wecraftDataDir } from "../paths";
 import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "../storage/jsonStore";
 import { safeToDelete } from "./delete";
-import { applyMeta, detectExternal, instancesDir, LocalScanner, metaKey, sortInstances, type ListedInstance } from "./detect";
+import { applyMeta, detectExternal, instancesDir, LocalScanner, metaKey, sortInstances, type IconMeta, type ListedInstance } from "./detect";
 
 /** Les autres launchers sont relus au plus toutes les 60 s (comme la version Python). */
 const EXTERNAL_TTL_MS = 60_000;
@@ -69,6 +69,8 @@ export class InstanceService {
         ram: i.ram,
         fav: i.fav,
         modpack: packs[k]!,
+        icon: !i.icon ? null : "file" in i.icon ? { kind: "file" as const, url: `app://wecraft/user/icons/${i.icon.file}` } : { kind: "gen" as const, c: i.icon.c, sym: i.icon.sym },
+        background: i.background ? `app://wecraft/user/backgrounds/${i.background}` : null,
       })),
     };
   }
@@ -130,6 +132,62 @@ export class InstanceService {
     this.local.clear();
     this.external = null;
     return { ok: true, metaForgotten };
+  }
+
+  /**
+   * Change quelques clés de l'instance dans instances_meta.json (update_meta en Python : les autres clés,
+   * y compris celles de la version Python, sont gardées). Les clés de `remove` sont retirées.
+   */
+  private async updateMeta(id: unknown, set: Record<string, unknown>, remove: string[] = []): Promise<SettingResult> {
+    const inst = this.target(id);
+    if (!inst) return { ok: false, reason: "invalid" };
+    const key = metaKey(inst.folder, this.env.platform);
+    try {
+      await this.store.update(this.metaFile, (meta) => {
+        const prev = meta[key];
+        const entry: Record<string, unknown> = typeof prev === "object" && prev !== null && !Array.isArray(prev) ? { ...(prev as object) } : {};
+        Object.assign(entry, set);
+        for (const k of remove) delete entry[k];
+        const out = { ...meta };
+        if (Object.keys(entry).length) out[key] = entry;
+        else delete out[key];
+        return out;
+      });
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof SettingsUnreadable) return { ok: false, reason: "unreadable" };
+      if (e instanceof SettingsNotBackedUp) return { ok: false, reason: "not-backed-up" };
+      return { ok: false, reason: "write-failed" };
+    }
+  }
+
+  /** Icône et fond (clés « icon » et « background », propres à ReLaunch). Valeurs déjà vérifiées par l'appelant. */
+  async setLook(id: unknown, look: { icon?: IconMeta | null; background?: string | null }): Promise<SettingResult> {
+    const set: Record<string, unknown> = {};
+    const remove: string[] = [];
+    if ("icon" in look) (look.icon ? (set["icon"] = look.icon) : remove.push("icon"));
+    if ("background" in look) (look.background ? (set["background"] = look.background) : remove.push("background"));
+    return this.updateMeta(id, set, remove);
+  }
+
+  /**
+   * Réglages de l'instance, comme configure_instance + rename_instance en Python : seul instances_meta.json
+   * change (le dossier n'est jamais renommé ni modifié). Version du loader gardée seulement si elle reste valable.
+   */
+  async edit(id: unknown, e: InstanceEdit): Promise<SettingResult> {
+    const inst = this.target(id);
+    if (!inst) return { ok: false, reason: "invalid" };
+    const name = e.name.trim().slice(0, 60);
+    const loader = e.loader === "Vanilla" ? null : e.loader;
+    // comme Python : « loader_version » toujours noté (null = choisie au lancement), même pour Vanilla,
+    // pour ne pas garder la version du loader lue dans les fichiers de l'instance
+    const set: Record<string, unknown> = { version: e.mc, loader: e.loader, loader_version: loader ? e.loaderVersion : null };
+    const remove: string[] = [];
+    if (name && name !== inst.name) set["name"] = name;
+    else remove.push("name");
+    if (e.ram) set["ram"] = e.ram;
+    else remove.push("ram");
+    return this.updateMeta(id, set, remove);
   }
 
   /** Favori (même clé « fav » que la version Python). Seule cette clé de l'instance change. */

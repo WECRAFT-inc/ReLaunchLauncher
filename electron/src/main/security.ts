@@ -127,3 +127,8 @@ export function secureWebPreferences(preloadPath: string, devTools: boolean) {
     devTools,
   } as const;
 }
+
+/** Touche F11 seule, appui (pas relâchement, pas de répétition automatique) : bascule du plein écran. */
+export function isFullScreenToggle(input: { type: string; key: string; alt?: boolean; control?: boolean; meta?: boolean; shift?: boolean; isAutoRepeat?: boolean }): boolean {
+  return input.type === "keyDown" && input.key === "F11" && !input.alt && !input.control && !input.meta && !input.shift && !input.isAutoRepeat;
+}

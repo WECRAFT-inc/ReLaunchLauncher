@@ -64,7 +64,52 @@ export interface InstanceView {
   fav: boolean;
   /** WePack créé par WeCraft (wecraft_modpack.json) : modifiable dans Découvrir (lot E7). */
   modpack: boolean;
+  /** Icône choisie : dégradé + symbole de la bibliothèque, ou image importée (adresse app://). */
+  icon: InstanceIcon | null;
+  /** Fond choisi (adresse app://), copié dans .wecraft\backgrounds. */
+  background: string | null;
 }
+
+export type InstanceIcon = { kind: "gen"; c: [string, string]; sym: string | null } | { kind: "file"; url: string };
+/** Icône à enregistrer : dégradé + symbole, ou nom renvoyé par `media.makeIcon`. */
+export type IconChoice = { c: [string, string]; sym: string | null } | { file: string };
+
+/** Réglages d'une instance (comme la fenêtre « Réglages de l'instance » de la version Python). */
+export interface InstanceEdit {
+  /** Nom affiché ; vide = nom d'origine. Le dossier n'est jamais renommé. */
+  name: string;
+  mc: string;
+  loader: "Vanilla" | "Fabric" | "NeoForge" | "Forge" | "Quilt";
+  loaderVersion: string | null;
+  /** null = RAM proposée par défaut. */
+  ram: number | null;
+}
+
+/** « Créer un WePack » > « Sur mesure » (instance vide, installée au premier lancement). */
+export interface CreateInstanceRequest {
+  name: string;
+  mc: string;
+  loader: "Vanilla" | "Fabric" | "NeoForge" | "Forge" | "Quilt";
+  /** null : version stable choisie au lancement. */
+  loaderVersion: string | null;
+  icon?: IconChoice | null;
+}
+export type CreateInstanceResult = { ok: true; id: string } | { ok: false; reason: "invalid" | "exists" | "write-failed"; name?: string };
+export interface LoaderVersionItem {
+  version: string;
+  stable: boolean;
+  recommended: boolean;
+}
+export type LoaderVersionList = { ok: true; versions: LoaderVersionItem[] } | { ok: false; message: string };
+
+export interface ScreenshotItem {
+  token: string;
+  name: string;
+  url: string;
+}
+export type BackgroundResult = { ok: true; url: string | null } | { ok: false; message?: string; canceled?: true };
+export type IconImportResult = { ok: true; key: string; ext: string; width: number; height: number; url: string } | { ok: false; message?: string; canceled?: true };
+export type MakeIconResult = { ok: true; icon: IconChoice; url: string } | { ok: false; message: string };
 
 export interface InstanceList {
   instances: InstanceView[];
@@ -124,6 +169,8 @@ export interface ModpackHit {
   downloads: number;
   categories: string[];
   slug: string | null;
+  /** Icône servie par ReLaunch (app://), null = image de remplacement. */
+  icon: string | null;
 }
 export type ModpackSearch = { ok: true; total: number; hits: ModpackHit[] } | { ok: false; message: string };
 export interface ModpackJob {
@@ -161,6 +208,91 @@ export interface ModpackQuery {
   sort?: string | null;
 }
 
+/** Pages Modrinth (grosse mise à jour). */
+export type ProjectType = "modpack" | "mod" | "resourcepack" | "shader";
+export interface ProjectHit {
+  id: string;
+  title: string;
+  author: string;
+  description: string;
+  downloads: number;
+  follows: number;
+  categories: string[];
+  slug: string | null;
+  type: ProjectType | null;
+  /** Icône servie par ReLaunch (app://), null = image de remplacement. */
+  icon: string | null;
+  banner: string | null;
+  updated: string | null;
+  clientSide: "required" | "optional" | "unsupported" | null;
+  serverSide: "required" | "optional" | "unsupported" | null;
+  mcVersions: string[];
+}
+export type ProjectSearch = { ok: true; total: number; hits: ProjectHit[] } | { ok: false; message: string };
+export interface ProjectQuery {
+  type: ProjectType;
+  query: string;
+  mc: string;
+  loader: string;
+  sort: string | null;
+  offset: number;
+  categories: string[];
+}
+/** Description convertie en blocs sûrs par le processus principal (jamais de HTML). */
+export type MdInline =
+  | { t: "text"; v: string }
+  | { t: "b"; c: MdInline[] }
+  | { t: "i"; c: MdInline[] }
+  | { t: "s"; c: MdInline[] }
+  | { t: "code"; v: string }
+  | { t: "a"; token: string | null; c: MdInline[] }
+  | { t: "img"; src: string | null; alt: string }
+  | { t: "br" };
+export type MdBlock =
+  | { t: "h"; level: 1 | 2 | 3 | 4; c: MdInline[] }
+  | { t: "p"; c: MdInline[] }
+  | { t: "ul" | "ol"; items: MdInline[][] }
+  | { t: "quote"; c: MdInline[] }
+  | { t: "pre"; v: string }
+  | { t: "hr" };
+export interface ProjectView {
+  id: string;
+  slug: string | null;
+  type: ProjectType | null;
+  title: string;
+  description: string;
+  body: MdBlock[];
+  icon: string | null;
+  author: string | null;
+  categories: string[];
+  extraCategories: string[];
+  loaders: string[];
+  mcVersions: string[];
+  clientSide: "required" | "optional" | "unsupported" | null;
+  serverSide: "required" | "optional" | "unsupported" | null;
+  downloads: number;
+  followers: number;
+  published: string | null;
+  updated: string | null;
+  license: { id: string | null; name: string | null; token: string | null } | null;
+  gallery: { url: string; title: string | null; description: string | null }[];
+  /** Liens officiels (jetons ouverts dans le navigateur par le processus principal). */
+  links: { label: string; token: string }[];
+  page: string | null;
+}
+export interface ProjectVersion {
+  id: string;
+  name: string;
+  number: string;
+  channel: "release" | "beta" | "alpha";
+  mcVersions: string[];
+  loaders: string[];
+  published: string | null;
+  downloads: number;
+  file: { name: string; size: number } | null;
+  dependencies: number;
+}
+
 export interface WeCraftApi {
   app: {
     getInfo(): Promise<AppInfo>;
@@ -180,6 +312,24 @@ export interface WeCraftApi {
     setFavorite(id: string, fav: boolean): Promise<SettingResult>;
     /** Envoie l'instance à la corbeille. `confirmed` doit être true (confirmation affichée par l'interface). */
     remove(id: string, confirmed: true): Promise<DeleteResult>;
+    /** Nouvelle instance vide (dossier et wecraft.json créés par le processus principal). */
+    create(req: CreateInstanceRequest): Promise<CreateInstanceResult>;
+    /** Versions du loader pour cette version de Minecraft ; ok:false = combinaison impossible ou hors ligne. */
+    loaderVersions(loader: string, mc: string): Promise<LoaderVersionList>;
+    /** Nom affiché, version, loader, RAM (instances_meta.json ; le dossier n'est pas modifié). */
+    edit(id: string, e: InstanceEdit): Promise<SettingResult>;
+    /** null = icône par défaut. */
+    setIcon(id: string, icon: IconChoice | null): Promise<SettingResult>;
+    /** Captures du dossier « screenshots » de l'instance, les plus récentes d'abord. */
+    screenshots(id: string): Promise<ScreenshotItem[]>;
+    /** Fond : capture listée (`shot` + jeton), image du PC (`import`, fenêtre du système) ou aucun (`clear`). */
+    setBackground(id: string, how: "shot" | "import" | "clear", token?: string): Promise<BackgroundResult>;
+  };
+  media: {
+    /** Fenêtre « Ouvrir » du système : image PNG ou JPEG gardée avant recadrage. */
+    importIcon(): Promise<IconImportResult>;
+    /** Recadre l'image importée en icône carrée (256 px). */
+    makeIcon(key: string, ext: string, crop: { zoom: number; cx: number; cy: number }): Promise<MakeIconResult>;
   };
   launch: {
     /** Prépare l'instance puis ouvre le launcher officiel. `ram` en Go (1 à 16) ; `repair` : tout réinstaller. */
@@ -199,6 +349,13 @@ export interface WeCraftApi {
     status(job: string): Promise<ModpackJob | null>;
     /** Page Modrinth d'un mod (adresse construite par le processus principal). */
     openPage(slug: string): Promise<boolean>;
+  };
+  projects: {
+    search(q: ProjectQuery): Promise<ProjectSearch>;
+    get(id: string): Promise<ProjectView | { error: string }>;
+    versions(id: string, mc?: string, loader?: string): Promise<ProjectVersion[] | { error: string }>;
+    /** Ouvre un lien (jeton reçu dans une page de projet) dans le navigateur. */
+    openLink(token: string): Promise<boolean>;
   };
   discord: {
     /** askNow : demander l'accord (premier démarrage de cette version). */

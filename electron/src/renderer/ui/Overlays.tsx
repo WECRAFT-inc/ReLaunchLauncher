@@ -3,6 +3,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSPropert
 import type { LaunchStatus, UpdateCheck } from "../../shared/api";
 import { Minis } from "./Bars";
 import { useApp } from "./ctx";
+import { useEscapeLayer } from "./keys";
 import { Ic } from "./Ic";
 import { detail, gById, initials, type Inst } from "./model";
 
@@ -249,14 +250,7 @@ export function RamDialog({ open, name, ram, onCancel, onGo }: { open: boolean; 
       goRef.current?.focus();
     }
   }, [open, ram]);
-  useEffect(() => {
-    if (!open) return;
-    const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancel();
-    };
-    document.addEventListener("keydown", k);
-    return () => document.removeEventListener("keydown", k);
-  }, [open, onCancel]);
+  useEscapeLayer(open, onCancel);
   return (
     <div className="overlay" id="ramOv" hidden={!open} data-a="m-ram" data-name="Lancer" onClick={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="ramTitle" style={{ width: "min(420px,100%)" }}>

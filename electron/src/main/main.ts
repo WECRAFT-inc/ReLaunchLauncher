@@ -1,18 +1,24 @@
 // Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
-import { app, BrowserWindow, dialog, ipcMain, Menu, protocol, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ModpackEditInfo, ModpackJob, ModpackSearch, ModpackStartResult, PackRowView, UpdateCheck, UpdateStatus } from "../shared/api";
+import type { LoaderVersionList } from "../shared/api";
 import type { AppInfo, DeleteResult, InstanceList, InvalidFileNotice, LaunchStartResult, LaunchStatus, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
 import { Settings } from "./config";
 import { loadXmcl } from "./install/xmcl";
 import { instancesDir } from "./instances/detect";
 import { InstanceService } from "./instances/service";
+import { loaderVersionList } from "./install/loaderList";
+import { isSafeVersionId } from "./install/vanilla";
+import { registerLookIpc, registerProjectIpc } from "./ipcLook";
+import { LinkStore } from "./links";
+import { MediaStore, type ImageOps } from "./media/media";
 import { ModpackService } from "./modpacks/service";
 import { DiscordPresence, discordClientId } from "./discord/presence";
 import { LaunchService } from "./launch/launch";
@@ -33,6 +39,7 @@ import {
   isAppUrl,
   isExternalLinkId,
   mimeType,
+  isFullScreenToggle,
   resolveAppAsset,
   secureWebPreferences,
 } from "./security";
@@ -51,6 +58,7 @@ let updater: UpdateService | null = null;
 let modpacks: ModpackService | null = null;
 let presence: DiscordPresence | null = null;
 let updateEnv: UpdateEnv | null = null;
+let media: MediaStore | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
 
@@ -97,7 +105,39 @@ function pathEnv(): PathEnv {
   return { platform: process.platform, env: process.env, home: os.homedir() };
 }
 
+/** Images avec Electron (nativeImage : PNG et JPEG). */
+const nativeOps: ImageOps = {
+  size(buf) {
+    const im = nativeImage.createFromBuffer(buf);
+    return im.isEmpty() ? null : im.getSize();
+  },
+  cropSquare(buf, r, out) {
+    return nativeImage.createFromBuffer(buf).crop({ x: r.x, y: r.y, width: r.size, height: r.size }).resize({ width: out, height: out, quality: "best" }).toPNG();
+  },
+  shrinkJpeg(buf, maxWidth) {
+    let im = nativeImage.createFromBuffer(buf);
+    if (im.getSize().width > maxWidth) im = im.resize({ width: maxWidth, quality: "best" });
+    return im.toJPEG(85);
+  },
+};
+
 async function serveAsset(request: Request): Promise<Response> {
+  // Images (icônes, fonds, captures, Modrinth) : noms opaques vérifiés dans MediaStore.serve
+  if (media) {
+    let pathname = "";
+    try {
+      const u = new URL(request.url);
+      if (u.host === "wecraft") pathname = decodeURIComponent(u.pathname);
+    } catch {
+      pathname = "";
+    }
+    const r = pathname ? await media.serve(pathname) : null;
+    if (r) {
+      return r.data
+        ? new Response(new Uint8Array(r.data), { status: 200, headers: { "Content-Type": r.type!, "X-Content-Type-Options": "nosniff", "Cache-Control": "max-age=86400", "Cross-Origin-Resource-Policy": "same-origin" } })
+        : new Response("Introuvable", { status: 404 });
+    }
+  }
   const file = resolveAppAsset(RENDERER_ROOT, request.url);
   const type = file ? mimeType(file) : null;
   if (!file || !type) return new Response("Introuvable", { status: 404 });
@@ -177,7 +217,9 @@ async function start(): Promise<void> {
   updater = new UpdateService({ env: updateEnv, quit: () => app.quit() });
   settings = new Settings(store, configFile(env));
   instances = new InstanceService(store, env);
+  media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
   modpacks = new ModpackService({
+    media,
     instancesDir: instancesDir(env),
     instances,
     userAgent: `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`,
@@ -218,9 +260,18 @@ function createWindow(): void {
     backgroundColor: "#0A0B10",
     show: false,
     autoHideMenuBar: true,
+    icon: path.join(RENDERER_ROOT, "assets", "relaunch_logo.png"),
     webPreferences: secureWebPreferences(PRELOAD, !app.isPackaged),
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+  // F11 : vrai plein écran de la fenêtre (pas un effet CSS) ; un second appui revient en fenêtré.
+  // Échap n'est pas intercepté ici : il reste à l'interface (fermeture des panneaux, retour à l'accueil).
+  mainWindow.webContents.on("before-input-event", (event: { preventDefault: () => void }, input: Parameters<typeof isFullScreenToggle>[0]) => {
+    if (isFullScreenToggle(input) && mainWindow) {
+      event.preventDefault();
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    }
+  });
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -235,6 +286,23 @@ function trustedSender(event: IpcMainInvokeEvent): boolean {
 }
 
 function registerIpc(): void {
+  const handle = (channel: string, fn: (...args: unknown[]) => Promise<unknown>) =>
+    ipcMain.handle(channel, async (event, ...args: unknown[]) => {
+      if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+      return fn(...args);
+    });
+  registerProjectIpc(handle, { modpacks: () => modpacks, media: () => media, links: new LinkStore(), openExternal: (url) => shell.openExternal(url) });
+  registerLookIpc(handle, {
+    instances: () => instances,
+    media: () => media,
+    instancesDir: () => instancesDir(pathEnv()),
+    platform: process.platform,
+    pickImage: async (title) => {
+      const opts = { title, properties: ["openFile" as const], filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg"] }] };
+      const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
+      return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    },
+  });
   ipcMain.handle(CHANNELS.getInfo, async (event): Promise<AppInfo> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     const env = pathEnv();
@@ -333,6 +401,13 @@ function registerIpc(): void {
     if (launcher?.busy() || modpacks?.busy()) return { ok: false, reason: "busy" };
     // corbeille de Windows uniquement : jamais d'effacement définitif
     return instances.remove(id, (folder) => shell.trashItem(folder));
+  });
+
+  // ---------------------------------------------------------------- créer une instance « Sur mesure »
+  ipcMain.handle(CHANNELS.loaderVersions, async (event, loader: unknown, mc: unknown): Promise<LoaderVersionList> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (typeof loader !== "string" || typeof mc !== "string" || !isSafeVersionId(mc)) return { ok: false, message: "Version invalide." };
+    return loaderVersionList(loader, mc);
   });
 
   // ---------------------------------------------------------------- modpacks (lot E7)

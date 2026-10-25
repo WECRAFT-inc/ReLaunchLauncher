@@ -225,10 +225,29 @@ export class LocalScanner {
   }
 }
 
+/** Icône d'instance notée dans instances_meta.json (clé « icon », ignorée par la version Python). */
+export type IconMeta = { c: [string, string]; sym: string | null } | { file: string };
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+/** Icône valide, sinon null (une entrée abîmée ne casse jamais la liste). */
+export function parseIconMeta(v: unknown): IconMeta | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o["file"] === "string") return /^[0-9a-f]{64}\.png$/.test(o["file"]) ? { file: o["file"] } : null;
+  const c = o["c"];
+  if (!Array.isArray(c) || c.length !== 2 || !c.every((x) => typeof x === "string" && HEX_COLOR.test(x))) return null;
+  const sym = o["sym"];
+  if (sym !== null && sym !== undefined && (typeof sym !== "string" || !/^[a-z0-9-]{1,32}$/.test(sym))) return null;
+  return { c: [c[0] as string, c[1] as string], sym: (sym as string | null | undefined) ?? null };
+}
+
 export interface ListedInstance extends Instance {
   display: string;
   hidden: boolean;
   fav: boolean;
+  icon: IconMeta | null;
+  /** Fond choisi : fichier de .wecraft\backgrounds (clé « background »). */
+  background: string | null;
 }
 
 /** Applique instances_meta.json (apply_meta) ; une entrée abîmée n'empêche pas d'afficher les autres. */
@@ -244,7 +263,15 @@ export function applyMeta(instances: Instance[], meta: Record<string, unknown> |
     if (!isLoader(i.loader)) i.loader = null;
     if (!i.loader) i.loaderVersion = null;
     const display = String(m["name"] ?? "").trim() || i.name;
-    return { ...i, display, hidden: Boolean(m["hidden"]), fav: Boolean(m["fav"]) };
+    const bg = m["background"];
+    return {
+      ...i,
+      display,
+      hidden: Boolean(m["hidden"]),
+      fav: Boolean(m["fav"]),
+      icon: parseIconMeta(m["icon"]),
+      background: typeof bg === "string" && /^[0-9a-f]{64}\.jpg$/.test(bg) ? bg : null,
+    };
   });
 }
 

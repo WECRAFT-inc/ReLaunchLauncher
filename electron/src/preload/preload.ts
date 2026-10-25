@@ -17,6 +17,14 @@ const SET_THEME = "settings:set-theme";
 const LIST_INSTANCES = "instances:list";
 const SET_FAVORITE = "instances:set-favorite";
 const REMOVE_INSTANCE = "instances:remove";
+const CREATE_INSTANCE = "instances:create";
+const LOADER_VERSIONS = "instances:loader-versions";
+const EDIT_INSTANCE = "instances:edit";
+const SET_ICON = "instances:set-icon";
+const SCREENSHOTS = "instances:screenshots";
+const SET_BACKGROUND = "instances:set-background";
+const IMPORT_ICON = "media:import-icon";
+const MAKE_ICON = "media:make-icon";
 const DISCORD_STATE = "discord:state";
 const DISCORD_SET = "discord:set";
 const MP_VERSIONS = "modpacks:versions";
@@ -27,6 +35,10 @@ const MP_ROWS = "modpacks:rows";
 const MP_EDIT = "modpacks:edit";
 const MP_STATUS = "modpacks:status";
 const MP_PAGE = "modpacks:page";
+const PROJ_SEARCH = "projects:search";
+const PROJ_GET = "projects:get";
+const PROJ_VERSIONS = "projects:versions";
+const PROJ_OPEN_LINK = "projects:open-link";
 const LAUNCH_START = "launch:start";
 const LAUNCH_STATUS = "launch:status";
 const LAUNCH_ANSWER = "launch:answer";
@@ -45,6 +57,16 @@ const api: WeCraftApi = Object.freeze({
     list: (rescan?: boolean) => ipcRenderer.invoke(LIST_INSTANCES, rescan === true),
     setFavorite: (id: string, fav: boolean) => ipcRenderer.invoke(SET_FAVORITE, id, fav),
     remove: (id: string, confirmed: true) => ipcRenderer.invoke(REMOVE_INSTANCE, id, confirmed === true),
+    create: (req: unknown) => ipcRenderer.invoke(CREATE_INSTANCE, req),
+    loaderVersions: (loader: string, mc: string) => ipcRenderer.invoke(LOADER_VERSIONS, loader, mc),
+    edit: (id: string, e: unknown) => ipcRenderer.invoke(EDIT_INSTANCE, id, e),
+    setIcon: (id: string, icon: unknown) => ipcRenderer.invoke(SET_ICON, id, icon),
+    screenshots: (id: string) => ipcRenderer.invoke(SCREENSHOTS, id),
+    setBackground: (id: string, how: string, token?: string) => ipcRenderer.invoke(SET_BACKGROUND, id, how, token ?? null),
+  }),
+  media: Object.freeze({
+    importIcon: () => ipcRenderer.invoke(IMPORT_ICON),
+    makeIcon: (key: string, ext: string, crop: unknown) => ipcRenderer.invoke(MAKE_ICON, key, ext, crop),
   }),
   launch: Object.freeze({
     start: (id: string, opts: { ram: number; repair?: boolean }) =>
@@ -65,6 +87,12 @@ const api: WeCraftApi = Object.freeze({
     edit: (id: string, selected: unknown) => ipcRenderer.invoke(MP_EDIT, id, selected),
     status: (job: string) => ipcRenderer.invoke(MP_STATUS, job),
     openPage: (slug: string) => ipcRenderer.invoke(MP_PAGE, slug),
+  }),
+  projects: Object.freeze({
+    search: (q: unknown) => ipcRenderer.invoke(PROJ_SEARCH, q),
+    get: (id: string) => ipcRenderer.invoke(PROJ_GET, id),
+    versions: (id: string, mc?: string, loader?: string) => ipcRenderer.invoke(PROJ_VERSIONS, id, mc ?? null, loader ?? null),
+    openLink: (token: string) => ipcRenderer.invoke(PROJ_OPEN_LINK, token),
   }),
   update: Object.freeze({
     check: (manual: boolean) => ipcRenderer.invoke(UPDATE_CHECK, manual === true),

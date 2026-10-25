@@ -1,6 +1,6 @@
 // Données et règles de l'interface (lot E6), reprises du prototype « ReLaunch × WeCraft » (prototype.js) :
 // mêmes clés de stockage local (préférences d'affichage seulement), mêmes valeurs par défaut, mêmes règles.
-import type { InstanceView } from "../../shared/api";
+import type { InstanceIcon, InstanceView } from "../../shared/api";
 
 export type Source = InstanceView["source"];
 
@@ -20,6 +20,10 @@ export interface Inst {
   last?: number;
   /** WePack créé par WeCraft : modifiable dans Découvrir (lot E7). */
   mp?: boolean;
+  /** Icône choisie (sinon dégradé de la source et initiales). */
+  icon: InstanceIcon | null;
+  /** Fond choisi (adresse app://). */
+  bg: string | null;
 }
 
 export const SC: Record<string, string> = { WeCraft: "var(--acc)", CurseForge: "#f16436", Prism: "#5eead4", Modrinth: "#1bd96a" };
@@ -44,6 +48,8 @@ export function toInst(i: InstanceView): Inst {
     fav: !!i.fav,
     c: SRCCOL[i.source] ?? SRCCOL["WeCraft"]!,
     ...(i.modpack ? { mp: true } : {}),
+    icon: i.icon ?? null,
+    bg: i.background ?? null,
   };
 }
 

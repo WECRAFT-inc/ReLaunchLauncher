@@ -33,8 +33,11 @@ import {
   type View,
 } from "./model";
 import { DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
+import { handleEscape, useEscapeLayer } from "./keys";
 import { moveNav, playFlip, Settings, snapPos } from "./Settings";
 import { Discover, emptyDraft } from "./Discover";
+import { CreateModal } from "./Create";
+import { ImportModal } from "./Import";
 import { Favorites, Home, Soon, SOON, Wecraft } from "./Views";
 import type { MpDraft } from "./ctx";
 
@@ -103,7 +106,7 @@ export function App() {
     } catch {
       // stockage indisponible
     }
-    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil" };
+    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "" };
   });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tip, setTip] = useState<{ text: string; el: HTMLElement } | null>(null);
@@ -116,6 +119,8 @@ export function App() {
   const setMp = useCallback((fn: (d: MpDraft) => MpDraft) => setMpState(fn), []);
   const [upd, setUpd] = useState<Extract<UpdateCheck, { state: "available" }> | null>(null);
   const [discordOn, setDiscordOn] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [discordAsk, setDiscordAsk] = useState(false);
   const hist = useRef<string[]>([]);
   const back = useRef(false);
@@ -562,7 +567,7 @@ export function App() {
     const i = Number(a.dataset["i"]);
     switch (act) {
       case "create":
-        show("discover");
+        setCreateOpen(true);
         break;
       case "mpEdit":
         editModpack(a.dataset["id"]!);
@@ -778,16 +783,29 @@ export function App() {
     },
   };
 
-  // Échap : ferme les épingles, puis le panneau latéral
+  // Échap (gestion centralisée, keys.ts) : ferme d'abord la dernière fenêtre ou le dernier panneau ouvert,
+  // sinon revient à l'accueil. Jamais de fermeture de ReLaunch, jamais d'opération interrompue.
+  useEscapeLayer(!!ui.drawer, () => setUi({ drawer: null }));
+  useEscapeLayer(!!ui.pop, () => setUi({ pop: null }));
+  useEscapeLayer(!!ui.delId, () => setUi({ delId: null }));
+  useEscapeLayer(launchUi.box, () => setLaunchUi((l) => ({ ...l, box: false })));
+  useEscapeLayer(!!upd, () => setUpd(null));
+  useEscapeLayer(discordAsk && !upd, () => {
+    setDiscordAsk(false);
+    setDiscord(false, true); // comme la version Python : fermer la question = « Non »
+  });
+  const viewRef = useRef(ui.view);
+  viewRef.current = ui.view;
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (ui.pop) setUi({ pop: null });
-      else if (ui.drawer) setUi({ drawer: null });
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      handleEscape(e.target, () => {
+        if (viewRef.current !== "home") show("home");
+      });
     };
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
-  }, [ui.pop, ui.drawer, setUi]);
+  }, [show]);
 
   const ctx: AppCtx = {
     inst,
@@ -831,6 +849,15 @@ export function App() {
   return (
     <Ctx.Provider value={ctx}>
       <Notice lines={notice} onClose={() => setNotice([])} />
+      <CreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onImport={() => {
+          setCreateOpen(false);
+          setImportOpen(true);
+        }}
+      />
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <DiscordAsk
         open={discordAsk && !upd}
         onAnswer={(on) => {
@@ -950,9 +977,7 @@ function Shell({
           </section>
         ))}
       </main>
-      <div className="overlay" id="createOv" hidden data-a="m-create" data-name="Créer un WePack">
-        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="cTitle" id="createModal"></div>
-      </div>
+      
       <div className="overlay lightbox" id="shotOv" hidden data-a="m-shot" data-name="Capture">
         <div className="modal" role="dialog" aria-modal="true" id="shotModal"></div>
       </div>

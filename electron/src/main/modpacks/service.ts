@@ -7,6 +7,7 @@ import path from "node:path";
 import type { ModpackEditInfo, ModpackHit, ModpackJob, ModpackSearch, ModpackStartResult, PackRowView } from "../../shared/api";
 import { fetchVersionList } from "../install/vanilla";
 import type { InstanceService } from "../instances/service";
+import type { MediaStore } from "../media/media";
 import type { NetOptions } from "../net/download";
 import {
   applyModpackEdit,
@@ -56,6 +57,8 @@ export interface ModpackDeps {
   versions?: () => Promise<string[]>;
   /** Retire un mod du modpack : corbeille de Windows (jamais d'effacement définitif). */
   trash?: (file: string) => Promise<void>;
+  /** Icônes des résultats (adresses app:// des images Modrinth). */
+  media?: MediaStore;
 }
 
 export class ModpackService {
@@ -67,6 +70,14 @@ export class ModpackService {
   constructor(private readonly d: ModpackDeps) {
     this.fetch = d.fetch ?? modrinthFetcher(d.userAgent, d.net);
     this.download = d.download ?? modDownloader(d.userAgent, d.net);
+  }
+
+  /** Accès à l'API Modrinth (mêmes garde-fous : HTTPS, api.modrinth.com seulement, User-Agent). */
+  get api(): Fetch {
+    return this.fetch;
+  }
+  get downloader(): Download {
+    return this.download;
   }
 
   /** Versions de Minecraft (releases) de la liste officielle de Mojang, la plus récente d'abord. */
@@ -102,6 +113,7 @@ export class ModpackService {
               downloads: typeof h["downloads"] === "number" ? h["downloads"] : 0,
               categories: (Array.isArray(h["categories"]) ? (h["categories"] as unknown[]) : []).filter((c): c is string => typeof c === "string").slice(0, 12),
               slug: typeof h["slug"] === "string" && /^[\w-]{1,100}$/.test(h["slug"]) ? h["slug"] : null,
+              icon: this.d.media?.remoteUrl(h["icon_url"]) ?? null,
             }),
           ),
       };
