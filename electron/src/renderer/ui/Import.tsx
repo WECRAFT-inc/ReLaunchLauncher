@@ -1,4 +1,4 @@
-// « Créer un WePack » > « Importer » : fichier .mrpack (format Modrinth) ou instances des autres launchers.
+// « Créer un WePack » > « Importer » : fichier .mrpack (Modrinth) ou .rlpack (pack ReLaunch partagé), ou instances des autres launchers.
 // Les instances de Prism, CurseForge et Modrinth ne sont pas copiées : ReLaunch les détecte là où elles sont
 // (lecture seule) ; « Rechercher à nouveau » relit leurs dossiers tout de suite.
 import { useEffect, useRef, useState } from "react";
@@ -85,8 +85,8 @@ export function ImportModal({ open, onClose }: { open: boolean; onClose: () => v
               <Ic n="upload" />
             </span>
             <span className="imp-txt">
-              <b>{t("Fichier .mrpack (Modrinth)")}</b>
-              <small className="muted">{t("Modpack exporté depuis Modrinth, Prism ou un autre launcher. Chaque fichier est téléchargé et vérifié (SHA-512) dans une nouvelle instance.")}</small>
+              <b>{t("Fichier .mrpack ou .rlpack")}</b>
+              <small className="muted">{t("Modpack Modrinth (Prism, autres launchers) ou pack ReLaunch envoyé par un ami. Chaque fichier est téléchargé et vérifié dans une nouvelle instance ; les mods qui ne viennent ni de Modrinth ni de WeCraft te sont montrés avant installation.")}</small>
             </span>
             <button className="btn sm pri" onClick={pick} disabled={busy}>
               {t("Choisir un fichier")}

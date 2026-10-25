@@ -2,7 +2,8 @@
 // events, partenaires, notifications, maintenance et politique de version. Rien n'est inventé : sans
 // réponse du service, la page le dit (et garde le dernier état connu, signalé comme ancien).
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { RelinkNews, RelinkState } from "../../shared/api";
+import type { OfficialInstalled, RelinkModpack, RelinkNews, RelinkState } from "../../shared/api";
+import { JobView, useJob } from "./Import";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { t } from "./i18n";
@@ -280,27 +281,66 @@ export function RelinkServersEvents() {
           ) : null}
         </div>
       </div>
-      {packs.length ? (
-        <div className="sect">
-          <h3>{t("Modpacks ReLaunch")}</h3>
-          <div className="mp-results">
-            {packs.map((m) => (
-              <div key={m.id} className="card imp-row">
-                <span className="imp-txt">
-                  <b>{m.name}</b>
-                  <small className="muted">{[m.mc, m.loader, m.version].filter(Boolean).join(" · ") || m.desc}</small>
-                </span>
-                <button className="btn sm" disabled title={t("Installation pas encore branchée : le format du manifeste de modpack doit être défini avec le service ReLink.")}>
-                  {t("Installer")}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      {packs.length ? <OfficialPacks packs={packs} /> : null}
     </>
   );
 }
+/** Modpacks officiels : installation et mise à jour (fichiers signés, vérifiés dans le processus principal). */
+function OfficialPacks({ packs }: { packs: RelinkModpack[] }) {
+  const { refreshInstances, toast } = useApp();
+  const [installed, setInstalled] = useState<OfficialInstalled[]>([]);
+  const [running, setRunning] = useState<string | null>(null);
+  const load = () => void window.wecraft.modpacks.officialInstalled().then(setInstalled, () => undefined);
+  useEffect(load, []);
+  const job = useJob((s) => {
+    setRunning(null);
+    load();
+    if (s.phase === "termine") refreshInstances();
+  });
+  const start = (m: RelinkModpack) => {
+    setRunning(m.id);
+    void window.wecraft.modpacks.installOfficial(m.id).then(
+      (r) => {
+        if (r.ok) job.follow(r.job);
+        else {
+          setRunning(null);
+          toast(r.reason === "busy" ? t("Une installation ou un lancement est déjà en cours.") : t("Installation impossible."));
+        }
+      },
+      () => setRunning(null),
+    );
+  };
+  const busy = job.job?.phase === "en-cours";
+  return (
+    <div className="sect">
+      <h3>{t("Modpacks ReLaunch")}</h3>
+      <div className="mp-results">
+        {packs.map((m) => {
+          const inst = installed.find((x) => x.packId === m.id);
+          const v = m.latest;
+          const upToDate = !!inst && !!v && inst.version === v.version;
+          return (
+            <div key={m.id} className="card imp-row">
+              <span className="imp-txt">
+                <b>
+                  {m.name}
+                  {v?.locked ? <span className="tag" style={{ marginLeft: "8px" }}>{t("Event · shaders seulement")}</span> : null}
+                </b>
+                <small className="muted">{[m.mc, m.loader, v ? `v${v.version}` : m.version].filter(Boolean).join(" · ") || m.desc}</small>
+                {inst ? <small className="faint">{upToDate ? `${t("Installé")} (${inst.folderName})` : `${t("Installé en")} v${inst.version} · ${t("mise à jour disponible")}`}</small> : null}
+              </span>
+              <button className={`btn sm${inst && !upToDate ? " pri" : ""}`} disabled={!v || upToDate || busy || running === m.id} onClick={() => start(m)} title={!v ? t("Pas encore de version publiée.") : ""}>
+                {running === m.id ? t("Installation…") : !v ? t("Bientôt") : upToDate ? t("À jour") : inst ? t("Mettre à jour") : t("Installer")}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <JobView job={job.job} />
+    </div>
+  );
+}
+
 function EventHero({ ev }: { ev: { id: string; name: string; desc: string; status: string; start: string } }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {

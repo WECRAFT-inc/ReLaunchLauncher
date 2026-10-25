@@ -154,6 +154,7 @@ export function instMenu(x: Inst, groups: InstGroup[], moveTo: (gid: string) => 
     { label: "Ajouter du contenu (mods, packs, shaders)", data: { act: "addContent", id: x.id } },
     { label: "Packs de ressources et shaders de l'événement", data: { act: "evEdit", id: x.id }, hidden: !x.ev },
     { label: "Ouvrir le dossier", data: { act: "instFolder", id: x.id } },
+    { label: "Exporter pour un ami (.rlpack)", data: { act: "instExport", id: x.id }, hidden: !!x.ev },
     "sep",
     { label: x.fav ? "Retirer des favoris" : "Ajouter aux favoris", data: { act: "fav", id: x.id } },
     { label: "Épingler / retirer de la barre", data: { act: "pin", id: x.id } },

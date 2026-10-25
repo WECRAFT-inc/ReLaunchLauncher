@@ -86,6 +86,7 @@ const START_ERRORS = {
   "no-version": "Version de Minecraft inconnue pour cette instance : réglez-la d'abord.",
   maintenance: "Lancement suspendu : maintenance en cours annoncée par ReLaunch.",
   login: "Connecte-toi à ReLink pour jouer (Réglages > Compte ReLink).",
+  pack: "Pack d'event : la remise en état des mods officiels a échoué (connexion ?). Réessaie dans un instant.",
 } as const;
 const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
   invalid: "Instance introuvable : la liste a peut-être changé.",
@@ -684,6 +685,13 @@ export function App() {
         break;
       case "inactive":
         toggleInactive(a.dataset["id"]!);
+        break;
+      case "instExport":
+        toast("Export en cours : recherche des mods sur Modrinth…", 3000);
+        void window.wecraft.modpacks.exportShared(a.dataset["id"]!).then(
+          (r) => !r.canceled && toast(r.message, 6000),
+          () => toast("Export impossible."),
+        );
         break;
       case "instFolder":
         void window.wecraft.instances.openFolder(a.dataset["id"]!, a.dataset["sub"] ?? "").then((ok) => !ok && toast("Ce dossier n'a pas pu être ouvert."));

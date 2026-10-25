@@ -127,17 +127,26 @@ Les mods absents de Modrinth et non hébergés vont dans les overrides. Ils sont
 
 `node tools/relaunch-pack.mjs check <manifeste>` applique les mêmes règles que le Worker avant l'envoi.
 
-## 4. Côté launcher (à faire, après validation)
+## 4. Côté launcher (fait)
 
-Le launcher lit déjà le catalogue (`/launcher/catalog`). Pour chaque modpack, `latestVersion` donne :
-- `downloadUrl` et `signatureUrl` du manifeste ;
-- `overrides`, avec `downloadUrl`, `signatureUrl`, `sha256` et `size`, ou `null` ;
-- `format: "relaunch-pack"`.
+**Packs officiels.** Le catalogue de la page ReLaunch propose les packs officiels avec « Installer », « Mettre à jour » ou « À jour ». Pour chaque installation, le launcher :
+1. télécharge le manifeste depuis le Worker, compare son SHA-256 à celui annoncé, puis vérifie sa signature Ed25519 avec la clé épinglée dans le launcher. Le `signatureVerified` du serveur n'est pas pris en compte ;
+2. revérifie toutes les règles du §1 ;
+3. télécharge l'archive overrides, compare son empreinte à celle du manifeste et vérifie sa signature ;
+4. télécharge chaque fichier depuis ses `downloads`, en vérifiant la taille et le SHA-512 ou SHA-256 ;
+5. copie les overrides par-dessus, en respectant `editable` ;
+6. à une mise à jour, met à la corbeille les fichiers officiels disparus et ceux de `remove`. Les fichiers modifiables du joueur sont gardés ;
+7. garde le manifeste installé dans `relaunch_pack.json`, pour la mise à jour et la réparation.
 
-L'installation prévue :
-1. Télécharger le manifeste et sa signature. Vérifier Ed25519 avec la clé **épinglée** dans le launcher, sans tenir compte de `signatureVerified`. Revérifier toutes les règles.
-2. Créer ou mettre à jour l'instance dans `%APPDATA%\.wecraft\instances`. Télécharger chaque fichier depuis ses `downloads`, en vérifiant la taille et le SHA-512 ou SHA-256 ; un fichier faux est supprimé et l'installation échoue.
-3. Télécharger l'archive overrides, vérifier son empreinte et sa signature, l'extraire en respectant `editable`, puis appliquer `remove`.
-4. Garder le manifeste installé, pour la mise à jour suivante et pour la réparation de l'instance.
+**Pack d'event (`pack.locked`).** L'instance devient un modpack d'événement (`wecraft_event.json`, shaders modifiables seulement).
+- **Avant chaque lancement**, chaque mod officiel est revérifié : un mod abîmé ou supprimé est retéléchargé, un mod ajouté par le joueur part à la corbeille.
+- Les configs ne sont pas remises à zéro, parce que les mods les réécrivent en jouant.
+- Les packs de ressources et les mods ne peuvent être ni ajoutés, ni retirés, ni désactivés.
 
-Rien de ceci n'est encore codé dans le launcher : c'est une modification critique, à valider avant de l'écrire.
+**Packs entre joueurs (`.rlpack`).** Le menu d'une instance propose « Exporter pour un ami (.rlpack) ».
+- **Export :**
+  - les mods et packs connus de Modrinth ou hébergés par WeCraft sont seulement référencés ;
+  - le reste (configs, mods privés) part dans l'archive ;
+  - `options.txt` et `servers.dat` restent sur le PC.
+- **Import :** « Créer un WePack », puis « Importer », puis le fichier `.rlpack`. Le pack est toujours installé dans une **nouvelle** instance, jamais verrouillé.
+- **Sécurité :** s'il contient des mods qui ne viennent ni de Modrinth ni de WeCraft, le launcher en montre la liste et demande l'accord du joueur avant d'installer, puisqu'un mod est du code exécuté par le jeu.

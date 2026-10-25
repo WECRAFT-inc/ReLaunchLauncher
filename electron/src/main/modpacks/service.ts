@@ -2,14 +2,16 @@
 // L'interface n'envoie que des valeurs vérifiées ici (texte, version, loader, identifiants de projets) ;
 // les dossiers sont calculés dans le processus principal, jamais fournis par l'interface.
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, stat, unlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ModpackEditInfo, ModpackHit, ModpackJob, ModpackSearch, ModpackStartResult, PackRowView } from "../../shared/api";
+import type { ModpackEditInfo, ModpackHit, ModpackJob, ModpackSearch, ModpackStartResult, OfficialInstalled, PackRowView, RelinkModpack } from "../../shared/api";
 import { fetchVersionList } from "../install/vanilla";
 import type { InstanceService } from "../instances/service";
 import type { MediaStore } from "../media/media";
 import type { NetOptions } from "../net/download";
 import { installMrpack } from "./mrpack";
+import { enforceLockedPack, exportRlpack, installRelaunchPack, planRelaunchPack, readInstalledPack, readRlpack, rlpackOverridesToZip, type RpPlan } from "./relaunchPack";
 import { CONTENT_DIRS, planContent } from "./projects";
 import { readEventManifest } from "../events/eventLock";
 import {
@@ -79,6 +81,20 @@ export interface ModpackDeps {
   media?: MediaStore;
   /** Journal de l'application (résultat de chaque opération). */
   log?: { info(origin: string, msg: string): unknown; error(origin: string, msg: string): unknown } | null;
+  /** Modpacks officiels ReLaunch : fichiers du Worker et clé publique épinglée. */
+  relaunch?: {
+    workerHost: string;
+    publicKey: string | null;
+    fetchBytes: (url: string, max: number) => Promise<Buffer>;
+    assetUrl: (id: string, signature: boolean) => string;
+    verify: (data: Buffer, sig: Buffer, key: string) => boolean;
+    /** Mods d'event hébergés : SHA-512 -> adresse (export entre joueurs). */
+    lookupHosted: (sha512s: string[]) => Promise<Record<string, { url: string }>>;
+    /** Modrinth : SHA-1 -> fichier exact (export entre joueurs). */
+    lookupModrinth: (sha1s: string[]) => Promise<Record<string, { url: string; sha512: string }>>;
+  };
+  /** Accord du joueur avant d'installer un pack partagé qui contient des mods hors Modrinth. */
+  confirmShared?: (name: string, unknownMods: string[]) => Promise<boolean>;
 }
 
 export class ModpackService {
@@ -156,10 +172,144 @@ export class ModpackService {
     };
   }
 
-  /** Importe un fichier .mrpack choisi par l'utilisateur (fenêtre du système) dans une nouvelle instance. */
+  /** Importe un fichier .mrpack ou .rlpack choisi par l'utilisateur (fenêtre du système) dans une nouvelle instance. */
   importFile(file: string): ModpackStartResult {
     if (this.busy()) return { ok: false, reason: "busy" };
+    if (/\.rlpack$/i.test(file)) return this.run((progress) => this.installShared(file, progress));
     return this.run((progress) => this.installArchive(file, null, progress));
+  }
+
+  private rl() {
+    const r = this.d.relaunch;
+    if (!r) throw new Error("Service ReLink indisponible.");
+    return r;
+  }
+  private get trash() {
+    return this.d.trash ?? (async (f: string) => void (await rm(f, { force: true })));
+  }
+  private netx() {
+    return { ...(this.d.net ?? {}), userAgent: this.d.userAgent };
+  }
+
+  /** Dossiers d'instances de ce launcher qui contiennent un modpack ReLaunch officiel installé. */
+  async officialInstalled(): Promise<OfficialInstalled[]> {
+    const host = this.d.relaunch?.workerHost ?? "";
+    const out: OfficialInstalled[] = [];
+    for (const name of await readdir(this.d.instancesDir).catch(() => [] as string[])) {
+      const folder = path.join(this.d.instancesDir, name);
+      const p = await readInstalledPack(folder, host);
+      if (p?.signed) out.push({ packId: p.plan.id, version: p.plan.version, locked: p.plan.locked, folderName: name });
+    }
+    return out;
+  }
+
+  /** Installe ou met à jour un modpack officiel (catalogue ReLink) : manifeste et overrides signés. */
+  installOfficial(pack: RelinkModpack): ModpackStartResult {
+    if (this.busy()) return { ok: false, reason: "busy" };
+    return this.run(async (progress) => {
+      const rl = this.rl();
+      const v = pack.latest;
+      if (!v) throw new Error("Ce modpack n'a pas encore de version publiée.");
+      if (!rl.publicKey) throw new Error("Installation impossible : la clé publique de signature ReLink n'est pas intégrée à ce launcher.");
+      progress(0, 0, "Téléchargement du manifeste signé...");
+      const man = await rl.fetchBytes(rl.assetUrl(v.id, false), 4 * 1024 * 1024);
+      if (createHash("sha256").update(man).digest("hex") !== v.sha256) throw new Error("Manifeste refusé : empreinte SHA-256 différente de celle annoncée.");
+      if (!rl.verify(man, await rl.fetchBytes(rl.assetUrl(v.id, true), 4096), rl.publicKey)) throw new Error("Manifeste refusé : signature invalide.");
+      const manifestText = man.toString("utf8");
+      const plan = planRelaunchPack(JSON.parse(manifestText) as unknown, rl.workerHost);
+      if (plan.id !== pack.id || plan.version !== v.version) throw new Error("Manifeste refusé : il ne correspond pas au modpack annoncé.");
+      const cache = path.join(path.dirname(this.d.instancesDir), "cache", "rlpack");
+      await mkdir(cache, { recursive: true });
+      let ovFile: string | null = null;
+      if (plan.overrides) {
+        if (!v.overrides || v.overrides.sha256 !== plan.overrides.sha256) throw new Error("Archive overrides absente ou différente de celle du manifeste.");
+        progress(0, 0, "Téléchargement des fichiers de configuration...");
+        const ov = await rl.fetchBytes(rl.assetUrl(v.overrides.id, false), 96 * 1024 * 1024);
+        if (createHash("sha256").update(ov).digest("hex") !== plan.overrides.sha256) throw new Error("Archive overrides refusée : empreinte différente.");
+        if (!rl.verify(ov, await rl.fetchBytes(rl.assetUrl(v.overrides.id, true), 4096), rl.publicKey)) throw new Error("Archive overrides refusée : signature invalide.");
+        ovFile = path.join(cache, `${plan.overrides.sha256}.zip`);
+        await writeFile(ovFile, ov);
+      }
+      // instance déjà installée pour ce modpack : mise à jour sur place ; sinon nouveau dossier
+      const existing = (await this.officialInstalled()).find((o) => o.packId === plan.id);
+      let folder: string;
+      let previous: { plan: RpPlan; overridesFiles: string[] } | null = null;
+      if (existing) {
+        folder = path.join(this.d.instancesDir, existing.folderName);
+        const p = await readInstalledPack(folder, rl.workerHost);
+        previous = p ? { plan: p.plan, overridesFiles: p.overridesFiles } : null;
+      } else {
+        folder = path.join(this.d.instancesDir, safeFolderName(plan.name));
+        await mkdir(this.d.instancesDir, { recursive: true });
+        try {
+          await mkdir(folder);
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`Une instance « ${path.basename(folder)} » existe déjà : renomme-la avant d'installer ce modpack.`);
+          throw e;
+        }
+      }
+      try {
+        const r = await installRelaunchPack({ folder, plan, overridesZip: ovFile, previous, signed: true, source: "ReLaunch", net: this.netx(), workerHost: rl.workerHost, progress, trash: this.trash, manifestText });
+        await this.d.instances.list(true);
+        return {
+          summary: `${plan.name} ${plan.version} ${previous ? "mis à jour" : "installé"} : Minecraft ${plan.mc}${plan.loader ? ` · ${plan.loader} ${plan.loaderVersion ?? ""}`.trimEnd() : ""}, ${plan.files.length} fichier${plan.files.length > 1 ? "s" : ""} vérifié${plan.files.length > 1 ? "s" : ""} (${r.downloaded} téléchargé${r.downloaded > 1 ? "s" : ""}).${plan.locked ? " Pack d'event : seuls les shaders peuvent être changés." : ""}`,
+          warnings: r.warnings,
+        };
+      } catch (e) {
+        if (!previous) await rm(folder, { recursive: true, force: true }).catch(() => undefined); // dossier créé à l'instant
+        throw e;
+      }
+    });
+  }
+
+  /** Pack partagé par un joueur (.rlpack) : toujours une NOUVELLE instance, après accord si mods inconnus. */
+  private async installShared(file: string, progress: (d: number, t: number, m: string) => void): Promise<{ summary: string; warnings: string[] }> {
+    const host = this.d.relaunch?.workerHost ?? "";
+    const { plan, manifestText, entries, unknownMods } = await readRlpack(file, host);
+    if (unknownMods.length && !(await (this.d.confirmShared ?? (async () => false))(plan.name, unknownMods))) throw new Error("Import annulé.");
+    const folder = path.join(this.d.instancesDir, safeFolderName(plan.name));
+    await mkdir(this.d.instancesDir, { recursive: true });
+    try {
+      await mkdir(folder);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`Une instance « ${path.basename(folder)} » existe déjà.`);
+      throw e;
+    }
+    const tmp = path.join(path.dirname(this.d.instancesDir), "cache", "rlpack", `shared-${Date.now()}.zip`);
+    try {
+      await mkdir(path.dirname(tmp), { recursive: true });
+      const hasOv = await rlpackOverridesToZip(file, entries, tmp);
+      const r = await installRelaunchPack({ folder, plan, overridesZip: hasOv ? tmp : null, previous: null, signed: false, source: "Partagé", net: this.netx(), workerHost: host, progress, trash: this.trash, manifestText });
+      await this.d.instances.list(true);
+      return { summary: `Instance « ${path.basename(folder)} » créée depuis le pack partagé : Minecraft ${plan.mc}${plan.loader ? ` · ${plan.loader}` : ""}, ${plan.files.length} fichier${plan.files.length > 1 ? "s" : ""} téléchargé${plan.files.length > 1 ? "s" : ""} et vérifié${plan.files.length > 1 ? "s" : ""}.`, warnings: r.warnings };
+    } catch (e) {
+      await rm(folder, { recursive: true, force: true }).catch(() => undefined);
+      throw e;
+    } finally {
+      await rm(tmp, { force: true }).catch(() => undefined);
+    }
+  }
+
+  /** Export d'une instance en .rlpack (mods de Modrinth et de WeCraft référencés, le reste dans l'archive). */
+  async exportShared(id: unknown, dest: string): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+    const inst = this.d.instances.target(id);
+    if (!inst || !inst.version) return { ok: false, message: "Instance introuvable ou version de Minecraft inconnue." };
+    if (await readEventManifest(inst.folder)) return { ok: false, message: "Un pack d'event ne peut pas être exporté." };
+    try {
+      const rl = this.rl();
+      const r = await exportRlpack(inst.path, { name: inst.display || inst.name, mc: inst.version, loader: inst.loader, loaderVersion: inst.loaderVersion }, { modrinth: rl.lookupModrinth, hosted: rl.lookupHosted }, () => undefined);
+      await writeFile(dest, r.data);
+      return { ok: true, message: `Pack exporté : ${r.fromModrinth} fichier${r.fromModrinth > 1 ? "s" : ""} depuis Modrinth, ${r.hosted} mod${r.hosted > 1 ? "s" : ""} WeCraft, ${r.inArchive} dans l'archive.` };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /** Avant le lancement d'un pack d'event verrouillé : mods officiels remis en état, mods ajoutés retirés. */
+  async enforceLocked(folder: string): Promise<{ restored: number; removed: string[] } | null> {
+    const host = this.d.relaunch?.workerHost;
+    if (!host) return null;
+    return enforceLockedPack(folder, { net: this.netx(), workerHost: host, trash: this.trash });
   }
 
   /** Installe une version de modpack Modrinth (Découvrir > Modpacks > Installer) dans une nouvelle instance. */

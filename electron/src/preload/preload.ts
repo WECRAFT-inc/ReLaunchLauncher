@@ -74,6 +74,9 @@ const MP_PAGE = "modpacks:page";
 const MP_ADD_MODS = "modpacks:add-mods";
 const MP_IMPORT_FILE = "modpacks:import-file";
 const MP_INSTALL_VERSION = "modpacks:install-version";
+const MP_OFFICIAL_INSTALLED = "modpacks:official-installed";
+const MP_INSTALL_OFFICIAL = "modpacks:install-official";
+const MP_EXPORT_SHARED = "modpacks:export-shared";
 const PROJ_SEARCH = "projects:search";
 const PROJ_GET = "projects:get";
 const PROJ_VERSIONS = "projects:versions";
@@ -179,6 +182,9 @@ const api: WeCraftApi = Object.freeze({
     addMods: (id: string, roots: unknown) => ipcRenderer.invoke(MP_ADD_MODS, id, roots),
     importFile: () => ipcRenderer.invoke(MP_IMPORT_FILE),
     installVersion: (versionId: string, name?: string) => ipcRenderer.invoke(MP_INSTALL_VERSION, versionId, name ?? null),
+    officialInstalled: () => ipcRenderer.invoke(MP_OFFICIAL_INSTALLED),
+    installOfficial: (relinkId: string) => ipcRenderer.invoke(MP_INSTALL_OFFICIAL, relinkId),
+    exportShared: (instanceId: string) => ipcRenderer.invoke(MP_EXPORT_SHARED, instanceId),
   }),
   projects: Object.freeze({
     search: (q: unknown) => ipcRenderer.invoke(PROJ_SEARCH, q),

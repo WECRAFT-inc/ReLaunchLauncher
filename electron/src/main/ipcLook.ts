@@ -63,7 +63,7 @@ async function readPicked(file: string): Promise<Buffer> {
 
 export interface ProjectDeps {
   modpacks: () => ModpackService | null;
-  instances: () => { target(id: unknown): { path: string } | null };
+  instances: () => { target(id: unknown): { path: string; folder: string } | null };
   media: () => MediaStore | null;
   links: LinkStore;
   openExternal: (url: string) => Promise<void>;
@@ -118,6 +118,8 @@ export function registerProjectIpc(handle: Handle, d: ProjectDeps): void {
     if (d.launching() || mp.busy()) return { ok: false, message: "Une opération est en cours : réessayez dans un instant." };
     try {
       const plan = await planContent(mp.api, versionId);
+      const ev = await readEventManifest(inst.folder);
+      if (ev && !ev.editable.has(plan.dir)) return { ok: false, message: "Pack d'event : seuls les shaders peuvent être ajoutés." };
       const dir = path.join(inst.path, plan.dir);
       const dest = path.join(dir, plan.file);
       try {
@@ -167,6 +169,7 @@ export function registerEventIpc(handle: Handle, d: LookDeps): void {
       shaders: await listPacks(t.folder, t.m, "shader"),
       shader: await currentShader(t.folder),
       defaultShader: t.m.defaultShader,
+      resourcepacksEditable: t.m.editable.has("resourcepacks"),
     };
   });
   handle(CHANNELS.eventSetPack, async (id, name, on) => run(id, (t) => setResourcePack(t.folder, t.m, name, on === true)));

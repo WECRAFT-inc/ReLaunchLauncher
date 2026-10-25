@@ -17,8 +17,9 @@ import { InstanceService } from "./instances/service";
 import { loaderVersionList } from "./install/loaderList";
 import { isSafeVersionId } from "./install/vanilla";
 import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLook";
-import { explainWorkerError, RelinkClient, WORKER_HOSTS } from "./relink/worker";
-import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore } from "./skins/skins";
+import { explainWorkerError, RelinkClient, WORKER_HOSTS, WORKER_URL } from "./relink/worker";
+import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore, verifyDetached } from "./skins/skins";
+import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
 import { AccountError, RelinkAccount } from "./relink/account";
 import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
@@ -263,6 +264,29 @@ async function start(): Promise<void> {
     instances,
     userAgent: `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`,
     trash: (f) => shell.trashItem(f), // mods retirés : corbeille de Windows uniquement
+    relaunch: {
+      workerHost: new URL(WORKER_URL).host,
+      publicKey: RELINK_SIGNING_PUBLIC_KEY,
+      fetchBytes: (url, max) => fetchBytes(url, max, {}, { allowedHosts: WORKER_HOSTS, signal: AbortSignal.timeout(120000), headers: { "User-Agent": ua } }),
+      assetUrl: (id, signature) => rl.assetUrl(id, signature),
+      verify: verifyDetached,
+      lookupHosted: (hashes) => hostedByHash(hashes, WORKER_URL, WORKER_HOSTS, ua),
+      lookupModrinth: (hashes) => modrinthByHash(hashes, ua),
+    },
+    confirmShared: async (name, mods) => {
+      const opts = {
+        type: "warning" as const,
+        title: "Pack partagé",
+        message: `« ${name} » contient ${mods.length} mod${mods.length > 1 ? "s" : ""} qui ne vien${mods.length > 1 ? "nent" : "t"} ni de Modrinth ni de WeCraft.`,
+        detail: `Un mod est un programme exécuté par le jeu. N'installe ce pack que si tu fais confiance à la personne qui te l'a envoyé.\n\n${mods.slice(0, 15).join("\n")}${mods.length > 15 ? `\n… et ${mods.length - 15} autre(s)` : ""}`,
+        buttons: ["Annuler", "Installer quand même"],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      };
+      const r = mainWindow ? await dialog.showMessageBox(mainWindow, opts) : await dialog.showMessageBox(opts);
+      return r.response === 1;
+    },
   });
   const launchLog = fileLogger(path.join(wecraftDataDir(env), "logs", "lancement.log"));
   launcher = new LaunchService({
@@ -367,7 +391,7 @@ function registerIpc(): void {
     openExternal: (url) => shell.openExternal(url),
     launching: () => launcher?.busy() ?? false,
     pickMrpack: async () => {
-      const opts = { title: "Importer un modpack Modrinth (.mrpack)", properties: ["openFile" as const], filters: [{ name: "Modpack Modrinth", extensions: ["mrpack"] }] };
+      const opts = { title: "Importer un modpack (.mrpack ou .rlpack)", properties: ["openFile" as const], filters: [{ name: "Modpack Modrinth ou ReLaunch", extensions: ["mrpack", "rlpack"] }] };
       const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
     },
@@ -430,6 +454,24 @@ function registerIpc(): void {
     }
   });
   handle(CHANNELS.accountSkinImage, async () => (account ? account.minecraftSkinImage() : null));
+  handle(CHANNELS.mpOfficialInstalled, async () => (modpacks ? modpacks.officialInstalled() : []));
+  handle(CHANNELS.mpInstallOfficial, async (relinkId) => {
+    if (!modpacks || !relink) return { ok: false, reason: "invalid" };
+    if (launcher?.busy()) return { ok: false, reason: "busy" };
+    const item = (await relink.cached()).data?.modpacks.find((m) => m.id === relinkId); // seulement un modpack annoncé par le Worker
+    if (!item) return { ok: false, reason: "invalid" };
+    return modpacks.installOfficial(item);
+  });
+  handle(CHANNELS.mpExportShared, async (instanceId) => {
+    if (!modpacks || !instances) return { ok: false, message: "Indisponible." };
+    const inst = instances.target(instanceId);
+    if (!inst) return { ok: false, message: "Instance introuvable." };
+    const opts = { title: "Exporter le pack (.rlpack)", defaultPath: `${(inst.display || "pack").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 60)}.rlpack`, filters: [{ name: "Pack ReLaunch", extensions: ["rlpack"] }] };
+    const r = mainWindow ? await dialog.showSaveDialog(mainWindow, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return { ok: false, message: "", canceled: true };
+    const dest = /\.rlpack$/i.test(r.filePath) ? r.filePath : `${r.filePath}.rlpack`;
+    return modpacks.exportShared(instanceId, dest);
+  });
   handle(CHANNELS.skinsList, async () => (skins ? skins.list() : []));
   handle(CHANNELS.skinsImport, async () => {
     if (!skins) return { ok: false, message: "Indisponible." };
@@ -661,6 +703,14 @@ function registerIpc(): void {
     // Compte ReLink obligatoire ; si le service est injoignable, le jeu se lance quand même (serveurs d'event fermés)
     const gate = account ? await account.launchGate() : "offline";
     if (gate === "login") return { ok: false, reason: "login" };
+    // pack d'event verrouillé : mods officiels remis en état, mods ajoutés à la corbeille
+    try {
+      const fix = await modpacks?.enforceLocked(inst.folder);
+      if (fix && (fix.restored || fix.removed.length)) void appLog?.info("Modpacks", `Pack d'event remis en état : ${fix.restored} mod(s) retéléchargé(s), ${fix.removed.length} mod(s) ajouté(s) retiré(s)${fix.removed.length ? ` (${fix.removed.slice(0, 10).join(", ")})` : ""}.`);
+    } catch (e) {
+      void appLog?.error("Modpacks", `Pack d'event : remise en état impossible (${e instanceof Error ? e.message : String(e)}).`);
+      return { ok: false, reason: "pack" };
+    }
     const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
     const ram = typeof o.ram === "number" ? o.ram : NaN;
     const started = launcher.start(

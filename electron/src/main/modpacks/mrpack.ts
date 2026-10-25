@@ -133,7 +133,7 @@ export function planMrpack(index: unknown): MrpackPlan {
 }
 
 // ---------------------------------------------------------------- lecture de l'archive
-interface ZipEntry {
+export interface ZipEntry {
   name: string;
   method: number;
   flags: number;

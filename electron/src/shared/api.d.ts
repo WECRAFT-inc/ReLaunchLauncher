@@ -127,6 +127,8 @@ export interface EventInfo {
   shaders: EventPackView[];
   shader: string | null;
   defaultShader: string | null;
+  /** Le joueur peut changer les packs de ressources (false : pack d'event verrouillé, shaders seulement). */
+  resourcepacksEditable: boolean;
 }
 export type EventResult = { ok: true } | { ok: false; message: string };
 
@@ -211,7 +213,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string; offline?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" };
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -507,6 +509,12 @@ export interface WeCraftApi {
     importFile(): Promise<ModpackStartResult | { ok: false; reason: "canceled" }>;
     /** Version d'un modpack Modrinth installée dans une nouvelle instance. */
     installVersion(versionId: string, name?: string): Promise<ModpackStartResult>;
+    /** Modpacks officiels ReLaunch déjà installés sur ce PC. */
+    officialInstalled(): Promise<OfficialInstalled[]>;
+    /** Installe ou met à jour un modpack officiel du catalogue ReLink (fichiers signés). */
+    installOfficial(relinkId: string): Promise<ModpackStartResult>;
+    /** Fenêtre « Enregistrer » : exporte l'instance en pack partageable (.rlpack). */
+    exportShared(instanceId: string): Promise<{ ok: boolean; message: string; canceled?: boolean }>;
   };
   projects: {
     search(q: ProjectQuery): Promise<ProjectSearch>;
@@ -597,6 +605,16 @@ export interface RelinkModpack {
   mc: string;
   loader: string;
   version: string;
+  /** Pack d'event (lié à un event ReLaunch). */
+  event: string | null;
+  /** Dernière version signée (manifeste relaunch-pack) ; null tant qu'aucune n'est publiée. */
+  latest: { id: string; version: string; sha256: string; size: number; locked: boolean; mandatory: boolean; changelog: string; overrides: { id: string; sha256: string; size: number } | null } | null;
+}
+export interface OfficialInstalled {
+  packId: string;
+  version: string;
+  locked: boolean;
+  folderName: string;
 }
 export interface RelinkSkin {
   id: string;

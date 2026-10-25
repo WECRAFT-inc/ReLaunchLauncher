@@ -110,7 +110,30 @@ export function decodeModpack(v: unknown): RelinkModpack | null {
   const i = id(o["id"]);
   const n = pick(o, ["n", "name", "title"], 100);
   if (!i || !n) return null;
-  return { id: i, name: n, desc: pick(o, ["d", "desc", "description"], 600), mc: pick(o, ["mc", "v", "minecraft"], 20), loader: pick(o, ["loader", "l"], 40), version: pick(o, ["version", "latest"], 40) };
+  return { id: i, name: n, desc: pick(o, ["d", "desc", "description"], 600), mc: pick(o, ["mc", "v", "minecraft"], 20), loader: pick(o, ["loader", "l"], 40), version: pick(o, ["version", "latest"], 40), event: id(o["event"]) || null, latest: decodeLatest(o["latestVersion"]) };
+}
+/** Identifiant de fichier d'une adresse /launcher/assets/<id> du Worker (relative ou complète). */
+function assetIdOf(v: unknown): string {
+  const s = str(v, 300);
+  const m = /^(?:https:\/\/[^/]+)?\/launcher\/assets\/([A-Za-z0-9_.:-]{1,100})$/.exec(s);
+  if (!m) return "";
+  if (s.startsWith("https://") && !WORKER_HOSTS.has(new URL(s).host)) return "";
+  return m[1]!;
+}
+const hex64 = (v: unknown) => (typeof v === "string" && /^[0-9a-f]{64}$/i.test(v) ? v.toLowerCase() : "");
+function decodeLatest(v: unknown): RelinkModpack["latest"] {
+  const o = obj(v);
+  const fileId = assetIdOf(o["downloadUrl"]);
+  const ver = version(o["version"]);
+  const sha256 = hex64(o["sha256"]);
+  if (o["format"] !== "relaunch-pack" || !fileId || !ver || !sha256) return null;
+  const ov = obj(o["overrides"]);
+  const ovId = assetIdOf(ov["downloadUrl"]);
+  const ovSha = hex64(ov["sha256"]);
+  return {
+    id: fileId, version: ver, sha256, size: Math.round(num(o["size"], 0, 8 * 1024 * 1024)), locked: bool(o["locked"]), mandatory: bool(o["mandatory"]), changelog: str(o["changelog"], 4000),
+    overrides: ovId && ovSha ? { id: ovId, sha256: ovSha, size: Math.round(num(ov["size"], 0, 96 * 1024 * 1024)) } : null,
+  };
 }
 /** Fichier téléchargeable annoncé par le Worker (route /launcher/assets/{id}), avec son empreinte. */
 function decodeAsset(v: unknown): RelinkSkin["file"] {

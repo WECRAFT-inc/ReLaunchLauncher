@@ -67,6 +67,8 @@ export function EventEditor({ id, onClose }: { id: string | null; onClose: () =>
                 ))}
                 {!info.shaders.length ? <small className="faint">{t("Aucun shader dans ce modpack.")}</small> : null}
               </div>
+              {info.resourcepacksEditable ? (
+                <>
               <h4>{t("Packs de ressources")}</h4>
               <div className="ev-list">
                 {info.resourcepacks.map((p) => (
@@ -83,6 +85,10 @@ export function EventEditor({ id, onClose }: { id: string | null; onClose: () =>
                 ))}
                 {!info.resourcepacks.length ? <small className="faint">{t("Aucun pack de ressources dans ce modpack.")}</small> : null}
               </div>
+                </>
+              ) : (
+                <p className="faint" style={{ fontSize: "12.5px" }}>{t("Pack d'event : les packs de ressources sont imposés, seuls les shaders peuvent être changés.")}</p>
+              )}
               <span className="row" style={{ gap: "8px", justifyContent: "flex-start" }}>
                 <button
                   className="btn sm"
@@ -150,7 +156,7 @@ export function RelaunchEvents() {
             ))}
           </div>
         ) : (
-          <p className="faint" style={{ fontSize: "13px" }}>{t("Aucun modpack d'événement installé sur ce PC. Leurs modpacks apparaîtront ici, avec « Modifier » pour choisir tes packs de ressources et tes shaders.")}</p>
+          <p className="faint" style={{ fontSize: "13px" }}>{t("Aucun modpack d'événement installé sur ce PC. Leurs modpacks apparaîtront ici, avec « Modifier » pour choisir tes shaders.")}</p>
         )}
       </div>
     </>
