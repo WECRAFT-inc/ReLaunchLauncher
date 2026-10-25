@@ -64,7 +64,7 @@ Le launcher ignore un objet dont l'`id` ou le titre manque. Il ne fabrique jamai
 
 Aucune fonction du prototype n'a été retirée. Celles-ci restent **non branchées**, affichées comme « pas encore disponible » ou vides, jamais avec des données d'exemple :
 
-- **Comptes ReLink** (profil, connexion, captures, skins Minecraft du joueur, shop, crédits) : pas d'authentification joueur dans le contrat.
+- **Comptes ReLink** (profil, connexion, captures, skins Minecraft du joueur, shop, éclats) : pas d'authentification joueur dans le contrat.
 - **Amis et demandes d'amis, présence (« en jeu », « en live »)** : pas d'endpoint.
 - **Gestionnaire de téléchargements** (file d'attente, pause, reprise) : local. Il sera branché avec l'installation des modpacks (n° 13).
 - **Lecteur de lives intégré, filtres Event / Partenaires / Amis** : pas de source live réelle (n° 12).

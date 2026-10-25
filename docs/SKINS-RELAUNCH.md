@@ -119,7 +119,12 @@ Une valeur invalide fait refuser **tout le skin**, avec un message qui dit laque
 - **Retrait du fichier.** `DELETE /admin/launcher-skins/{id}/file` retire le fichier publié. Le fichier lui-même se supprime ensuite depuis « Stockage ».
 - **Fichier dans la réponse publique.** `GET /launcher/bootstrap` → `skins[]` contient `"file": { "id", "sha256", "size", "version" }`, ou `null`. Le fichier se télécharge par `GET /launcher/assets/{id}`, et sa signature par `?signature=1` (base64).
 - **Fiche protégée.** Enregistrer la fiche du skin depuis le panel ne peut pas écraser `file`.
-- **Propriété des skins (fait).** `GET /launcher/me`, avec la session ReLink du joueur, renvoie `launcherSkins` : les skins offerts depuis le panel (« Offrir un skin »). Le launcher laisse installer un skin à débloquer seulement s'il en fait partie. Le lien avec les achats de la boutique et les succès reste à brancher : il faudra qu'ils créent aussi une attribution.
+- **Déblocage (fait).** Un skin possédé correspond à une attribution, dans `skin_grants`. On en obtient une de trois façons :
+  - **achat en Éclats** depuis le launcher (« Acheter · N éclats »). Le Worker débite le solde de façon atomique et inscrit la dépense dans `eclats_transactions`, avec la raison `launcher_skin` ;
+  - **code de déblocage** généré dans le panel, depuis la fiche du skin (« Codes de déblocage »). Le Worker ne garde qu'une empreinte du code, chaque code a un nombre d'utilisations et une date de fin facultative, et un joueur ne peut pas faire plus de 10 essais faux par tranche de 10 minutes. Un lot de codes peut être désactivé ;
+  - **« Offrir un skin »** dans le panel, en indiquant l'identifiant Discord, le pseudo ReLink ou le pseudo Minecraft du joueur.
+
+  `GET /launcher/me` renvoie les skins possédés, et le launcher n'installe un skin à débloquer que s'il en fait partie. Il n'existe pas encore de système de succès ni de premium : en attendant, ces skins passent par des codes ou par « Offrir un skin ».
 
 Côté launcher, la **clé publique** `RELAUNCH_SIGNING_PUBLIC_KEY` est épinglée dans `electron/src/main/skins/skins.ts` (`RELINK_SIGNING_PUBLIC_KEY` = `MgGSWwwFZQsyGY0oVhUUcuKOOnlAjvg6HMZ7r/FUB7c=`). Changer de clé demande donc une nouvelle version du launcher.
 
