@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import {
@@ -302,6 +303,7 @@ test("service : recherche vérifiée, création et modification suivies, refus c
     const env = { platform: "linux" as NodeJS.Platform, env: { HOME: dir }, home: dir };
     const inst = new InstanceService(new JsonStore(), env);
     const calls: { p: string; params?: unknown }[] = [];
+    const trashed: string[] = [];
     const world: Record<string, unknown> = {
       ...WORLD,
       "/search": { total_hits: 2, hits: [{ project_id: "sodium", title: "Sodium", author: "jelly", description: "Rapide", downloads: 10, categories: ["optimization"], slug: "sodium" }, { project_id: "../evil", title: "x" }] },
@@ -316,6 +318,10 @@ test("service : recherche vérifiée, création et modification suivies, refus c
       },
       download: fakeDownload,
       versions: async () => ["1.21.4", "1.20.1"],
+      trash: async (f) => {
+        trashed.push(path.basename(f));
+        await rm(f);
+      },
     });
     assert.deepEqual(await svc.mcVersions(), ["1.21.4", "1.20.1"]);
     const s = await svc.search({ query: "sod", mc: "1.20.1", loader: "Fabric", categories: ["optimization", "<script>"], envs: ["client", "x"], sort: "downloads" });
@@ -350,6 +356,11 @@ test("service : recherche vérifiée, création et modification suivies, refus c
     assert.ok(e.ok);
     for (let i = 0; i < 1000 && svc.status(e.job)?.phase === "en-cours"; i++) await new Promise((res) => setTimeout(res, 10));
     assert.match(svc.status(e.job)!.message, /mis à jour : 1 mod ajouté \(\+ 1 dépendance\), 1 retiré/);
+    assert.ok(trashed.includes("sodium.jar"), "mod retiré : passé par la corbeille, jamais effacé directement");
+    // seuls les WePacks créés dans WeCraft se modifient (comme la version Python)
+    const other = new ModpackService({ instancesDir: instancesDir(env), instances: { target: () => ({ ...pack, folder: path.join(instancesDir(env), "Mon pack"), source: "CurseForge" }) } as unknown as InstanceService, userAgent: "t", fetch: fetchFrom(world), download: fakeDownload });
+    assert.equal(await other.editInfo("x"), null);
+    assert.deepEqual(await other.edit("x", [{ project_id: "jei", title: "JEI" }]), { ok: false, reason: "invalid" });
     assert.equal(await svc.editInfo("inconnu"), null);
     assert.equal(svc.status("autre"), null);
   } finally {

@@ -21,6 +21,7 @@ import { closeOfficialLauncher, nodeRunner, openOfficialLauncher } from "./launc
 import { defaultInstanceName, profileNameFor } from "./launch/profiles";
 import { cleanupLeftovers, markHealthy, restorePrevious, startupCheck, type UpdateEnv } from "./update/pending";
 import { UpdateService } from "./update/service";
+import { fetchReleaseProof } from "./update/release";
 import { configFile, legacyDataDirs, minecraftDir, wecraftDataDir, type PathEnv } from "./paths";
 import { JsonStore } from "./storage/jsonStore";
 import { migrateOldSettings } from "./storage/migrate";
@@ -146,6 +147,7 @@ async function start(): Promise<void> {
     packaged: app.isPackaged,
     store,
     start: (file, args) => nodeRunner.start(file, args),
+    releaseProof: (v) => fetchReleaseProof(v),
   };
   const failed = await startupCheck(updateEnv);
   if (failed) {
@@ -175,7 +177,12 @@ async function start(): Promise<void> {
   updater = new UpdateService({ env: updateEnv, quit: () => app.quit() });
   settings = new Settings(store, configFile(env));
   instances = new InstanceService(store, env);
-  modpacks = new ModpackService({ instancesDir: instancesDir(env), instances, userAgent: `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)` });
+  modpacks = new ModpackService({
+    instancesDir: instancesDir(env),
+    instances,
+    userAgent: `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`,
+    trash: (f) => shell.trashItem(f), // mods retirés : corbeille de Windows uniquement
+  });
   const launchLog = fileLogger(path.join(wecraftDataDir(env), "logs", "lancement.log"));
   launcher = new LaunchService({
     mcDir: minecraftDir(env),
@@ -323,7 +330,7 @@ function registerIpc(): void {
   ipcMain.handle(CHANNELS.removeInstance, async (event, id: unknown, confirmed: unknown): Promise<DeleteResult> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     if (!instances || confirmed !== true) return { ok: false, reason: "invalid" };
-    if (launcher?.busy()) return { ok: false, reason: "busy" };
+    if (launcher?.busy() || modpacks?.busy()) return { ok: false, reason: "busy" };
     // corbeille de Windows uniquement : jamais d'effacement définitif
     return instances.remove(id, (folder) => shell.trashItem(folder));
   });
@@ -391,6 +398,7 @@ function registerIpc(): void {
     const inst = instances?.target(id); // identifiant opaque : le dossier n'est jamais fourni par l'interface
     if (!inst || !launcher) return { ok: false, reason: "invalid" };
     if (!inst.version) return { ok: false, reason: "no-version" };
+    if (modpacks?.busy()) return { ok: false, reason: "busy" }; // mods en cours de téléchargement
     const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
     const ram = typeof o.ram === "number" ? o.ram : NaN;
     const started = launcher.start(

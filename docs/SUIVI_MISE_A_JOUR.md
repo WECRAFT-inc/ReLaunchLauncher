@@ -470,3 +470,29 @@ liste des mods d'un modpack (noms lus dans les `.jar`).
 - **Non fait volontairement** : retrait des dépendances Python (le code Python reste jusqu'à la validation de la
   migration, prompt maître).
 - Restent : essai réel avec Discord sur le PC du développeur, revue indépendante.
+
+### Revue indépendante des lots critiques (25/10/2026) et corrections
+
+Relecture par un agent séparé (branche `electron/e9-finitions`, code lu en entier et comparé au Python, tests
+lancés). Aucun constat critique. Verdicts : E3, E4, E8, E9 « OK pour fusion » ; E5 et E7 « OK après corrections ».
+Corrections faites (même branche) :
+- **E5 (important)** : un installeur gardé n'est plus jamais lancé sans preuve. `<installeur>.preuve.json`
+  (version, empreinte, signature) est écrit après le téléchargement vérifié ; avant l'installation ET avant un
+  retour arrière, l'empreinte est recalculée et la signature revérifiée (installeur remplacé = refusé, retour
+  arrière pas proposé). Au passage Python → ReLaunch, l'installeur n'est gardé que si son empreinte est celle,
+  signée, de la release de cette version (sinon : pas gardé, noté dans `update.log`).
+- E5 : retour arrière noté AVANT de lancer l'installeur (remis en place s'il ne démarre pas) ; seul
+  `ReLaunch-Setup-<version>.exe` est retenu dans une release (jamais un autre `.exe`, jamais un tag qui ne
+  donne pas un nom de fichier sûr).
+- E7 : seuls les WePacks créés dans WeCraft se modifient (comme Python) ; mods retirés envoyés à la
+  **corbeille** (plus d'effacement définitif) ; création d'instance sans risque d'effacer un dossier apparu
+  entre-temps ; noms de fichiers comparés sans tenir compte des majuscules (Windows).
+- E3 : aucun fichier hors de `.minecraft`, même pour un profil de loader ; identifiants de version et chemins
+  Java : refus des noms réservés de Windows (CON, NUL…), des flux cachés (« : ») et des points/espaces finaux ;
+  progression réelle pendant le téléchargement de Java, plus de barre figée pendant l'installeur Forge/NeoForge.
+- IPC : lancement et suppression refusés pendant un téléchargement de mods.
+- Non corrigés (notés) : fermeture du launcher officiel non vérifiée hors Windows (comme Python, hors cible) ;
+  NeoForge 1.20.1 peut-être réinstallé à chaque lancement (supposition, à vérifier avec xmcl en CI).
+
+Workflow `release-relaunch.yml` ajouté : tag `relaunch-vX.Y.Z`, tests, installeur, signature (clé actuelle),
+vérification avec les clés Python et ReLaunch, **brouillon** sur WeCraft-Releases (jamais publié automatiquement).

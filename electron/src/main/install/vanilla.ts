@@ -7,7 +7,7 @@
 // Rien n'est déclaré prêt tant que chaque fichier n'a pas l'empreinte attendue (§10.4 du prompt maître).
 import path from "node:path";
 import { downloadVerified, fetchJson, fileSha1, IntegrityError, type NetOptions } from "../net/download";
-import { javaComponentOf } from "./javaRuntime";
+import { javaComponentOf, WINDOWS_RESERVED } from "./javaRuntime";
 import {
   allowedUrls,
   hardenFiles,
@@ -28,9 +28,12 @@ export interface VersionEntry {
   releaseTime?: string;
 }
 
-/** Identifiant de version utilisable comme nom de dossier (pas de « .. », pas de séparateur). */
+/**
+ * Identifiant de version utilisable comme nom de dossier : pas de « .. », pas de séparateur, pas de point ni
+ * d'espace final (Windows les retire), pas de nom réservé de Windows.
+ */
 export function isSafeVersionId(id: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9._+ -]{0,63}$/.test(id) && !id.includes("..");
+  return /^[A-Za-z0-9][A-Za-z0-9._+ -]{0,63}$/.test(id) && !id.includes("..") && !/[. ]$/.test(id) && !WINDOWS_RESERVED.test(id);
 }
 
 export async function fetchVersionList(opts: NetOptions = {}): Promise<VersionEntry[]> {
@@ -51,7 +54,9 @@ export type VanillaStep =
   | { phase: "liste" }
   | { phase: "version" }
   | { phase: "fichiers"; progress: DownloadProgress }
-  | { phase: "ressources"; progress: DownloadProgress };
+  | { phase: "ressources"; progress: DownloadProgress }
+  | { phase: "java"; progress: { filesDone: number; filesTotal: number } }
+  | { phase: "loader"; kind: string };
 
 export interface InstallVanillaOptions extends NetOptions {
   xmcl: XmclApi;
@@ -105,11 +110,11 @@ export async function installVersionFiles(mcDir: string, id: string, opts: Insta
     ...xmcl.resolveLibraryInstallFiles(version.libraries, folder, { libraryHost }),
     ...xmcl.resolveAssetMetadataInstallFiles(version, folder),
   ];
-  const files = await hardenFiles(planned, n, opts.knownHashes);
+  const files = await hardenFiles(planned, n, opts.knownHashes, mcDir);
   await xmcl.execute({ schemaVersion: 1, tasks: [{ id: "version-files", type: "files", files }] }, runtimeFor("fichiers"), execOpts);
 
   if (opts.withAssets !== false) {
-    const assets = await hardenFiles(await xmcl.resolveAssetObjectInstallFiles(version, folder), n);
+    const assets = await hardenFiles(await xmcl.resolveAssetObjectInstallFiles(version, folder), n, new Map(), mcDir);
     await xmcl.execute({ schemaVersion: 1, tasks: [{ id: "asset-objects", type: "files", files: assets }] }, runtimeFor("ressources"), execOpts);
   }
 

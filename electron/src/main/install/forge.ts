@@ -12,7 +12,7 @@ import path from "node:path";
 import { fetchBytes, IntegrityError, type NetOptions } from "../net/download";
 import { installJavaRuntime, type InstallJavaOptions } from "./javaRuntime";
 import { ensureVanillaJson, installVersionFiles, isSafeVersionId, net, type InstalledVersion, type InstallVanillaOptions } from "./vanilla";
-import { allowedUrls, hardenFiles, safeDownloader, type InstallFile, type JavaCommand } from "./xmcl";
+import { allowedUrls, hardenFiles, inside, safeDownloader, type InstallFile, type JavaCommand } from "./xmcl";
 
 export type ForgeLike = "Forge" | "NeoForge";
 
@@ -102,10 +102,6 @@ export function installerFile(mcDir: string, kind: ForgeLike, choice: ForgeChoic
 
 // ---------------------------------------------------------------- garde-fous du plan
 
-function inside(root: string, p: string): boolean {
-  const rel = path.relative(path.resolve(root), path.resolve(p));
-  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
-}
 
 export class UnsafePlanError extends Error {
   constructor(what: string) {
@@ -203,7 +199,7 @@ export async function installForgeLike(mcDir: string, kind: ForgeLike, mc: strin
   await ensureVanillaJson(mcDir, mc, opts);
   const base = await installVersionFiles(mcDir, mc, opts);
 
-  const javaOpts: InstallJavaOptions = { ...n };
+  const javaOpts: InstallJavaOptions = { ...n, onProgress: (p) => opts.onStep?.({ phase: "java", progress: p }) };
   if (opts.java?.platform) javaOpts.platform = opts.java.platform;
   const java = (await installJavaRuntime(mcDir, base.javaComponent, javaOpts)).executable;
 
@@ -235,6 +231,7 @@ export async function installForgeLike(mcDir: string, kind: ForgeLike, mc: strin
       break;
     }
     await hardenPlan(step.plan as { schemaVersion: 1; tasks: PlanTask[] }, mcDir, java, n);
+    opts.onStep?.({ phase: "loader", kind });
     const execOpts: { attempts: number; signal?: AbortSignal } = { attempts: 3 };
     if (opts.signal) execOpts.signal = opts.signal;
     await xmcl.execute(step.plan as never, runtime, execOpts);

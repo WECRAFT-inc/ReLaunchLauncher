@@ -182,9 +182,9 @@ export async function resolveModpack(mc: string, loader: string, roots: Root[], 
   const plan: PlanItem[] = [];
   const seen = new Set<string>();
   for (const item of chosen.values()) {
-    if (item && !seen.has(item.filename)) {
-      // deux projets ne peuvent pas partager un fichier
-      seen.add(item.filename);
+    if (item && !seen.has(item.filename.toLowerCase())) {
+      // deux projets ne peuvent pas partager un fichier (Windows ne distingue pas majuscules et minuscules)
+      seen.add(item.filename.toLowerCase());
       plan.push({ ...item, title: "", required_by: [] });
     }
   }
@@ -242,13 +242,16 @@ export async function buildModpack(
   const { plan, warnings } = await resolveModpack(mc, loader, roots, fetch);
   if (!plan.length) throw new Error(`Aucun de ces mods n'existe pour cette version de Minecraft et ce loader.\n${warnings.join("\n")}`);
   const modsDir = path.join(folder, "mods");
+  // mkdir sans « recursive » : échoue si le dossier existe (même apparu entre-temps) ; seul un dossier créé
+  // ici peut être retiré en cas d'échec (comme mkdir(parents=True) sans exist_ok en Python)
+  await mkdir(path.dirname(folder), { recursive: true });
   try {
-    await stat(folder);
-    throw Object.assign(new Error(`Une instance « ${path.basename(folder)} » existe déjà.`), { code: "EEXIST" });
+    await mkdir(folder);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "EEXIST") throw e;
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") throw Object.assign(new Error(`Une instance « ${path.basename(folder)} » existe déjà.`), { code: "EEXIST" });
+    throw e;
   }
-  await mkdir(modsDir, { recursive: true });
+  await mkdir(modsDir);
   try {
     let done = 0;
     await runLimited(plan, 4, async (i) => {
@@ -403,6 +406,8 @@ export async function applyModpackEdit(
   progress: Progress,
   fetch: Fetch,
   download: Download,
+  /** Retrait d'un mod (ReLaunch : corbeille de Windows) ; par défaut effacement, comme la version Python. */
+  remove: (file: string) => Promise<void> = unlink,
 ): Promise<{ added: number; deps: number; removed: number; pruned: number; warnings: string[] }> {
   const modsDir = path.join(folder, "mods");
   const { minecraft: mc, loader } = meta;
@@ -419,14 +424,14 @@ export async function applyModpackEdit(
     const r = await resolveModpack(mc, loader, newRoots, fetch);
     warnings = r.warnings;
     if (!r.plan.length) throw new Error(`Aucun des mods ajoutés n'existe pour cette version de Minecraft et ce loader.\n${warnings.join("\n")}`);
-    const used = new Set(old.map((m) => m.filename));
+    const used = new Set(old.map((m) => m.filename.toLowerCase())); // Windows : « Foo.jar » = « foo.jar »
     for (const item of r.plan) {
       if (oldIds.has(item.project_id)) {
         // déjà dans le modpack : seul « qui le requiert » est mis à jour
         foundRb[item.project_id] = item.required_by ?? [];
         continue;
       }
-      if (used.has(item.filename) || (await exists(path.join(modsDir, item.filename)))) {
+      if (used.has(item.filename.toLowerCase()) || (await exists(path.join(modsDir, item.filename)))) {
         warnings.push(`« ${item.title} » : un fichier du même nom existe déjà dans « mods », ignoré.`);
         continue;
       }
@@ -455,8 +460,10 @@ export async function applyModpackEdit(
 
   const failed: MetaMod[] = [];
   for (const m of removed) {
+    const f = path.join(modsDir, path.basename(m.filename));
+    if (!(await exists(f))) continue;
     try {
-      await unlink(path.join(modsDir, path.basename(m.filename)));
+      await remove(f);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
       failed.push(m);

@@ -54,7 +54,7 @@ test("plateforme et composant comme minecraft_launcher_lib", () => {
 test("chemins du manifeste : impossible de sortir du dossier Java", () => {
   const root = path.join(path.sep, "r");
   assert.equal(safeJoin(root, "bin/java.exe"), path.join(root, "bin", "java.exe"));
-  for (const bad of ["../x", "bin/../../x", "/etc/x", "C:/Windows/x", "a\\..\\x", "a//b", "./a", ""]) {
+  for (const bad of ["../x", "bin/../../x", "/etc/x", "C:/Windows/x", "a\\..\\x", "a//b", "./a", "", "bin/java.exe:evil", "bin/CON", "lib/nul.dll", "bin/x."]) {
     assert.throws(() => safeJoin(root, bad), IntegrityError, bad);
   }
 });

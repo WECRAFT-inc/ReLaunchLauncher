@@ -8,6 +8,7 @@
 //
 // Les types ci-dessous décrivent seulement ce que ReLaunch utilise ; le module est chargé avec require()
 // pour que le reste du code ne dépende pas des types internes de la bibliothèque.
+import path from "node:path";
 import {
   checkUrl,
   downloadVerified,
@@ -157,13 +158,22 @@ export function allowedUrls(urls: readonly string[], opts: NetOptions = {}): str
  * - aucune confiance « sur la taille » ou « sur la date » : chaque fichier existant est revérifié par empreinte ;
  * - fichier sans empreinte : empreinte « .sha1 » publiée par le dépôt Maven, sinon refus.
  */
+/** `p` est-il dans `root` (après résolution) ? */
+export function inside(root: string, p: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(p));
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
 export async function hardenFiles(
   files: readonly InstallFile[],
   opts: NetOptions = {},
   known: ReadonlyMap<string, { sha1: string; size?: number }> = new Map(),
+  /** Dossier dont aucun fichier ne doit sortir (.minecraft). */
+  root?: string,
 ): Promise<InstallFile[]> {
   const out: InstallFile[] = [];
   for (const f of files) {
+    if (root !== undefined && !inside(root, f.path)) throw new UnsafeUrlError(f.path, "fichier hors du dossier .minecraft");
     const urls = allowedUrls(f.urls, opts);
     if (urls.length === 0) throw new UnsafeUrlError(f.urls[0] ?? f.path, "aucune adresse autorisée pour ce fichier");
     const copy: InstallFile = { path: f.path, urls };

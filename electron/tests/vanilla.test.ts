@@ -45,7 +45,7 @@ function fakeXmcl(files: InstallFile[], assets: InstallFile[]): XmclApi & { plan
 
 test("identifiants de version : noms de dossier sûrs seulement", () => {
   for (const ok of ["1.21.4", "24w14a", "1.20.1-pre1", "1.14.4 Pre-Release 1"]) assert.ok(isSafeVersionId(ok), ok);
-  for (const bad of ["../x", "a/b", "a\\b", "", ".hidden", "x".repeat(80)]) assert.ok(!isSafeVersionId(bad), bad);
+  for (const bad of ["../x", "a/b", "a\\b", "", ".hidden", "x".repeat(80), "1.20 ", "1.20.", "CON", "nul.txt", "COM1", "lpt9"]) assert.ok(!isSafeVersionId(bad), bad);
 });
 
 test("fichier de version modifié en route : refusé avant tout le reste", async () => {

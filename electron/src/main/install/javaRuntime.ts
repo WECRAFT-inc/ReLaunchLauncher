@@ -43,13 +43,19 @@ export function javaExecutable(dir: string, platform: string): string {
   return path.join(dir, "bin", "java");
 }
 
+/** Noms que Windows réserve à des périphériques (CON, NUL, COM1…), avec ou sans extension. */
+export const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
 /** Résout un chemin relatif du manifeste dans `root` ; refuse tout ce qui en sortirait. */
 export function safeJoin(root: string, rel: string): string {
   if (rel === "" || rel.includes("\0") || rel.includes("\\") || path.posix.isAbsolute(rel) || /^[a-zA-Z]:/.test(rel)) {
     throw new IntegrityError(rel, "chemin interdit dans le manifeste Java");
   }
   const parts = rel.split("/");
-  if (parts.some((p) => p === ".." || p === "." || p === "")) throw new IntegrityError(rel, "chemin interdit dans le manifeste Java");
+  // ni « .. », ni flux caché NTFS (« : »), ni nom réservé de Windows (CON, NUL…), ni point/espace final
+  if (parts.some((p) => p === ".." || p === "." || p === "" || p.includes(":") || /[. ]$/.test(p) || WINDOWS_RESERVED.test(p))) {
+    throw new IntegrityError(rel, "chemin interdit dans le manifeste Java");
+  }
   const out = path.join(root, ...parts);
   const back = path.relative(root, out);
   if (back.startsWith("..") || path.isAbsolute(back)) throw new IntegrityError(rel, "chemin hors du dossier Java");

@@ -60,14 +60,14 @@ const SAVE_ERRORS: Record<FailureReason, string> = {
   "write-failed": "Thème appliqué pour cette session : l'enregistrement a échoué.",
 };
 const START_ERRORS = {
-  busy: "Un lancement est déjà en cours.",
+  busy: "Un lancement ou un téléchargement de mods est déjà en cours.",
   invalid: "Instance introuvable : la liste a peut-être changé. Réessayez.",
   "no-version": "Version de Minecraft inconnue pour cette instance : réglez-la d'abord.",
 } as const;
 const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
   invalid: "Instance introuvable : la liste a peut-être changé.",
   refused: "Ce dossier ne peut pas être supprimé ici (il n'est pas dans un dossier d'instances connu).",
-  busy: "Un lancement est en cours : réessayez dans un instant.",
+  busy: "Un lancement ou un téléchargement de mods est en cours : réessayez dans un instant.",
   "trash-failed": "La corbeille de Windows a refusé ce dossier : rien n'a été supprimé.",
 };
 const isTheme = (v: unknown): v is ThemeKey => typeof v === "string" && (THEMES as readonly string[]).includes(v);
@@ -375,7 +375,7 @@ export function App() {
       }
       if (polling.current !== null) {
         setLaunchUi((l) => ({ ...l, box: true }));
-        toast(START_ERRORS.busy, 4000);
+        toast("Un lancement est déjà en cours.", 4000);
         return;
       }
       setRam({ id: x.id, name: x.n, ram: x.r && x.r >= 1 && x.r <= 16 ? x.r : defaultRam });

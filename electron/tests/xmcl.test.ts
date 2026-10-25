@@ -51,6 +51,9 @@ test("préparation : fichier sans empreinte -> « .sha1 » publié par le dépô
 
 test("préparation : sans empreinte publiée, le fichier est refusé", async () => {
   await assert.rejects(hardenFiles([{ path: "/x/a.jar", urls: [`${F}a.jar`] }], { fetch: fakeFetch({}) }), IntegrityError);
+  // profil de loader qui ferait écrire hors de .minecraft : refusé avant tout téléchargement
+  const mc = path.resolve("/x/.minecraft");
+  await assert.rejects(hardenFiles([{ path: path.join(mc, "libraries", "..", "..", "evil.jar"), urls: [`${F}a.jar`] }], { fetch: fakeFetch({}) }, new Map(), mc), /hors du dossier/);
   const bad = fakeFetch({ [`${F}a.jar.sha1`]: { body: "<html>pas une empreinte</html>" } });
   await assert.rejects(publishedSha1([`${F}a.jar`], { fetch: bad }), IntegrityError);
 });

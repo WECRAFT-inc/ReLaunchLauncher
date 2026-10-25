@@ -3,7 +3,7 @@
 import path from "node:path";
 import type { UpdateCheck, UpdateStatus } from "../../shared/api";
 import { HttpError, type NetOptions } from "../net/download";
-import { applyInstaller, files, skippedVersion, updateLog, type UpdateEnv } from "./pending";
+import { applyInstaller, files, skippedVersion, updateLog, writeProof, type UpdateEnv } from "./pending";
 import { downloadUpdate, fetchLatestRelease, GITHUB_REPO, type ReleaseInfo } from "./release";
 import { isNewer } from "./signature";
 
@@ -72,6 +72,8 @@ export class UpdateService {
       try {
         const note = await (this.d.download ?? downloadUpdate)(info, dest, { ...(this.d.net ?? {}), onBytes: (n) => (this.st.done += n) });
         if (note) await updateLog(this.d.env, `v${info.version} : ${note}`);
+        // preuve gardée à côté : l'installeur est revérifié avant chaque lancement (installation, retour arrière)
+        if (!(await writeProof(this.d.env, dest, { version: info.version, sha256: info.sha256!, signature: info.signature ?? "" }))) throw new Error("Preuve de l'installeur impossible à enregistrer.");
         this.st = { ...this.st, phase: "restart", message: "Redémarrage..." };
         await applyInstaller(this.d.env, dest, info.version);
         this.handedOff = true;

@@ -196,8 +196,12 @@ export class LaunchService {
   private step(s: LaunchStatus, step: VanillaStep): void {
     if (step.phase === "liste") s.message = "Récupération de la liste des versions...";
     else if (step.phase === "version") s.message = "Vérification de la version...";
-    else {
-      s.message = step.phase === "fichiers" ? "Téléchargement des fichiers du jeu..." : "Téléchargement des ressources (sons, textures)...";
+    else if (step.phase === "loader") {
+      s.message = `Installation de ${step.kind} (étapes de son installeur)...`;
+      s.progress = null; // pas de mesure fiable : aucune barre plutôt qu'une barre figée
+    } else {
+      s.message =
+        step.phase === "fichiers" ? "Téléchargement des fichiers du jeu..." : step.phase === "java" ? "Téléchargement de Java (nécessaire à l'installation)..." : "Téléchargement des ressources (sons, textures)...";
       s.progress = { done: step.progress.filesDone, total: step.progress.filesTotal };
     }
   }

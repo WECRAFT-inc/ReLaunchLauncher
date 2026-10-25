@@ -16,9 +16,15 @@
 // Les chemins lus dans update_pending.json sont vérifiés (l'ancienne version doit être « <exe>.old » à côté de
 // l'exe, ou un installeur de .wecraft\updates) : un fichier modifié ne peut pas faire renommer ou lancer
 // n'importe quel programme.
+// Un installeur gardé n'est JAMAIS lancé sans preuve : « <installeur>.preuve.json » (version, empreinte, signature
+// de la release) est écrit après le téléchargement vérifié ; juste avant de lancer l'installeur, son empreinte est
+// recalculée et la signature revérifiée (un installeur remplacé dans .wecraft\updates est refusé).
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { appendFile, copyFile, mkdir, readdir, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { JsonStore, stamp } from "../storage/jsonStore";
+import { UPDATE_PUBLIC_KEY, verifyUpdateSignature } from "./signature";
 
 export const INSTALLER_NAME = /^ReLaunch-Setup-(\d+(?:\.\d+){0,3}(?:-[0-9A-Za-z.]+)?)\.exe$/;
 const DOUBLE_CLICK_S = 30;
@@ -47,7 +53,19 @@ export interface UpdateEnv {
   /** Lance un programme détaché. */
   start: (file: string, args: string[]) => Promise<void>;
   now?: () => Date;
+  /** Empreinte et signature publiées pour une version (release GitHub) : sert au passage Python → ReLaunch. */
+  releaseProof?: (version: string) => Promise<{ sha256: string; signature: string } | null>;
+  /** Clé publique (tests uniquement ; sinon la clé intégrée). */
+  publicKey?: string;
 }
+
+export interface InstallerProof {
+  version: string;
+  sha256: string;
+  signature: string;
+}
+
+export const proofPath = (installer: string) => `${installer}.preuve.json`;
 
 export const files = (e: UpdateEnv) => ({
   pending: path.join(e.dataDir, "update_pending.json"),
@@ -65,6 +83,38 @@ const same = (e: UpdateEnv, a: string, b: string) =>
 async function isFile(f: string): Promise<boolean> {
   try {
     return (await stat(f)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+export function sha256File(f: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const h = createHash("sha256");
+    createReadStream(f)
+      .on("data", (c) => h.update(c))
+      .on("error", reject)
+      .on("end", () => resolve(h.digest("hex")));
+  });
+}
+
+/** Note la preuve d'un installeur téléchargé et vérifié (version, empreinte, signature de la release). */
+export async function writeProof(e: UpdateEnv, installer: string, proof: InstallerProof): Promise<boolean> {
+  return e.store.writeAtomic(proofPath(installer), JSON.stringify(proof));
+}
+
+/**
+ * Installeur gardé et prouvé : bon dossier, nom « ReLaunch-Setup-<version>.exe », preuve de la même version,
+ * empreinte RECALCULÉE identique, signature valide. Appelé juste avant chaque lancement d'installeur.
+ */
+export async function verifiedInstaller(e: UpdateEnv, f: string): Promise<boolean> {
+  try {
+    const m = INSTALLER_NAME.exec(path.basename(f));
+    if (!m || !isKeptInstaller(e, f) || !(await isFile(f))) return false;
+    const d = await e.store.read(proofPath(f));
+    if (!d || d["version"] !== m[1] || typeof d["sha256"] !== "string" || typeof d["signature"] !== "string") return false;
+    const sha = await sha256File(f);
+    return sha === d["sha256"].toLowerCase() && verifyUpdateSignature(m[1]!, sha, d["signature"], e.publicKey ?? UPDATE_PUBLIC_KEY);
   } catch {
     return false;
   }
@@ -142,7 +192,12 @@ export async function startupCheck(e: UpdateEnv): Promise<{ data: PendingData; k
     if (t - Number(r.data.last_start ?? 0) > DOUBLE_CLICK_S) r.data.starts += 1;
     r.data.last_start = t;
     await e.store.writeAtomic(files(e).pending, JSON.stringify(r.data));
-    return r.data.starts >= 2 && r.data.old && (await isFile(r.data.old)) ? r : null;
+    if (r.data.starts < 2 || !r.data.old || !(await isFile(r.data.old))) return null;
+    if (r.kind === "electron" && !(await verifiedInstaller(e, r.data.old))) {
+      await updateLog(e, `retour arrière impossible : l'installeur de v${r.data.from} n'a pas pu être vérifié`);
+      return null;
+    }
+    return r;
   } catch (err) {
     await updateLog(e, `contrôle de mise à jour au démarrage impossible (${String(err)})`);
     return null;
@@ -154,7 +209,8 @@ async function cleanup(e: UpdateEnv, r: { data: PendingData; kind: PendingKind }
   const keep = `ReLaunch-Setup-${e.version}.exe`;
   try {
     for (const n of await readdir(files(e).updates)) {
-      if (INSTALLER_NAME.test(n) && n.toLowerCase() !== keep.toLowerCase()) await unlink(path.join(files(e).updates, n)).catch(() => undefined);
+      const inst = n.toLowerCase().endsWith(".preuve.json") ? n.slice(0, -".preuve.json".length) : n;
+      if (INSTALLER_NAME.test(inst) && inst.toLowerCase() !== keep.toLowerCase()) await unlink(path.join(files(e).updates, n)).catch(() => undefined);
     }
   } catch {
     // pas de dossier updates
@@ -185,11 +241,23 @@ export async function markHealthy(e: UpdateEnv, handedOff = false): Promise<bool
   const r = await readPending(e);
   if (!r) return false;
   if (r.kind === "passage") {
+    // L'installeur n'est gardé que si son empreinte est celle, signée, de la release de cette version.
+    const kept = path.join(files(e).updates, `ReLaunch-Setup-${e.version}.exe`);
+    let ok = false;
     try {
       await mkdir(files(e).updates, { recursive: true });
-      await copyFile(r.data.exe, path.join(files(e).updates, `ReLaunch-Setup-${e.version}.exe`));
+      await copyFile(r.data.exe, kept);
+      const proof = await (e.releaseProof?.(e.version) ?? Promise.resolve(null)).catch(() => null);
+      const sha = await sha256File(kept);
+      if (proof && proof.sha256.toLowerCase() === sha && verifyUpdateSignature(e.version, sha, proof.signature, e.publicKey ?? UPDATE_PUBLIC_KEY)) {
+        ok = await writeProof(e, kept, { version: e.version, sha256: sha, signature: proof.signature });
+      }
     } catch {
-      // sans cette copie, seul le retour arrière de la PROCHAINE mise à jour est perdu
+      ok = false;
+    }
+    if (!ok) {
+      await unlink(kept).catch(() => undefined);
+      await updateLog(e, `installeur de v${e.version} non vérifié : pas gardé (retour arrière de la prochaine mise à jour impossible)`);
     }
   }
   try {
@@ -237,10 +305,18 @@ export async function restorePrevious(e: UpdateEnv, r: { data: PendingData; kind
     await e.start(cur, []);
     return;
   }
-  // electron : l'installeur de la version précédente réinstalle celle-ci par-dessus
-  await e.start(data.old, ["/S", "--force-run"]);
+  // electron : l'installeur de la version précédente (revérifié) réinstalle celle-ci par-dessus
+  if (!(await verifiedInstaller(e, data.old))) throw new Error("L'installeur de la version précédente n'a pas pu être vérifié : retour arrière annulé.");
+  // noté AVANT de lancer l'installeur (il peut fermer ReLaunch aussitôt) ; remis en place s'il ne démarre pas
   await unlink(files(e).pending).catch(() => undefined);
   await e.store.writeAtomic(files(e).skip, JSON.stringify({ version: data.to })).catch(() => false);
+  try {
+    await e.start(data.old, ["/S", "--force-run"]);
+  } catch (err) {
+    await e.store.writeAtomic(files(e).pending, JSON.stringify(data)).catch(() => false);
+    await unlink(files(e).skip).catch(() => undefined);
+    throw err;
+  }
   await updateLog(e, `retour à v${data.from} (v${data.to} ne démarrait pas) avec ${p(e).basename(data.old)}`);
 }
 
@@ -249,9 +325,10 @@ export async function restorePrevious(e: UpdateEnv, r: { data: PendingData; kind
  * silencieux ; l'appelant quitte ensuite ReLaunch (l'installeur remplace les fichiers et relance l'appli).
  */
 export async function applyInstaller(e: UpdateEnv, installer: string, to: string): Promise<void> {
-  if (!isKeptInstaller(e, installer)) throw new Error("Installeur inattendu : mise à jour annulée.");
+  if (!isKeptInstaller(e, installer) || path.basename(installer).toLowerCase() !== `relaunch-setup-${to}.exe`.toLowerCase()) throw new Error("Installeur inattendu : mise à jour annulée.");
+  if (!(await verifiedInstaller(e, installer))) throw new Error("Installeur non vérifié (empreinte ou signature) : mise à jour annulée.");
   const current = path.join(files(e).updates, `ReLaunch-Setup-${e.version}.exe`);
-  const old = (await isFile(current)) ? current : "";
+  const old = (await verifiedInstaller(e, current)) ? current : "";
   await e.store.writeAtomic(files(e).pending, JSON.stringify({ exe: e.execPath, old, from: e.version, to, starts: 0, kind: "electron" }));
   await updateLog(e, `mise à jour installée : v${e.version} -> v${to}${old ? ` (installeur de v${e.version} gardé pour un retour arrière)` : " (pas d'installeur de la version actuelle : retour arrière impossible)"}`);
   await e.start(installer, ["/S", "--force-run"]);

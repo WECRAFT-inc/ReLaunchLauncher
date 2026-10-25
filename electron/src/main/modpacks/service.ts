@@ -54,6 +54,8 @@ export interface ModpackDeps {
   fetch?: Fetch;
   download?: Download;
   versions?: () => Promise<string[]>;
+  /** Retire un mod du modpack : corbeille de Windows (jamais d'effacement définitif). */
+  trash?: (file: string) => Promise<void>;
 }
 
 export class ModpackService {
@@ -112,7 +114,8 @@ export class ModpackService {
     return this.job && this.job.id === id ? { ...this.job, warnings: [...this.job.warnings] } : null;
   }
 
-  private busy(): boolean {
+  /** Une création ou une modification est en cours (lancement et suppression refusés pendant ce temps). */
+  busy(): boolean {
     return !!this.job && this.job.phase === "en-cours";
   }
 
@@ -153,7 +156,8 @@ export class ModpackService {
 
   private async metaOf(id: unknown): Promise<{ folder: string; display: string; meta: ModpackMeta } | null> {
     const inst = this.d.instances.target(id);
-    if (!inst) return null;
+    // comme la version Python : seuls les WePacks créés dans WeCraft se modifient ici (jamais CurseForge, Prism…)
+    if (!inst || inst.source !== "WeCraft") return null;
     try {
       const meta = JSON.parse(await readFile(path.join(inst.folder, "wecraft_modpack.json"), "utf8")) as ModpackMeta;
       if (!meta || !isMc(meta.minecraft) || !isLoader(meta.loader) || !Array.isArray(meta.mods)) return null;
@@ -197,7 +201,7 @@ export class ModpackService {
     const keep = new Set(sel.map((x) => x.project_id));
     if (keep.size === oldRoots.size && [...keep].every((k) => oldRoots.has(k))) return { ok: false, reason: "unchanged" };
     return this.run(async (progress) => {
-      const r = await applyModpackEdit(m.folder, m.meta, sel, progress, this.fetch, this.download);
+      const r = await applyModpackEdit(m.folder, m.meta, sel, progress, this.fetch, this.download, this.d.trash);
       const s = (n: number) => (n > 1 ? "s" : "");
       const parts: string[] = [];
       if (r.added) parts.push(`${r.added} mod${s(r.added)} ajouté${s(r.added)}${r.deps ? ` (+ ${r.deps} dépendance${s(r.deps)})` : ""}`);

@@ -6,6 +6,7 @@
 // Une release sans empreinte ou sans signature est refusée. Serveurs GitHub en HTTPS uniquement.
 import { unlink } from "node:fs/promises";
 import { downloadVerified, fetchBytes, fetchJson, type NetOptions } from "../net/download";
+import { INSTALLER_NAME } from "./pending";
 import { checkUpdateSignature, UpdateRefused } from "./signature";
 
 export const GITHUB_REPO = "Rexidelamort/WeCraft-Releases";
@@ -40,12 +41,30 @@ async function readSmall(url: string, opts: NetOptions): Promise<string> {
   return (await fetchBytes(url, 4096, {}, net(opts))).toString("utf8");
 }
 
-/** Dernière release publiée : version, notes, premier .exe, son empreinte SHA-256 et sa signature. */
+/**
+ * Dernière release publiée : version, notes, installeur, son empreinte SHA-256 et sa signature.
+ * Seul l'installeur « ReLaunch-Setup-<version>.exe » de la version du tag est retenu (jamais un autre .exe,
+ * par exemple le WeCraft.exe de la version Python) ; un tag qui ne donne pas un nom sûr = pas d'installeur.
+ */
 export async function fetchLatestRelease(opts: NetOptions = {}, repo: string = GITHUB_REPO): Promise<ReleaseInfo> {
   const d = await fetchJson<Record<string, unknown>>(`https://api.github.com/repos/${repo}/releases/latest`, 2 * 1024 * 1024, {}, net(opts));
+  return parseRelease(d, opts, repo);
+}
+
+/** Empreinte et signature publiées pour UNE version (release « v<version> »), sinon null. */
+export async function fetchReleaseProof(version: string, opts: NetOptions = {}, repo: string = GITHUB_REPO): Promise<{ sha256: string; signature: string } | null> {
+  if (!INSTALLER_NAME.test(`ReLaunch-Setup-${version}.exe`)) return null;
+  const d = await fetchJson<Record<string, unknown>>(`https://api.github.com/repos/${repo}/releases/tags/v${version}`, 2 * 1024 * 1024, {}, net(opts));
+  const r = await parseRelease(d, opts, repo);
+  return r.version === version && r.sha256 && r.signature ? { sha256: r.sha256, signature: r.signature } : null;
+}
+
+async function parseRelease(d: Record<string, unknown>, opts: NetOptions, repo: string): Promise<ReleaseInfo> {
   const assets = (Array.isArray(d["assets"]) ? d["assets"] : []) as Asset[];
   const nameOf = (a: Asset) => (typeof a.name === "string" ? a.name.toLowerCase() : "");
-  const exe = assets.find((a) => nameOf(a).endsWith(".exe")) ?? null;
+  const tag0 = typeof d["tag_name"] === "string" ? d["tag_name"] : "";
+  const want = `ReLaunch-Setup-${tag0.replace(/^[vV]+/, "")}.exe`;
+  const exe = INSTALLER_NAME.test(want) ? (assets.find((a) => nameOf(a) === want.toLowerCase()) ?? null) : null;
   let sha: string | null = null;
   let sig: string | null = null;
   if (exe) {

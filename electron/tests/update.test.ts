@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { applyInstaller, cleanupLeftovers, files, markHealthy, readPending, restorePrevious, skippedVersion, startupCheck, type UpdateEnv } from "../src/main/update/pending";
@@ -71,7 +72,7 @@ test("politique : release non signée ou mal signée refusée (messages de la ve
 const API = "https://api.github.com/repos/Rexidelamort/WeCraft-Releases/releases/latest";
 const DL = "https://github.com/Rexidelamort/WeCraft-Releases/releases/download/v2.0.0/";
 
-test("release : premier .exe, empreinte (digest ou .sha256), signature, notes", async () => {
+test("release : installeur ReLaunch-Setup-<version>.exe seulement, empreinte (digest ou .sha256), signature, notes", async () => {
   const sha = "b".repeat(64);
   const release = (digest?: string) => ({
     tag_name: "v2.0.0",
@@ -79,21 +80,27 @@ test("release : premier .exe, empreinte (digest ou .sha256), signature, notes", 
     html_url: "https://github.com/Rexidelamort/WeCraft-Releases/releases/tag/v2.0.0",
     assets: [
       { name: "notes.txt", browser_download_url: `${DL}notes.txt` },
-      { name: "ReLaunch-Setup.exe", browser_download_url: `${DL}ReLaunch-Setup.exe`, size: 10, ...(digest ? { digest } : {}) },
-      { name: "ReLaunch-Setup.exe.sha256", browser_download_url: `${DL}ReLaunch-Setup.exe.sha256` },
-      { name: "ReLaunch-Setup.exe.sig", browser_download_url: `${DL}ReLaunch-Setup.exe.sig` },
+      { name: "WeCraft.exe", browser_download_url: `${DL}WeCraft.exe`, size: 99 },
+      { name: "ReLaunch-Setup-2.0.0.exe", browser_download_url: `${DL}ReLaunch-Setup-2.0.0.exe`, size: 10, ...(digest ? { digest } : {}) },
+      { name: "ReLaunch-Setup-2.0.0.exe.sha256", browser_download_url: `${DL}ReLaunch-Setup-2.0.0.exe.sha256` },
+      { name: "ReLaunch-Setup-2.0.0.exe.sig", browser_download_url: `${DL}ReLaunch-Setup-2.0.0.exe.sig` },
     ],
   });
   const routes = {
-    [`${DL}ReLaunch-Setup.exe.sha256`]: { body: `${sha}  ReLaunch-Setup.exe\n` },
-    [`${DL}ReLaunch-Setup.exe.sig`]: { body: " SIG== \n" },
+    [`${DL}ReLaunch-Setup-2.0.0.exe.sha256`]: { body: `${sha}  ReLaunch-Setup-2.0.0.exe\n` },
+    [`${DL}ReLaunch-Setup-2.0.0.exe.sig`]: { body: " SIG== \n" },
   };
   let info = await fetchLatestRelease({ fetch: fakeFetch({ ...routes, [API]: { body: JSON.stringify(release()) } }) });
-  assert.deepEqual(info, { version: "2.0.0", notes: "Nouveautés", page: release().html_url, url: `${DL}ReLaunch-Setup.exe`, size: 10, sha256: sha, signature: "SIG==" });
+  assert.deepEqual(info, { version: "2.0.0", notes: "Nouveautés", page: release().html_url, url: `${DL}ReLaunch-Setup-2.0.0.exe`, size: 10, sha256: sha, signature: "SIG==" });
   info = await fetchLatestRelease({ fetch: fakeFetch({ ...routes, [API]: { body: JSON.stringify(release(`sha256:${"C".repeat(64)}`)) } }) });
   assert.equal(info.sha256, "c".repeat(64));
+  // jamais un autre .exe (WeCraft.exe de la version Python) ; tag qui ne donne pas un nom sûr = pas d'installeur
+  const odd = { ...release(), tag_name: "v2.0.0/../../x" };
+  assert.equal((await fetchLatestRelease({ fetch: fakeFetch({ ...routes, [API]: { body: JSON.stringify(odd) } }) })).url, null);
+  const pyOnly = { ...release(), assets: [{ name: "WeCraft.exe", browser_download_url: `${DL}WeCraft.exe` }] };
+  assert.equal((await fetchLatestRelease({ fetch: fakeFetch({ [API]: { body: JSON.stringify(pyOnly) } }) })).url, null);
   // adresse hors GitHub : refusée par la couche réseau
-  const evil = { ...release(), assets: [{ name: "x.exe", browser_download_url: "https://exemple.com/x.exe" }, { name: "x.exe.sig", browser_download_url: "https://exemple.com/x.exe.sig" }] };
+  const evil = { ...release(), assets: [{ name: "ReLaunch-Setup-2.0.0.exe", browser_download_url: "https://exemple.com/x.exe" }, { name: "ReLaunch-Setup-2.0.0.exe.sig", browser_download_url: "https://exemple.com/x.exe.sig" }] };
   await assert.rejects(fetchLatestRelease({ fetch: fakeFetch({ [API]: { body: JSON.stringify(evil) } }) }), /serveur non autorisé/);
 });
 
@@ -142,6 +149,15 @@ function env(dir: string, over: Partial<UpdateEnv> = {}): UpdateEnv & { started:
   };
 }
 
+const KEYS = testKeys();
+const shaOf = (t: string) => createHash("sha256").update(t).digest("hex");
+const signed = (version: string, content: string) => ({ sha256: shaOf(content), signature: KEYS.signer(updateSignedMessage(version, shaOf(content))) });
+/** Installeur gardé avec sa preuve (comme après un téléchargement vérifié). */
+function keep(file: string, version: string, content: string): void {
+  writeFileSync(file, content);
+  writeFileSync(`${file}.preuve.json`, JSON.stringify({ version, ...signed(version, content) }));
+}
+
 /** Passage depuis la version Python : WeCraft.exe (devenu l'installeur ReLaunch) + WeCraft.exe.old (Python). */
 function passage(dir: string): { exe: string; old: string } {
   const app = path.join(dir, "WeCraft");
@@ -161,19 +177,35 @@ test("passage Python → ReLaunch : 1ᵉʳ démarrage puis validation ; installe
   const { dir, cleanup } = tempDir("e5-passage-ok");
   try {
     const { exe, old } = passage(dir);
-    const e = env(dir);
+    const e = env(dir, { publicKey: KEYS.pub, releaseProof: async (v) => signed(v, "INSTALLEUR RELAUNCH 2.0.0") });
     assert.equal(await startupCheck(e), null, "1ᵉʳ démarrage : rien à proposer");
     assert.equal(JSON.parse(readFileSync(files(e).pending, "utf8")).starts, 1);
     assert.equal(await markHealthy(e, true), false, "processus qui a passé la main : ne valide rien");
     assert.equal(await markHealthy(e), true);
     assert.equal(existsSync(files(e).pending), false);
     assert.equal(readFileSync(path.join(files(e).updates, "ReLaunch-Setup-2.0.0.exe"), "utf8"), "INSTALLEUR RELAUNCH 2.0.0");
+    assert.ok(existsSync(path.join(files(e).updates, "ReLaunch-Setup-2.0.0.exe.preuve.json")), "installeur gardé avec sa preuve");
     assert.equal(existsSync(old), false);
     assert.equal(existsSync(path.join(path.dirname(exe), "WeCraft.exe.1729000000.old")), false);
     assert.equal(existsSync(path.join(path.dirname(exe), "autre.old")), true, "jamais un autre fichier");
     assert.equal(existsSync(exe), true, "WeCraft.exe (installeur) reste : les raccourcis continuent de marcher");
   } finally {
     cleanup();
+  }
+});
+
+test("passage : installeur sans preuve (hors ligne, empreinte ou signature fausse) : pas gardé, validation quand même", async () => {
+  for (const proof of [null, signed("2.0.0", "AUTRE FICHIER"), { ...signed("2.0.0", "INSTALLEUR RELAUNCH 2.0.0"), signature: KEYS.signer(Buffer.from("x")) }]) {
+    const { dir, cleanup } = tempDir("e5-passage-sans-preuve");
+    try {
+      passage(dir);
+      const e = env(dir, { publicKey: KEYS.pub, releaseProof: async () => proof });
+      assert.equal(await markHealthy(e), true);
+      assert.equal(existsSync(path.join(files(e).updates, "ReLaunch-Setup-2.0.0.exe")), false);
+      assert.match(readFileSync(files(e).log, "utf8"), /non vérifié : pas gardé/);
+    } finally {
+      cleanup();
+    }
   }
 });
 
@@ -261,18 +293,24 @@ test("fichier de suivi modifié ou mal formé : ignoré, jamais de renommage ni 
 test("ReLaunch → ReLaunch : installeur lancé en silencieux, retour arrière avec l'installeur précédent", async () => {
   const { dir, cleanup } = tempDir("e5-electron");
   try {
-    const e1 = env(dir, { version: "2.0.0" });
+    const e1 = env(dir, { version: "2.0.0", publicKey: KEYS.pub });
     mkdirSync(files(e1).updates, { recursive: true });
     const cur = path.join(files(e1).updates, "ReLaunch-Setup-2.0.0.exe");
     const next = path.join(files(e1).updates, "ReLaunch-Setup-2.1.0.exe");
-    writeFileSync(cur, "2.0.0");
-    writeFileSync(next, "2.1.0");
+    keep(cur, "2.0.0", "2.0.0");
+    keep(next, "2.1.0", "2.1.0");
     await assert.rejects(applyInstaller(e1, path.join(dir, "ailleurs.exe"), "2.1.0"), /inattendu/);
+    await assert.rejects(applyInstaller(e1, cur, "2.1.0"), /inattendu/, "installeur d'une autre version");
+    // installeur remplacé après le téléchargement : refusé, rien lancé
+    writeFileSync(next, "PIÉGÉ");
+    await assert.rejects(applyInstaller(e1, next, "2.1.0"), /non vérifié/);
+    assert.deepEqual(e1.started, []);
+    keep(next, "2.1.0", "2.1.0");
     await applyInstaller(e1, next, "2.1.0");
     assert.deepEqual(e1.started, [`${next} /S --force-run`]);
 
     // nouvelle version : 2 démarrages ratés → l'installeur 2.0.0 est relancé
-    const e2 = env(dir, { version: "2.1.0" });
+    const e2 = env(dir, { version: "2.1.0", publicKey: KEYS.pub });
     assert.equal(await startupCheck(e2), null);
     e2.clock.t += 60_000;
     const failed = await startupCheck(e2);
@@ -280,15 +318,35 @@ test("ReLaunch → ReLaunch : installeur lancé en silencieux, retour arrière a
     await restorePrevious(e2, failed);
     assert.deepEqual(e2.started, [`${cur} /S --force-run`]);
     assert.equal(await skippedVersion(e2), "2.1.0");
+    assert.equal(existsSync(files(e2).pending), false);
+
+    // installeur précédent remplacé : le retour arrière n'est ni proposé ni lancé
+    await applyInstaller(e1, next, "2.1.0");
+    writeFileSync(cur, "PIÉGÉ");
+    const e2b = env(dir, { version: "2.1.0", publicKey: KEYS.pub });
+    assert.equal(await startupCheck(e2b), null);
+    e2b.clock.t += 60_000;
+    assert.equal(await startupCheck(e2b), null, "pas proposé");
+    const r = await readPending(e2b);
+    await assert.rejects(restorePrevious(e2b, r!), /pas pu être vérifié/);
+    assert.deepEqual(e2b.started, []);
+    keep(cur, "2.0.0", "2.0.0");
+
+    // l'installeur ne démarre pas : le suivi est remis en place, la version n'est pas abandonnée
+    const e2c = env(dir, { version: "2.1.0", publicKey: KEYS.pub, start: async () => { throw new Error("refus"); } });
+    await unlink(files(e2c).skip);
+    await assert.rejects(restorePrevious(e2c, (await readPending(e2c))!), /refus/);
+    assert.ok(existsSync(files(e2c).pending));
+    assert.equal(await skippedVersion(e2c), null);
 
     // autre essai : validation, l'installeur inutile est supprimé, celui de la version en place gardé
     await applyInstaller(e1, next, "2.1.0");
-    const e3 = env(dir, { version: "2.1.0" });
+    const e3 = env(dir, { version: "2.1.0", publicKey: KEYS.pub });
     assert.equal(await startupCheck(e3), null);
     assert.equal(await markHealthy(e3), true);
-    assert.deepEqual(readdirSync(files(e3).updates).sort(), ["ReLaunch-Setup-2.1.0.exe"]);
+    assert.deepEqual(readdirSync(files(e3).updates).sort(), ["ReLaunch-Setup-2.1.0.exe", "ReLaunch-Setup-2.1.0.exe.preuve.json"]);
     await cleanupLeftovers(e3);
-    assert.deepEqual(readdirSync(files(e3).updates), ["ReLaunch-Setup-2.1.0.exe"]);
+    assert.deepEqual(readdirSync(files(e3).updates).sort(), ["ReLaunch-Setup-2.1.0.exe", "ReLaunch-Setup-2.1.0.exe.preuve.json"]);
   } finally {
     cleanup();
   }
@@ -297,8 +355,8 @@ test("ReLaunch → ReLaunch : installeur lancé en silencieux, retour arrière a
 test("service : version abandonnée non reproposée au démarrage, message d'erreur clair en manuel, installation suivie", async () => {
   const { dir, cleanup } = tempDir("e5-service");
   try {
-    const e = env(dir, { version: "2.0.0" });
-    const info: ReleaseInfo = { version: "2.1.0", notes: "x".repeat(600), page: "https://github.com/Rexidelamort/WeCraft-Releases/releases/tag/v2.1.0", url: `${DL}ReLaunch-Setup.exe`, size: 4, sha256: "a".repeat(64), signature: "s" };
+    const e = env(dir, { version: "2.0.0", publicKey: KEYS.pub });
+    const info: ReleaseInfo = { version: "2.1.0", notes: "x".repeat(600), page: "https://github.com/Rexidelamort/WeCraft-Releases/releases/tag/v2.1.0", url: `${DL}ReLaunch-Setup-2.1.0.exe`, size: 4, ...signed("2.1.0", "2.1.0") };
     let quit = 0;
     const svc = new UpdateService({
       env: e,
