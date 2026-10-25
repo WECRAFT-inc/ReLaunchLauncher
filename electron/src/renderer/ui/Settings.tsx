@@ -916,7 +916,7 @@ function AccountGroup() {
         <div className="setrow">
           <span>
             <b>{u.pseudo}</b>
-            <small>{[u.minecraftName ? `${t("Minecraft")} : ${u.minecraftName}` : t("Compte Minecraft pas encore lié (commande /link en jeu)"), `${u.eclats} ${t("éclats")}`, exp ? `${t("session valable jusqu'au")} ${exp}` : ""].filter(Boolean).join(" · ")}</small>
+            <small>{[u.minecraftName ? `${t("Minecraft")} : ${u.minecraftName}` : t("Compte Minecraft pas encore lié (commande /link en jeu)"), `${u.eclats} ${t("éclats")}`, u.premium ? t("Premium") : "", exp ? `${t("session valable jusqu'au")} ${exp}` : ""].filter(Boolean).join(" · ")}</small>
           </span>
           <span className="row" style={{ gap: "8px" }}>
             <button className="btn sm" disabled={!!busy} onClick={() => act("refresh", window.wecraft.account.refresh())}>{t("Actualiser")}</button>
@@ -1002,7 +1002,7 @@ function SkinsGroup() {
   const use = (k: string) => editPref((p) => (p["lskin"] = k || null));
   const catalog = relink?.data?.skins ?? [];
   const lock = (u: { event: boolean; shop: number; achievement: boolean; premium: boolean }) =>
-    [u.event ? t("event ReLaunch") : "", u.shop ? `${u.shop} ${t("éclats")}` : "", u.achievement ? t("succès") : "", u.premium ? t("premium") : ""].filter(Boolean);
+    [u.event ? t("event ReLaunch") : "", u.shop ? `${u.shop} ${t("éclats")}` : "", u.achievement ? t("succès") : "", u.premium ? t("premium (boutique)") : ""].filter(Boolean);
   const run = (key: string, p: Promise<{ ok: boolean; message?: string; canceled?: boolean; skin?: { key: string; manifest: { name: string } } }>) => {
     setBusy(key);
     void p

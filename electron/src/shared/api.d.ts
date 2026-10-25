@@ -654,7 +654,7 @@ export interface RelinkBootstrap {
 /** Compte ReLink du joueur (le jeton de session ne quitte jamais le processus principal). */
 export interface AccountState {
   loggedIn: boolean;
-  user: { id: string; pseudo: string; minecraftName: string | null; eclats: number } | null;
+  user: { id: string; pseudo: string; minecraftName: string | null; eclats: number; premium: boolean } | null;
   expiresAt: string | null;
   /** Le service ReLink n'a pas répondu au dernier essai. */
   offline: boolean;

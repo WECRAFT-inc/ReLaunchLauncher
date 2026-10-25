@@ -67,6 +67,7 @@ function decodeUser(v: unknown): AccountState["user"] {
     pseudo: str(o["pseudo"], 60) || "Joueur",
     minecraftName: /^[A-Za-z0-9_]{1,16}$/.test(String(o["minecraftName"] ?? "")) ? String(o["minecraftName"]) : null,
     eclats: typeof o["eclats"] === "number" && Number.isFinite(o["eclats"]) ? Math.max(0, Math.floor(o["eclats"])) : 0,
+    premium: o["premium"] === true,
   };
 }
 function decodeMe(v: unknown): { user: AccountState["user"]; me: Me; expiresAt: string | null } {
