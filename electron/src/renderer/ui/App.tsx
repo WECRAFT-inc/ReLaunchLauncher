@@ -34,6 +34,7 @@ import {
 } from "./model";
 import { DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
 import { handleEscape, useEscapeLayer } from "./keys";
+import { BASE_THEMES, cleanRotation, previewRotation, useThemeRotation } from "./theme";
 import { moveNav, playFlip, Settings, snapPos } from "./Settings";
 import { Discover, emptyDraft } from "./Discover";
 import { CreateModal } from "./Create";
@@ -256,6 +257,14 @@ export function App() {
     applyingSaved.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Thème dégradé automatique (affichage seulement) et animations réduites
+  const rot = useMemo(() => cleanRotation(pref["rot"]), [pref]);
+  useThemeRotation(rot, pref.skin, pref.anim);
+  useEffect(() => {
+    document.documentElement.classList.toggle("reduce-motion", pref.anim === false);
+  }, [pref.anim]);
+  const previewStop = useRef<(() => void) | null>(null);
 
   // ------------------------------------------------------------ instances (lot E2)
   const loadInstances = useCallback(
@@ -731,6 +740,40 @@ export function App() {
       case "pref":
         editPref((p) => (p[a.dataset["k"]!] = !p[a.dataset["k"]!]));
         break;
+      case "imgsTgl":
+        editPref((p) => (p.imgs = p.imgs === false));
+        break;
+      case "animTgl":
+        editPref((p) => (p.anim = p.anim === false));
+        break;
+      case "rotTgl":
+      case "rotTheme":
+      case "rotUp":
+      case "rotDown":
+      case "rotSec":
+      case "rotFade": {
+        const v = a.dataset["v"] ?? "";
+        editPref((p) => {
+          const r = cleanRotation(p["rot"]);
+          if (act === "rotTgl") r.on = !r.on;
+          if (act === "rotTheme") r.list = r.list.includes(v) ? r.list.filter((t) => t !== v) : [...r.list, v];
+          if (act === "rotUp" || act === "rotDown") {
+            const i = r.list.indexOf(v);
+            const j = act === "rotUp" ? i - 1 : i + 1;
+            if (i >= 0 && j >= 0 && j < r.list.length) [r.list[i], r.list[j]] = [r.list[j]!, r.list[i]!];
+          }
+          if (act === "rotSec") r.sec = Number(v);
+          if (act === "rotFade") r.fade = Number(v);
+          p["rot"] = cleanRotation(r);
+        });
+        break;
+      }
+      case "rotPreview": {
+        previewStop.current?.();
+        const list = rot.list.length >= 2 ? rot.list : [...BASE_THEMES];
+        previewStop.current = previewRotation(list, rot.fade, pref.anim, () => (previewStop.current = null));
+        break;
+      }
       case "discord":
         setDiscord(!discordOn);
         break;

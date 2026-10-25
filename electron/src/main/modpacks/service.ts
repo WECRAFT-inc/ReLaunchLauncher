@@ -60,6 +60,8 @@ export interface ModpackDeps {
   trash?: (file: string) => Promise<void>;
   /** Icônes des résultats (adresses app:// des images Modrinth). */
   media?: MediaStore;
+  /** Journal de l'application (résultat de chaque opération). */
+  log?: { info(origin: string, msg: string): unknown; error(origin: string, msg: string): unknown } | null;
 }
 
 export class ModpackService {
@@ -180,8 +182,14 @@ export class ModpackService {
     const job: ModpackJob = { id: randomUUID(), phase: "en-cours", message: "Préparation...", done: 0, total: 0, warnings: [] };
     this.job = job;
     void work((done, total, msg) => Object.assign(job, { done, total, message: total ? `Téléchargement des mods (${done}/${total}) : ${msg}` : msg }))
-      .then((r) => Object.assign(job, { phase: "termine", message: r.summary, warnings: r.warnings }))
-      .catch((e: unknown) => Object.assign(job, { phase: "erreur", message: explainModrinthError(e) }));
+      .then((r) => {
+        Object.assign(job, { phase: "termine", message: r.summary, warnings: r.warnings });
+        this.d.log?.info("Modpacks", `${r.summary}${r.warnings.length ? ` (${r.warnings.length} avertissement(s) : ${r.warnings.slice(0, 5).join(" ; ")})` : ""}`);
+      })
+      .catch((e: unknown) => {
+        Object.assign(job, { phase: "erreur", message: explainModrinthError(e) });
+        this.d.log?.error("Modpacks", explainModrinthError(e));
+      });
     return { ok: true, job: job.id };
   }
 

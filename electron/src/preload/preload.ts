@@ -24,6 +24,9 @@ const SET_ICON = "instances:set-icon";
 const SCREENSHOTS = "instances:screenshots";
 const SET_BACKGROUND = "instances:set-background";
 const IMPORT_ICON = "media:import-icon";
+const LOGS_READ = "logs:read";
+const LOGS_OPEN_DIR = "logs:open-dir";
+const LOGS_COPY = "logs:copy";
 const MAKE_ICON = "media:make-icon";
 const DISCORD_STATE = "discord:state";
 const DISCORD_SET = "discord:set";
@@ -67,6 +70,11 @@ const api: WeCraftApi = Object.freeze({
     setIcon: (id: string, icon: unknown) => ipcRenderer.invoke(SET_ICON, id, icon),
     screenshots: (id: string) => ipcRenderer.invoke(SCREENSHOTS, id),
     setBackground: (id: string, how: string, token?: string) => ipcRenderer.invoke(SET_BACKGROUND, id, how, token ?? null),
+  }),
+  logs: Object.freeze({
+    read: () => ipcRenderer.invoke(LOGS_READ),
+    openDir: () => ipcRenderer.invoke(LOGS_OPEN_DIR),
+    copy: (text: string) => ipcRenderer.invoke(LOGS_COPY, typeof text === "string" ? text : ""),
   }),
   media: Object.freeze({
     importIcon: () => ipcRenderer.invoke(IMPORT_ICON),

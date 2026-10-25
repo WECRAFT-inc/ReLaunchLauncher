@@ -111,6 +111,15 @@ export type BackgroundResult = { ok: true; url: string | null } | { ok: false; m
 export type IconImportResult = { ok: true; key: string; ext: string; width: number; height: number; url: string } | { ok: false; message?: string; canceled?: true };
 export type MakeIconResult = { ok: true; icon: IconChoice; url: string } | { ok: false; message: string };
 
+export interface LogEntry {
+  time: string;
+  level: "error" | "warn" | "info";
+  origin: string;
+  text: string;
+  /** Niveau déduit du texte (journal sans niveau écrit). */
+  guessed: boolean;
+}
+
 export interface InstanceList {
   instances: InstanceView[];
   /** Instances masquées (réglage de la version Python), seulement comptées. */
@@ -324,6 +333,14 @@ export interface WeCraftApi {
     screenshots(id: string): Promise<ScreenshotItem[]>;
     /** Fond : capture listée (`shot` + jeton), image du PC (`import`, fenêtre du système) ou aucun (`clear`). */
     setBackground(id: string, how: "shot" | "import" | "clear", token?: string): Promise<BackgroundResult>;
+  };
+  logs: {
+    /** Fin des journaux (relaunch.log, lancement.log, update.log), les plus récentes d'abord, textes masqués. */
+    read(): Promise<{ entries: LogEntry[]; truncated: boolean }>;
+    /** Ouvre le dossier des journaux dans l'Explorateur. */
+    openDir(): Promise<boolean>;
+    /** Copie dans le presse-papiers, après masquage des données sensibles. */
+    copy(text: string): Promise<boolean>;
   };
   media: {
     /** Fenêtre « Ouvrir » du système : image PNG ou JPEG gardée avant recadrage. */

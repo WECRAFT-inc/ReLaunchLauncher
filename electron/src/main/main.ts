@@ -1,7 +1,7 @@
 // Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -18,6 +18,8 @@ import { loaderVersionList } from "./install/loaderList";
 import { isSafeVersionId } from "./install/vanilla";
 import { registerLookIpc, registerProjectIpc } from "./ipcLook";
 import { LinkStore } from "./links";
+import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
+import { mkdir } from "node:fs/promises";
 import { MediaStore, type ImageOps } from "./media/media";
 import { ModpackService } from "./modpacks/service";
 import { DiscordPresence, discordClientId } from "./discord/presence";
@@ -59,6 +61,7 @@ let modpacks: ModpackService | null = null;
 let presence: DiscordPresence | null = null;
 let updateEnv: UpdateEnv | null = null;
 let media: MediaStore | null = null;
+let appLog: AppLogger | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
 
@@ -173,6 +176,8 @@ function lockDownSession(): void {
 
 async function start(): Promise<void> {
   const env = pathEnv();
+  appLog = appLogger(path.join(wecraftDataDir(env), "logs", "relaunch.log"));
+  void appLog.info("ReLaunch", `Démarrage de ReLaunch ${app.getVersion()} (Electron ${process.versions.electron ?? "?"}, ${process.platform} ${process.arch})`);
   try {
     migrated = (await migrateOldSettings(wecraftDataDir(env), legacyDataDirs(env))).map((m) => path.basename(m.file));
   } catch {
@@ -220,6 +225,7 @@ async function start(): Promise<void> {
   media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
   modpacks = new ModpackService({
     media,
+    log: appLog,
     instancesDir: instancesDir(env),
     instances,
     userAgent: `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`,
@@ -288,9 +294,28 @@ function trustedSender(event: IpcMainInvokeEvent): boolean {
 function registerIpc(): void {
   const handle = (channel: string, fn: (...args: unknown[]) => Promise<unknown>) =>
     ipcMain.handle(channel, async (event, ...args: unknown[]) => {
-      if (!trustedSender(event)) throw new Error("Expéditeur refusé");
-      return fn(...args);
+      if (!trustedSender(event)) {
+        void appLog?.warn("Sécurité", `Message refusé sur ${channel} : expéditeur inattendu`);
+        throw new Error("Expéditeur refusé");
+      }
+      try {
+        return await fn(...args);
+      } catch (e) {
+        void appLog?.error(channel, e instanceof Error ? e.message : String(e));
+        throw e;
+      }
     });
+  handle(CHANNELS.logsRead, async () => readLogs(logSources(wecraftDataDir(pathEnv()))));
+  handle(CHANNELS.logsOpenDir, async () => {
+    const dir = path.join(wecraftDataDir(pathEnv()), "logs"); // dossier fixe, jamais fourni par l'interface
+    await mkdir(dir, { recursive: true });
+    return (await shell.openPath(dir)) === "";
+  });
+  handle(CHANNELS.logsCopy, async (text) => {
+    if (typeof text !== "string" || text.length > 2_000_000) return false;
+    clipboard.writeText(redact(text));
+    return true;
+  });
   registerProjectIpc(handle, {
     modpacks: () => modpacks,
     instances: () => ({ target: (id) => instances?.target(id) ?? null }),

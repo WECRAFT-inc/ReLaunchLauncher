@@ -2,7 +2,9 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { Minis } from "./Bars";
 import { useApp } from "./ctx";
+import { BASE_THEMES, cleanRotation, ROT_FADES, ROT_INTERVALS, THEME_COLORS, THEME_NAMES, type BaseTheme } from "./theme";
 import { Ic } from "./Ic";
+import { LogsTab } from "./Logs";
 import { BARSIZES, dockSide, NAVINFO, occupied, pinCount, PRESETS, profPlace, type NavConfig, type Side } from "./model";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
@@ -552,6 +554,7 @@ export function Settings() {
     ["accueil", "Accueil", "home"],
     ["jeu", "Jeu", "game"],
     ["comportement", "Comportement", "behave"],
+    ["logs", "Logs", "news"],
     ["compte", "Compte ReLink", "relink"],
   ];
   const mb = (m: [string, string, string]) => (
@@ -633,10 +636,30 @@ export function Settings() {
             ))}
           </div>
         </div>
+        <div className="grp">
+          <h3>Images et animations</h3>
+          <div className="setrow">
+            <span>
+              <b>Images de fond</b>
+              <small>Fonds choisis pour les instances (et, plus tard, images des événements). Désactivées : fond du thème. Réglage propre à ce PC, il ne change rien pour les autres joueurs.</small>
+            </span>
+            <button className="toggle" role="switch" aria-checked={tf(pref.imgs !== false)} data-act="imgsTgl" aria-label="Images de fond"></button>
+          </div>
+          <div className="setrow">
+            <span>
+              <b>Animations</b>
+              <small>Transitions et fondus de l'interface. Toujours réduites si Windows demande de réduire les animations.</small>
+            </span>
+            <button className="toggle" role="switch" aria-checked={tf(pref.anim !== false)} data-act="animTgl" aria-label="Animations"></button>
+          </div>
+        </div>
+        <RotationGroup />
       </>
     );
   } else if (ui.setTab === "nav") {
     body = <NavTab />;
+  } else if (ui.setTab === "logs") {
+    body = <LogsTab />;
   } else if (ui.setTab === "accueil") {
     body = (
       <>
@@ -794,11 +817,69 @@ export function Settings() {
         {menu.slice(0, 3).map(mb)}
         <h4>Jeu</h4>
         {menu.slice(3, 5).map(mb)}
-        <h4>Compte</h4>
+        <h4>Diagnostic</h4>
         {mb(menu[5]!)}
+        <h4>Compte</h4>
+        {mb(menu[6]!)}
         <span className="ver">{`ReLaunch ${appVer}`}</span>
       </div>
       <div className="setbody">{body}</div>
+    </div>
+  );
+}
+
+/** Thème dégradé automatique : thèmes de la rotation, ordre, durées, aperçu. */
+function RotationGroup() {
+  const { pref } = useApp();
+  const rot = cleanRotation(pref["rot"]);
+  const others = BASE_THEMES.filter((t) => !rot.list.includes(t));
+  const row = (t: BaseTheme, on: boolean, i: number) => (
+    <div key={t} className={`rot-item${on ? "" : " off"}`}>
+      <input type="checkbox" checked={on} data-act="rotTheme" data-v={t} aria-label={`${THEME_NAMES[t]} dans la rotation`} readOnly />
+      <span className="dot" style={{ background: THEME_COLORS[t] }}></span>
+      <b>{THEME_NAMES[t]}</b>
+      <button className="ib" data-act="rotUp" data-v={t} disabled={!on || i === 0} aria-label={`Monter ${THEME_NAMES[t]}`}>
+        ↑
+      </button>
+      <button className="ib" data-act="rotDown" data-v={t} disabled={!on || i === rot.list.length - 1} aria-label={`Descendre ${THEME_NAMES[t]}`}>
+        ↓
+      </button>
+    </div>
+  );
+  return (
+    <div className="grp">
+      <h3>Thème dégradé automatique</h3>
+      <div className="setrow">
+        <span>
+          <b>Rotation des thèmes</b>
+          <small>Passe d'un thème à l'autre avec un fondu des couleurs. Le thème enregistré reste celui choisi plus haut.</small>
+        </span>
+        <button className="toggle" role="switch" aria-checked={tf(rot.on)} data-act="rotTgl" aria-label="Rotation des thèmes"></button>
+      </div>
+      <div className="rot-list">
+        {rot.list.map((t, i) => row(t as BaseTheme, true, i))}
+        {others.map((t) => row(t, false, -1))}
+      </div>
+      {rot.list.length < 2 ? <small className="cr-bad">Choisis au moins deux thèmes pour la rotation.</small> : null}
+      <div className="rot-opts">
+        <span className="chips">
+          {ROT_INTERVALS.map((n) => (
+            <button key={n} className="chip" data-act="rotSec" data-v={n} aria-pressed={tf(rot.sec === n)}>
+              {n < 60 ? `${n} s` : `${n / 60} min`}
+            </button>
+          ))}
+        </span>
+        <span className="chips">
+          {ROT_FADES.map((n) => (
+            <button key={n} className="chip" data-act="rotFade" data-v={n} aria-pressed={tf(rot.fade === n)}>
+              {`Fondu ${n} s`}
+            </button>
+          ))}
+        </span>
+        <button className="btn sm" data-act="rotPreview">
+          Aperçu
+        </button>
+      </div>
     </div>
   );
 }
