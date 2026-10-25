@@ -27,6 +27,10 @@ const SCREENSHOTS = "instances:screenshots";
 const SET_BACKGROUND = "instances:set-background";
 const IMPORT_ICON = "media:import-icon";
 const LOGS_READ = "logs:read";
+const EVENT_INFO = "events:info";
+const EVENT_SET_PACK = "events:set-pack";
+const EVENT_SET_SHADER = "events:set-shader";
+const EVENT_REMOVE = "events:remove";
 const LOGS_OPEN_DIR = "logs:open-dir";
 const LOGS_COPY = "logs:copy";
 const MAKE_ICON = "media:make-icon";
@@ -74,6 +78,12 @@ const api: WeCraftApi = Object.freeze({
     setIcon: (id: string, icon: unknown) => ipcRenderer.invoke(SET_ICON, id, icon),
     screenshots: (id: string) => ipcRenderer.invoke(SCREENSHOTS, id),
     setBackground: (id: string, how: string, token?: string) => ipcRenderer.invoke(SET_BACKGROUND, id, how, token ?? null),
+  }),
+  events: Object.freeze({
+    info: (id: string) => ipcRenderer.invoke(EVENT_INFO, id),
+    setPack: (id: string, name: string, on: boolean) => ipcRenderer.invoke(EVENT_SET_PACK, id, name, on === true),
+    setShader: (id: string, name: string | null) => ipcRenderer.invoke(EVENT_SET_SHADER, id, name),
+    remove: (id: string, kind: string, name: string) => ipcRenderer.invoke(EVENT_REMOVE, id, kind, name),
   }),
   logs: Object.freeze({
     read: () => ipcRenderer.invoke(LOGS_READ),

@@ -9,6 +9,7 @@ import type { PathEnv } from "../paths";
 import { wecraftDataDir } from "../paths";
 import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "../storage/jsonStore";
 import { safeToDelete } from "./delete";
+import { readEventManifest } from "../events/eventLock";
 import { applyMeta, detectExternal, instancesDir, LocalScanner, metaKey, sortInstances, type IconMeta, type ListedInstance } from "./detect";
 
 /** Les autres launchers sont relus au plus toutes les 60 s (comme la version Python). */
@@ -47,6 +48,7 @@ export class InstanceService {
     const all = sortInstances(applyMeta([...local, ...this.external.list], meta, this.env.platform));
     this.byId = new Map(all.map((i) => [InstanceService.idOf(i.folder, this.env.platform), i]));
     const visible = all.filter((i) => !i.hidden);
+    const events = await Promise.all(visible.map((i) => (i.source === "WeCraft" ? readEventManifest(i.folder) : Promise.resolve(null))));
     const packs = await Promise.all(
       visible.map((i) =>
         i.source === "WeCraft"
@@ -71,6 +73,7 @@ export class InstanceService {
         modpack: packs[k]!,
         icon: !i.icon ? null : "file" in i.icon ? { kind: "file" as const, url: `app://wecraft/user/icons/${i.icon.file}` } : { kind: "gen" as const, c: i.icon.c, sym: i.icon.sym },
         background: i.background ? `app://wecraft/user/backgrounds/${i.background}` : null,
+        event: events[k] ? { id: events[k]!.id, name: events[k]!.name } : null,
       })),
     };
   }
@@ -163,6 +166,10 @@ export class InstanceService {
 
   /** Icône et fond (clés « icon » et « background », propres à ReLaunch). Valeurs déjà vérifiées par l'appelant. */
   async setLook(id: unknown, look: { icon?: IconMeta | null; background?: string | null }): Promise<SettingResult> {
+    const inst = this.target(id);
+    // image de fond officielle d'un événement : jamais remplacée depuis l'éditeur (le joueur peut seulement
+    // masquer les images de fond dans ses réglages d'affichage)
+    if (inst && "background" in look && (await readEventManifest(inst.folder))) return { ok: false, reason: "locked" };
     const set: Record<string, unknown> = {};
     const remove: string[] = [];
     if ("icon" in look) (look.icon ? (set["icon"] = look.icon) : remove.push("icon"));
@@ -177,11 +184,13 @@ export class InstanceService {
   async edit(id: unknown, e: InstanceEdit): Promise<SettingResult> {
     const inst = this.target(id);
     if (!inst) return { ok: false, reason: "invalid" };
+    const locked = !!(await readEventManifest(inst.folder)); // modpack d'événement : version et loader imposés
     const name = e.name.trim().slice(0, 60);
     const loader = e.loader === "Vanilla" ? null : e.loader;
     // comme Python : « loader_version » toujours noté (null = choisie au lancement), même pour Vanilla,
     // pour ne pas garder la version du loader lue dans les fichiers de l'instance
-    const set: Record<string, unknown> = { version: e.mc, loader: e.loader, loader_version: loader ? e.loaderVersion : null };
+    // événement : seuls le nom affiché et la mémoire (réglages du joueur) changent, jamais version ni loader
+    const set: Record<string, unknown> = locked ? {} : { version: e.mc, loader: e.loader, loader_version: loader ? e.loaderVersion : null };
     const remove: string[] = [];
     if (name && name !== inst.name) set["name"] = name;
     else remove.push("name");

@@ -69,7 +69,7 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
   const sameBase = mc === x.v && loader === ((x.l as Loader) || "Vanilla");
   const lvValue = loader === "Vanilla" ? null : sameBase ? lv : lv && lvList?.some((v) => v.version === lv) ? lv : null;
   const versionList = versions ? (mc && !versions.includes(mc) ? [mc, ...versions] : versions) : mc ? [mc] : [];
-  const canSave = !busy && !!mc && (loader === "Vanilla" || !lvErr);
+  const canSave = !busy && (!!x.ev || (!!mc && (loader === "Vanilla" || !lvErr)));
 
   const save = async () => {
     if (!canSave) return;
@@ -120,10 +120,11 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
               <input type="text" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
               <small className="faint">{t("Seul le nom affiché change : le dossier de l'instance n'est pas renommé. Champ vide = nom d'origine.")}</small>
             </label>
+            {x.ev ? <div className="pj-warn">{t("Modpack d'événement : la version, le loader, les mods et l'image de fond sont imposés par l'événement. Packs de ressources et shaders : bouton « Modifier ».")}</div> : null}
             <div className="ie-row">
               <label className="field">
                 <span className="lbl strong">{t("Version de Minecraft")}</span>
-                <select value={mc} onChange={(e) => setMc(e.target.value)}>
+                <select value={mc} disabled={!!x.ev} onChange={(e) => setMc(e.target.value)}>
                   {mc ? null : <option value="">{t("Choisir…")}</option>}
                   {versionList.map((v) => (
                     <option key={v} value={v}>
@@ -144,6 +145,7 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
                 </select>
               </label>
             </div>
+            {x.ev ? null : (
             <div className="field">
               <span className="lbl strong">{t("Loader")}</span>
               <div className="chips">
@@ -170,6 +172,8 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
                 )
               ) : null}
             </div>
+            )}
+            {x.ev ? null : (
             <div className="field">
               <span className="lbl strong">{t("Image de fond")}</span>
               <div className="ie-bg">
@@ -203,6 +207,7 @@ export function InstanceEditor({ x, onClose }: { x: Inst | null; onClose: () => 
               ) : null}
               <small className="faint">{t("L'image est copiée dans les réglages de ReLaunch : elle reste valable si l'instance ou ReLaunch changent de place.")}</small>
             </div>
+            )}
           </div>
           <div className="mfoot">
             <button className="btn" onClick={onClose}>

@@ -41,6 +41,7 @@ import { Discover, emptyDraft } from "./Discover";
 import { CreateModal } from "./Create";
 import { ImportModal } from "./Import";
 import { InstanceEditor } from "./InstanceEditor";
+import { EventEditor, RelaunchEvents } from "./EventEditor";
 import { Favorites, Home, Soon, SOON, Wecraft } from "./Views";
 import type { MpDraft } from "./ctx";
 
@@ -64,6 +65,7 @@ const SAVE_ERRORS: Record<FailureReason, string> = {
   unreadable: "Thème appliqué pour cette session : le fichier de réglages est utilisé par un autre programme. Il n'a pas été modifié.",
   "not-backed-up": "Thème appliqué pour cette session : le fichier de réglages est abîmé et n'a pas pu être copié de côté, il n'a donc pas été modifié.",
   "write-failed": "Thème appliqué pour cette session : l'enregistrement a échoué.",
+  locked: "Modpack d'événement : ce réglage est imposé par l'événement.",
 };
 const START_ERRORS = {
   busy: "Un lancement ou un téléchargement de mods est déjà en cours.",
@@ -125,6 +127,7 @@ export function App() {
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editInst, setEditInst] = useState<string | null>(null);
+  const [editEvent, setEditEvent] = useState<string | null>(null);
   const [discordAsk, setDiscordAsk] = useState(false);
   const hist = useRef<string[]>([]);
   const back = useRef(false);
@@ -590,6 +593,9 @@ export function App() {
       case "instEdit":
         setEditInst(a.dataset["id"]!);
         break;
+      case "evEdit":
+        setEditEvent(a.dataset["id"]!);
+        break;
       case "mpEdit":
         editModpack(a.dataset["id"]!);
         break;
@@ -917,6 +923,7 @@ export function App() {
       />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <InstanceEditor x={editInst ? (byId(editInst) ?? null) : null} onClose={() => setEditInst(null)} />
+      <EventEditor id={editEvent} onClose={() => setEditEvent(null)} />
       <DiscordAsk
         open={discordAsk && !upd}
         onAnswer={(on) => {
@@ -1067,6 +1074,7 @@ function ViewBody({ v }: { v: View }) {
   if (v === "favorites") return <Favorites />;
   if (v === "settings") return <Settings />;
   if (v === "discover") return <Discover />;
+  if (v === "relaunch") return <RelaunchEvents />;
   const s = SOON[v]!;
   return <Soon title={s.title} sub={s.sub} text={s.text} />;
 }

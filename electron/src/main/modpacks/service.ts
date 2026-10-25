@@ -10,6 +10,7 @@ import type { InstanceService } from "../instances/service";
 import type { MediaStore } from "../media/media";
 import type { NetOptions } from "../net/download";
 import { installMrpack } from "./mrpack";
+import { readEventManifest } from "../events/eventLock";
 import {
   applyModpackEdit,
   buildModpack,
@@ -223,6 +224,7 @@ export class ModpackService {
     const inst = this.d.instances.target(id);
     // comme la version Python : seuls les WePacks créés dans WeCraft se modifient ici (jamais CurseForge, Prism…)
     if (!inst || inst.source !== "WeCraft") return null;
+    if (await readEventManifest(inst.folder)) return null; // mods d'un modpack d'événement : jamais modifiables
     try {
       const meta = JSON.parse(await readFile(path.join(inst.folder, "wecraft_modpack.json"), "utf8")) as ModpackMeta;
       if (!meta || !isMc(meta.minecraft) || !isLoader(meta.loader) || !Array.isArray(meta.mods)) return null;

@@ -49,7 +49,7 @@ export interface InvalidFileNotice {
  */
 export type SettingResult =
   | { ok: true; reset?: { name: string; copyName: string } }
-  | { ok: false; reason: "invalid" | "unreadable" | "not-backed-up" | "write-failed" };
+  | { ok: false; reason: "invalid" | "unreadable" | "not-backed-up" | "write-failed" | "locked" };
 
 /** Instance affichée par l'interface (lot E2). Aucun chemin : `id` est opaque. */
 export interface InstanceView {
@@ -68,7 +68,23 @@ export interface InstanceView {
   icon: InstanceIcon | null;
   /** Fond choisi (adresse app://), copié dans .wecraft\backgrounds. */
   background: string | null;
+  /** Modpack d'événement (wecraft_event.json) : seuls ses packs de ressources et shaders se modifient. */
+  event: { id: string; name: string } | null;
 }
+
+export interface EventPackView {
+  name: string;
+  official: boolean;
+  enabled: boolean;
+}
+export interface EventInfo {
+  name: string;
+  resourcepacks: EventPackView[];
+  shaders: EventPackView[];
+  shader: string | null;
+  defaultShader: string | null;
+}
+export type EventResult = { ok: true } | { ok: false; message: string };
 
 export type InstanceIcon = { kind: "gen"; c: [string, string]; sym: string | null } | { kind: "file"; url: string };
 /** Icône à enregistrer : dégradé + symbole, ou nom renvoyé par `media.makeIcon`. */
@@ -351,6 +367,14 @@ export interface WeCraftApi {
     openDir(): Promise<boolean>;
     /** Copie dans le presse-papiers, après masquage des données sensibles. */
     copy(text: string): Promise<boolean>;
+  };
+  events: {
+    /** Packs de ressources et shaders d'un modpack d'événement (null si ce n'en est pas un). */
+    info(id: string): Promise<EventInfo | null>;
+    setPack(id: string, name: string, on: boolean): Promise<EventResult>;
+    setShader(id: string, name: string | null): Promise<EventResult>;
+    /** Retire (corbeille) un pack ajouté par le joueur ; les fichiers officiels sont refusés. */
+    remove(id: string, kind: "resourcepack" | "shader", name: string): Promise<EventResult>;
   };
   media: {
     /** Fenêtre « Ouvrir » du système : image PNG ou JPEG gardée avant recadrage. */

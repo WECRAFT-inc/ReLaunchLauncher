@@ -226,6 +226,11 @@ export function Wecraft() {
                   <td>
                     <span className="row" style={{ justifyContent: "flex-end" }}>
                       <PinBtn id={i.id} />
+                      {i.ev ? (
+                        <button className="btn sm" data-act="evEdit" data-id={i.id} title={t("Packs de ressources et shaders de l'événement")}>
+                          {t("Modifier")}
+                        </button>
+                      ) : null}
                       <button className="ib" data-act="instEdit" data-id={i.id} aria-label={`Réglages de ${i.n}`} title={t("Réglages (nom, version, loader, RAM, icône, fond)")}>
                         ⚙
                       </button>

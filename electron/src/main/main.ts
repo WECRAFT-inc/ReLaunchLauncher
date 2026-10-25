@@ -342,6 +342,7 @@ function registerIpc(): void {
     media: () => media,
     instancesDir: () => instancesDir(pathEnv()),
     platform: process.platform,
+    trash: (f) => shell.trashItem(f),
     pickImage: async (title) => {
       const opts = { title, properties: ["openFile" as const], filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg"] }] };
       const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);

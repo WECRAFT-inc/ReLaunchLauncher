@@ -6,6 +6,7 @@ import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { CreateInstanceResult, IconChoice, InstanceEdit, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
+import { currentShader, EventLockError, listPacks, readEventManifest, removePack, setResourcePack, setShader, type EventManifest } from "./events/eventLock";
 import { cleanCreate, createCustomInstance } from "./instances/create";
 import { parseIconMeta, type IconMeta } from "./instances/detect";
 import { InstanceService } from "./instances/service";
@@ -23,6 +24,8 @@ export interface LookDeps {
   platform: NodeJS.Platform;
   /** Fenêtre « Ouvrir » du système (une image) ; null si annulée. */
   pickImage: (title: string) => Promise<string | null>;
+  /** Corbeille du système (jamais d'effacement définitif). */
+  trash: (file: string) => Promise<void>;
 }
 
 /** Icône choisie dans l'interface, vérifiée (couleurs, symbole, nom de fichier d'icône recadrée). */
@@ -137,7 +140,41 @@ export function registerProjectIpc(handle: Handle, d: ProjectDeps): void {
   });
 }
 
+/** Modpacks d'événements : seuls les packs de ressources et les shaders du joueur se modifient. */
+export function registerEventIpc(handle: Handle, d: LookDeps): void {
+  const target = async (id: unknown) => {
+    const inst = d.instances()?.target(id);
+    const m = inst ? await readEventManifest(inst.folder) : null;
+    return inst && m ? { folder: inst.path, root: inst.folder, m } : null;
+  };
+  const run = async (id: unknown, fn: (t: { folder: string; m: EventManifest }) => Promise<void>) => {
+    const t = await target(id);
+    if (!t) return { ok: false, message: "Ce n'est pas un modpack d'événement." };
+    try {
+      await fn(t);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: e instanceof EventLockError ? e.message : "Opération impossible." };
+    }
+  };
+  handle(CHANNELS.eventInfo, async (id) => {
+    const t = await target(id);
+    if (!t) return null;
+    return {
+      name: t.m.name,
+      resourcepacks: await listPacks(t.folder, t.m, "resourcepack"),
+      shaders: await listPacks(t.folder, t.m, "shader"),
+      shader: await currentShader(t.folder),
+      defaultShader: t.m.defaultShader,
+    };
+  });
+  handle(CHANNELS.eventSetPack, async (id, name, on) => run(id, (t) => setResourcePack(t.folder, t.m, name, on === true)));
+  handle(CHANNELS.eventSetShader, async (id, name) => run(id, (t) => setShader(t.folder, name === null ? null : name)));
+  handle(CHANNELS.eventRemove, async (id, kind, name) => run(id, (t) => removePack(t.folder, t.m, kind, name, d.trash)));
+}
+
 export function registerLookIpc(handle: Handle, d: LookDeps): void {
+  registerEventIpc(handle, d);
   handle(CHANNELS.createInstance, async (req) => {
     const c = cleanCreate(req);
     const inst = d.instances();
@@ -212,6 +249,7 @@ export function registerLookIpc(handle: Handle, d: LookDeps): void {
         name = await media.importBackground(await readPicked(file));
       } else return { ok: false, message: "Demande invalide." };
       const r = await inst.setLook(id, { background: name });
+      if (!r.ok && r.reason === "locked") return { ok: false, message: "L'image de fond d'un événement est choisie par le staff : elle ne se remplace pas ici (Réglages > Apparence pour masquer les images de fond)." };
       return r.ok ? { ok: true, url: name ? `app://wecraft/user/backgrounds/${name}` : null } : { ok: false, message: "Réglage non enregistré." };
     } catch (e) {
       return { ok: false, message: failMessage(e) };

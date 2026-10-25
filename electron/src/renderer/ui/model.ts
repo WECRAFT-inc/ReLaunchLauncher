@@ -24,6 +24,8 @@ export interface Inst {
   icon: InstanceIcon | null;
   /** Fond choisi (adresse app://). */
   bg: string | null;
+  /** Modpack d'événement : seuls ses packs de ressources et shaders se modifient. */
+  ev: { id: string; name: string } | null;
 }
 
 export const SC: Record<string, string> = { WeCraft: "var(--acc)", CurseForge: "#f16436", Prism: "#5eead4", Modrinth: "#1bd96a" };
@@ -50,6 +52,7 @@ export function toInst(i: InstanceView): Inst {
     ...(i.modpack ? { mp: true } : {}),
     icon: i.icon ?? null,
     bg: i.background ?? null,
+    ev: i.event ?? null,
   };
 }
 
