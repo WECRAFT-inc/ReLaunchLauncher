@@ -475,3 +475,7 @@ body.tb-off .app { height: 100vh !important; }
 .srv small.faint { display: block; }
 .nhero .nhbody .btn { align-self: flex-start; }
 .rl-car { min-width: min(420px, 40vw); }
+
+/* En-têtes de page : place réservée au bloc flottant (cloche, téléchargements, profil) en haut à droite */
+.main > .view > .vhead:first-child, .main > .rl-maint:first-child { padding-right: max(0px, calc(var(--pf-reserve, 0px) - 26px)); }
+.main > .rl-maint ~ .view > .vhead:first-child { padding-right: 0; }

@@ -1101,6 +1101,28 @@ function Shell({
   const tipRef = useRef<HTMLDivElement>(null);
   const lastTip = useRef("");
   if (p.tip) lastTip.current = p.tip.text;
+  // le bloc flottant (cloche, téléchargements, profil) recouvre le haut à droite de la page :
+  // on réserve sa largeur aux en-têtes de page pour que leurs boutons restent visibles.
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    const pf = rootRef.current?.querySelector<HTMLElement>(".pfloat");
+    if (!main) return;
+    if (!pf) {
+      main.style.removeProperty("--pf-reserve");
+      return;
+    }
+    const upd = () => {
+      const m = main.getBoundingClientRect();
+      const r = pf.getBoundingClientRect();
+      const over = r.left < m.right && r.right > m.left && r.top < m.top + 80;
+      main.style.setProperty("--pf-reserve", over ? `${Math.ceil(m.right - r.left + 10)}px` : "0px");
+    };
+    upd();
+    const ro = new ResizeObserver(upd);
+    ro.observe(pf);
+    ro.observe(main);
+    return () => ro.disconnect();
+  });
   const cls = [
     "app",
     ui.view === "home" ? "on-home" : "",
