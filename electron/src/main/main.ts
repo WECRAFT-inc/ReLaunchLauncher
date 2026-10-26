@@ -489,7 +489,15 @@ function registerIpc(): void {
     try {
       const st = await stat(r.filePaths[0]);
       if (!st.isFile() || st.size > 64 * 1024) return { ok: false, message: "Image trop lourde (64 Ko maximum)." };
-      return { ok: true, state: await account.uploadMinecraftSkin(await readFile(r.filePaths[0]), model === "slim" ? "slim" : "classic") };
+      const png = await readFile(r.filePaths[0]);
+      const variant = model === "slim" ? "slim" : "classic";
+      const state = await account.uploadMinecraftSkin(png, variant);
+      // compte Microsoft connecté : le skin est aussi appliqué au profil Minecraft officiel (visible partout)
+      if (microsoft && (await microsoft.state()).connected) {
+        const err = await microsoft.uploadSkin(png, variant);
+        return { ok: true, state, message: err ? `Skin envoyé à ReLink, mais pas à Mojang : ${err}` : "Skin envoyé à ReLink et appliqué à ton compte Minecraft officiel." };
+      }
+      return { ok: true, state };
     } catch (e) {
       return { ok: false, message: e instanceof AccountError ? e.message : "Image illisible." };
     }

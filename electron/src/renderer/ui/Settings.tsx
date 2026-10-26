@@ -881,7 +881,7 @@ function AccountGroup() {
       (r) => {
         if (r.ok) {
           setAccount(r.state);
-          toast(ok);
+          toast(r.message ?? ok);
         } else if (!r.canceled) toast(r.message);
       },
       () => toast(t("Action impossible pour le moment.")),
@@ -961,7 +961,7 @@ function AccountGroup() {
             <li>{t("dans tes instances moddées pour lesquelles le mod de skins compatible existe (installé automatiquement au lancement, sauf si tu le désactives dans Réglages > Jeu) ;")}</li>
             <li>{t("sur les serveurs et les versions où le plugin de skins compatible existe.")}</li>
           </ul>
-          <p className="faint" style={{ margin: "6px 0 0" }}>{t("Ailleurs (Minecraft vanilla, serveurs sans le plugin), c'est le skin de ton compte Microsoft qui s'affiche.")}</p>
+          <p className="faint" style={{ margin: "6px 0 0" }}>{t("Ailleurs (Minecraft vanilla, serveurs sans le plugin), c'est le skin de ton compte Microsoft qui s'affiche. Si ton compte Microsoft est connecté dans ReLaunch, le skin envoyé y est aussi appliqué : il est alors visible partout.")}</p>
         </div>
       </div>
     </>

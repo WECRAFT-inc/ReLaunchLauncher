@@ -253,6 +253,27 @@ export class MicrosoftAccount {
     }
   }
 
+  /**
+   * Envoie le skin au profil Minecraft officiel (visible partout, même en vanilla). PNG déjà vérifié
+   * (64 × 64 ou 64 × 32). Renvoie null si réussi, sinon le message d'erreur.
+   */
+  async uploadSkin(png: Buffer, model: "classic" | "slim"): Promise<string | null> {
+    const ses = await this.session();
+    if (!ses) return "Compte Microsoft non connecté dans ReLaunch.";
+    const form = new FormData();
+    form.append("variant", model === "slim" ? "slim" : "classic");
+    form.append("file", new Blob([new Uint8Array(png)], { type: "image/png" }), "skin.png");
+    let res: Response;
+    try {
+      res = await (this.d.fetch ?? fetch)("https://api.minecraftservices.com/minecraft/profile/skins", { method: "POST", headers: { Authorization: `Bearer ${ses.accessToken}` }, body: form, redirect: "error", signal: AbortSignal.timeout(20000) });
+    } catch {
+      return "Mojang injoignable.";
+    }
+    await res.body?.cancel().catch(() => undefined);
+    if (res.ok) return null;
+    return res.status === 429 ? "Mojang limite les changements de skin : réessaie dans quelques minutes." : res.status === 401 || res.status === 403 ? "Mojang a refusé le changement de skin (accès de l'application WeCraft pas encore accordé ?)." : `Mojang a refusé le skin (HTTP ${res.status}).`;
+  }
+
   async logout(): Promise<MicrosoftState> {
     await this.load();
     this.saved = null;
