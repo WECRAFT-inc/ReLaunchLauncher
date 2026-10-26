@@ -175,21 +175,6 @@ export class RelinkAccount {
     return this.saved && !this.expired() ? this.saved.token : null;
   }
 
-  /** Lancer le jeu : connecté, ou Worker injoignable (le jeu passe alors sans les serveurs d'event). */
-  async launchGate(): Promise<"ok" | "offline" | "login"> {
-    const st = await this.state();
-    if (st.loggedIn) return "ok";
-    if (this.offline) return "offline";
-    try {
-      const res = await this.fetcher()(checkUrl(`${WORKER_URL}/launcher/auth/config`, WORKER_HOSTS).href, { redirect: "error", signal: AbortSignal.timeout(6000), headers: { "User-Agent": this.d.userAgent } });
-      await res.body?.cancel().catch(() => undefined);
-      return res.ok ? "login" : "offline";
-    } catch {
-      this.offline = true;
-      return "offline";
-    }
-  }
-
   private async call(method: string, route: string, init: { body?: FormData; json?: unknown; auth?: boolean; timeout?: number } = {}): Promise<Obj> {
     const headers: Record<string, string> = { "User-Agent": this.d.userAgent, Accept: "application/json" };
     if (init.json !== undefined) headers["Content-Type"] = "application/json";
@@ -374,14 +359,6 @@ export class RelinkAccount {
   /** Lie le compte Minecraft officiel : le Worker vérifie le jeton chez Mojang, puis l'oublie. */
   async linkMinecraft(minecraftToken: string): Promise<AccountState> {
     await this.call("POST", "/launcher/me/minecraft", { auth: true, json: { minecraftToken } });
-    return this.refresh();
-  }
-
-  /** Code /link (6 chiffres) donné en jeu sur un serveur ReLink. */
-  async linkCode(code: string): Promise<AccountState> {
-    const c = String(code).replace(/\D/g, "");
-    if (c.length !== 6) throw new AccountError("Code invalide : 6 chiffres, donnés par /link en jeu.");
-    await this.call("POST", "/link/confirm", { auth: true, json: { code: c } });
     return this.refresh();
   }
 

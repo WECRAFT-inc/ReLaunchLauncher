@@ -528,15 +528,6 @@ function registerIpc(): void {
     }
   });
   handle(CHANNELS.accountQuests, async () => (account ? account.quests() : { ok: false, error: "Compte ReLink indisponible.", quests: [], streak: null }));
-  handle(CHANNELS.accountLinkCode, async (code) => {
-    if (!account || typeof code !== "string" || code.length > 20) return { ok: false, message: "Code invalide." };
-    try {
-      const st = await account.linkCode(code);
-      return { ok: true, state: st, message: st.user?.minecraftVerified ? "Compte Minecraft lié, licence vérifiée." : "Compte Minecraft lié (serveur sans vérification de licence : rejoins un serveur ReLink en mode online pour la vérifier)." };
-    } catch (e) {
-      return { ok: false, message: e instanceof AccountError ? e.message : "Code refusé pour le moment." };
-    }
-  });
   handle(CHANNELS.accountRedeem, async (code) => {
     if (!account || typeof code !== "string" || code.length > 40) return { ok: false, message: "Code invalide." };
     try {
@@ -800,15 +791,10 @@ function registerIpc(): void {
     if (!inst.version) return { ok: false, reason: "no-version" };
     if (modpacks?.busy()) return { ok: false, reason: "busy" }; // mods en cours de téléchargement
     if (relink?.policy().blockLaunch) return { ok: false, reason: "maintenance" }; // maintenance décidée dans le panneau ReLink
-    // Compte ReLink obligatoire ; si le service est injoignable, le jeu se lance quand même (serveurs d'event fermés)
-    const gate = account ? await account.launchGate() : "offline";
-    if (gate === "login") return { ok: false, reason: "login" };
-    // compte Minecraft officiel lié au compte ReLink (Réglages > Compte ou site), sauf service injoignable
-    if (gate === "ok" && account) {
-      await linkOfficial();
-      const st = await account.state();
-      if (!st.user?.minecraftVerified) return { ok: false, reason: "minecraft" };
-    }
+    // Aucune connexion exigée par ReLaunch. Le compte Minecraft officiel est toujours requis, mais vérifié par
+    // Microsoft lui-même : connexion Microsoft dans ReLaunch (lancement direct) ou, sinon, le launcher officiel.
+    // Si le joueur est aussi connecté à ReLink, son compte Microsoft y est lié (quête « 1re liaison »).
+    if (account && (await account.state()).loggedIn) await linkOfficial().catch(() => null);
     // lancement direct (défaut) avec la session Microsoft de ReLaunch. Repli automatique sur le launcher officiel
     // si le joueur n'est pas connecté à Microsoft dans ReLaunch, ou si Microsoft / Mojang refusent la connexion
     // directe (application WeCraft non autorisée ou bloquée) : les instances WeCraft restent jouables.
@@ -855,7 +841,7 @@ function registerIpc(): void {
       await instances?.rememberRam(id, ram);
     }
     if (!started.ok) return started;
-    return { ...started, ...(gate === "offline" ? { offline: true } : {}), ...(fallback ? { viaOfficial: true } : {}) };
+    return { ...started, ...(fallback ? { viaOfficial: true } : {}) };
   });
 
   ipcMain.handle(CHANNELS.launchStatus, async (event, job: unknown): Promise<LaunchStatus | null> => {

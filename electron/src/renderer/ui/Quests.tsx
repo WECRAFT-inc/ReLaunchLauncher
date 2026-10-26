@@ -59,32 +59,22 @@ export function useQuests(on = true): { q: QuestsState | null; reload: () => voi
   return { q, reload: () => setN((x) => x + 1) };
 }
 
-/** Accueil : compte Minecraft utilisé (façon « Joue en tant que »), ou invitation discrète à le lier. */
+/**
+ * Accueil : compte Minecraft utilisé (façon « Joue en tant que »), ou invitation discrète à connecter
+ * Microsoft. Toujours présenté comme facultatif : ReLaunch fonctionne sans (le launcher officiel prend le relais).
+ */
 export function HomeAccount() {
   const { account } = useApp();
   const [ms, setMs] = useState<MicrosoftState | null>(null);
   useEffect(() => {
     void window.wecraft.microsoft.state().then(setMs, () => undefined);
   }, [account?.user?.minecraftVerified]);
-  const u = account?.user;
+  const u = account?.loggedIn ? account.user : null;
   const { q } = useQuests(!!u);
   const quest = q?.quests.find((x) => x.id === "official_account");
-  if (!account) return null;
-  if (!account.loggedIn || !u) {
-    return (
-      <button className="hacct" data-go="settings" data-set="compte" data-a="home-account">
-        <span className="hav off" aria-hidden="true">
-          <Ic n="relink" />
-        </span>
-        <span className="htxt">
-          <b>{t("Connecte-toi à ReLink")}</b>
-          <small>{t("Nécessaire pour lancer tes instances")}</small>
-        </span>
-      </button>
-    );
-  }
-  const name = (ms?.connected ? ms.profile?.name : null) ?? u.minecraftName;
-  if (u.minecraftVerified && name) {
+  if (!ms) return null;
+  const name = ms.connected ? (ms.profile?.name ?? null) : u?.minecraftVerified ? u.minecraftName : null;
+  if (name) {
     return (
       <button className="hacct" data-go="settings" data-set="compte" data-a="home-account" title={t("Compte Minecraft : réglages")}>
         <span className="hav" aria-hidden="true">
@@ -95,23 +85,25 @@ export function HomeAccount() {
           <small>{t("Joue en tant que")}</small>
           <b>{name}</b>
         </span>
-        <span className="hnote">{ms?.connected ? t("Compte Microsoft connecté") : t("Lancement via le launcher officiel")}</span>
+        <span className="hnote">{ms.connected ? t("Compte Microsoft") : t("Via le launcher officiel")}</span>
       </button>
     );
   }
+  // récompense seulement si elle reste à gagner (compte ReLink connecté, quête pas encore reçue)
+  const reward = u && quest && !quest.claimed ? quest.reward : u ? null : 1000;
   return (
     <button className="hacct invite" data-go="settings" data-set="compte" data-a="home-account">
       <span className="hav off" aria-hidden="true">
         <Ic n="game" />
       </span>
       <span className="htxt">
-        <b>{t("Lie ton compte Minecraft officiel")}</b>
-        <small>{u.minecraftName ? `${u.minecraftName} · ${t("licence pas encore vérifiée")}` : t("Nécessaire pour lancer les instances WeCraft")}</small>
+        <b>{ms.available ? t("Connecte ton compte Microsoft") : t("Connexion Microsoft bientôt disponible")}</b>
+        <small>{t("Facultatif : sans, le launcher officiel s'ouvre pour jouer")}</small>
       </span>
-      {quest && !quest.claimed ? (
-        <span className="hreward">
+      {reward ? (
+        <span className="hreward" title={t("Récompense versée une seule fois, à la première liaison de ton compte Microsoft à ReLink")}>
           <Ic n="gem" />
-          {`+${quest.reward}`}
+          {`+${reward} ${t("à la 1re liaison")}`}
         </span>
       ) : null}
     </button>

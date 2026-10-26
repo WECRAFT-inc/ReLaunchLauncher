@@ -77,6 +77,12 @@ export function Home() {
       <h2 className="huge" aria-label="ReLaunch">
         RELAUNCH
       </h2>
+    </div>
+  );
+  // compte Minecraft (facultatif) et Info & News, côte à côte au-dessus du titre
+  const top = (
+    <div className="htop">
+      <HomeAccount />
       <button className="newsbtn" data-go="news" data-a="home-news">
         <Ic n="news" />
         {t("Info & News")}
@@ -87,7 +93,7 @@ export function Home() {
     return (
       <div className="home nocar">
         <div className="hmain">
-          <HomeAccount />
+          {top}
           {title}
           <div className="playrow">
             <select id="homeSel" aria-label={t("Instance ou serveur")} disabled>
@@ -125,7 +131,7 @@ export function Home() {
     <div className={`home${hasCar ? "" : " nocar"}${large ? " has-bg" : ""} bgf-${bg.url ? bg.fmt : "none"}`} style={bgStyle}>
       <div className="hmain">
         {bg.url && (bg.fmt === "mini" || bg.fmt === "reduced") ? <div className={`hbg ${bg.fmt}`} style={{ backgroundImage: `url("${bg.url}")` }} aria-hidden="true"></div> : null}
-        <HomeAccount />
+        {top}
         {title}
         <div className="playrow">
           <select id="homeSel" aria-label={t("Instance ou serveur")} value={sel.id} onChange={(e) => setUi({ sel: e.target.value })}>

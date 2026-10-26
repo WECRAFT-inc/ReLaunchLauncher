@@ -452,8 +452,6 @@ export interface WeCraftApi {
     buySkin(relinkId: string): Promise<AccountResult>;
     /** Débloque un skin avec un code (event, succès, partenaire…). */
     redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
-    /** Code donné par /link sur un serveur ReLink (liaison du compte Minecraft, licence vérifiée en mode online). */
-    linkCode(code: string): Promise<AccountResult>;
     /** Avantages & Quêtes du joueur (lu sur ReLink). */
     quests(): Promise<QuestsState>;
   };

@@ -890,9 +890,10 @@ function AccountGroup() {
   if (!account) return <div className="grp"><h3>{t("Compte ReLink")}</h3><p className="faint">{t("Chargement…")}</p></div>;
   if (!account.loggedIn) {
     return (
+      <>
       <div className="grp">
         <h3>{t("Compte ReLink")}</h3>
-        <p>{t("Un compte ReLink est nécessaire pour jouer, obtenir des skins, utiliser la boutique et envoyer ton skin Minecraft.")}</p>
+        <p>{t("Facultatif pour jouer : un compte ReLink sert aux skins, à la boutique, aux quêtes, à l'envoi de ton skin Minecraft et aux events.")}</p>
         <div className="card updcard">
           <span className="updcard-ic"><Ic n="relink" /></span>
           <span className="updcard-txt">
@@ -904,8 +905,9 @@ function AccountGroup() {
           </button>
         </div>
         {account.error ? <p className="faint" style={{ fontSize: "12.5px" }}>{account.error}</p> : null}
-        <p className="faint" style={{ fontSize: "12.5px" }}>{t("Sans connexion internet, le jeu se lance quand même, mais les serveurs d'event refusent l'accès tant que ta session ReLink n'est pas vérifiée.")}</p>
       </div>
+      <MicrosoftGroup verified={false} linkedName={null} relink={false} />
+      </>
     );
   }
   const u = account.user!;
@@ -968,45 +970,8 @@ function AccountGroup() {
   );
 }
 
-/** Liaison par /link : le joueur rejoint un serveur ReLink en mode online, tape /link, et entre le code ici. */
-function LinkCodeRow() {
-  const { toast, setAccount } = useApp();
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  return (
-    <div className="setrow">
-      <span>
-        <b>{t("Lier avec /link")}</b>
-        <small>{t("Rejoins un serveur ReLink avec le launcher officiel, tape /link en jeu, puis entre le code à 6 chiffres. Sur un serveur en mode online, Mojang vérifie ta licence.")}</small>
-      </span>
-      <span className="row" style={{ gap: "8px" }}>
-        <input type="text" className="mono" inputMode="numeric" value={code} maxLength={6} placeholder="123456" aria-label={t("Code /link")} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} style={{ width: "100px" }} />
-        <button
-          className="btn sm pri"
-          disabled={busy || code.length !== 6}
-          onClick={() => {
-            setBusy(true);
-            void window.wecraft.account
-              .linkCode(code)
-              .then((r) => {
-                if (r.ok) {
-                  setAccount(r.state);
-                  setCode("");
-                }
-                toast(r.message ?? "");
-              })
-              .finally(() => setBusy(false));
-          }}
-        >
-          {busy ? t("Vérification…") : t("Lier")}
-        </button>
-      </span>
-    </div>
-  );
-}
-
 /** Compte Minecraft officiel (Microsoft) : connexion dans le navigateur, liaison automatique au compte ReLink. */
-function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedName: string | null }) {
+function MicrosoftGroup({ verified, linkedName, relink = true }: { verified: boolean; linkedName: string | null; relink?: boolean }) {
   const { toast, setAccount } = useApp();
   const [ms, setMs] = useState<import("../../shared/api").MicrosoftState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1033,7 +998,7 @@ function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedNam
   return (
     <div className="grp">
       <h3>{t("Compte Minecraft (Microsoft)")}</h3>
-      <p>{t("Nécessaire pour lancer tes instances : ReLaunch démarre le jeu lui-même et associe ton compte Minecraft officiel à ReLink. Tu ne te reconnectes que si Microsoft le redemande (environ 3 mois sans jouer, mot de passe changé).")}</p>
+      <p>{t("Facultatif : ReLaunch fonctionne sans. Connecté, ReLaunch démarre le jeu lui-même sans ouvrir le launcher officiel ; sinon, le launcher officiel s'ouvre et vérifie ton compte. La toute première liaison de ton compte Microsoft à ReLink rapporte 1000 Éclats (une seule fois). Tu ne te reconnectes que si Microsoft le redemande (environ 3 mois sans jouer, mot de passe changé).")}</p>
       <div className="setrow">
         <span>
           <b>{ms?.connected ? ms.profile?.name : ms?.loginPending || busy ? t("Accepte la connexion dans ton navigateur…") : t("Non connecté")}</b>
@@ -1041,11 +1006,13 @@ function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedNam
             {ms?.connected
               ? verified && linkedName === ms.profile?.name
                 ? t("Connecté et lié à ton compte ReLink.")
-                : t("Connecté ; liaison avec ReLink au prochain lancement.")
+                : relink
+                  ? t("Connecté ; liaison avec ReLink au prochain lancement.")
+                  : t("Connecté. Connecte-toi aussi à ReLink pour lier ton compte (1000 Éclats à la première liaison).")
               : verified
                 ? `${t("Lié à ReLink")} (${linkedName ?? ""}) ${t("depuis le site : connecte-toi ici pour jouer sans le launcher officiel.")}`
                 : ms && !ms.available
-                  ? t("Connexion directe pas encore disponible : le jeu passe par le launcher officiel. Lie ton compte avec /link ci-dessous.")
+                  ? t("Connexion Microsoft dans ReLaunch bientôt disponible : en attendant, le jeu passe par le launcher officiel, qui vérifie ton compte.")
                   : t("Ton navigateur s'ouvre sur Microsoft. ReLaunch ne voit jamais ton mot de passe.")}
           </small>
         </span>
@@ -1057,7 +1024,6 @@ function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedNam
           )}
         </span>
       </div>
-      {!verified ? <LinkCodeRow /> : null}
       {ms && !ms.persisted ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Chiffrement système indisponible : la connexion Microsoft ne sera pas gardée après la fermeture de ReLaunch.")}</p> : null}
       <div className="setrow">
         <span>

@@ -62,7 +62,16 @@ ReLaunch n'utilise **pas** l'identifiant de l'application Microsoft officielle. 
 ## Quête « Compte Minecraft officiel » (1000 Éclats)
 
 - Elle est versée par le Worker, une seule fois par compte ReLink **et** une seule fois par compte Minecraft. Délier puis relier le même compte Minecraft à un autre profil ne rapporte rien.
-- Elle est validée par une licence vérifiée : connexion Microsoft (dans le launcher ou sur le site), ou `/link` sur un serveur en mode online.
-- Les comptes déjà vérifiés avant l'arrivée de la quête la reçoivent à leur prochaine ouverture de « Avantages & Quêtes » ou de l'accueil.
+- Elle est validée uniquement par la première liaison d'un compte Microsoft (connexion dans le launcher ou sur le site), avec le compte ReLink connecté. `/link` ne compte pas.
+- Les comptes déjà liés à Microsoft avant l'arrivée de la quête la reçoivent à leur prochaine ouverture de « Avantages & Quêtes » ou de l'accueil.
 - Route : `GET /launcher/quests` (Bearer). Elle renvoie les quêtes, la série de jours (tables `streaks` et `streak_config` existantes) et `reward` si une récompense vient d'être versée.
 - Les réclamations sont enregistrées dans `launcher_records`, collection `quest_claims`. La ligne d'Éclats a la raison `quest_custom`, avec `meta.quest = official_account`.
+
+## Connexions exigées (décision du 26/10/2026)
+
+- **ReLaunch :** aucune connexion exigée, ni ReLink ni Microsoft.
+- **Instances WeCraft (Minecraft normal, moddé ou non) :** un compte Minecraft officiel est obligatoire, mais c'est Microsoft qui le vérifie.
+  - Connecté à Microsoft dans ReLaunch : lancement direct.
+  - Sinon : le launcher officiel s'ouvre et authentifie le joueur. ReLaunch ne vérifie rien lui-même.
+- **Compte ReLink :** facultatif pour jouer. Il sert aux skins, à la boutique, aux quêtes, à l'envoi du skin et aux events.
+- **`/link` :** retiré du launcher. Il reste disponible côté serveurs, avec le plugin, pour les events.

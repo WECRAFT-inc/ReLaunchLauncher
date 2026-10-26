@@ -49,7 +49,6 @@ const ACC_BUY = "account:buy-skin";
 const SKINMOD_GET = "skins:get-skin-mod";
 const SKINMOD_SET = "skins:set-skin-mod";
 const ACC_REDEEM = "account:redeem-code";
-const ACC_LINK = "account:link-code";
 const ACC_QUESTS = "account:quests";
 const SKINS_LIST = "skins:list";
 const SKINS_IMPORT = "skins:import-local";
@@ -148,7 +147,6 @@ const api: WeCraftApi = Object.freeze({
     skinMod: () => ipcRenderer.invoke(SKINMOD_GET),
     setSkinMod: (on: boolean) => ipcRenderer.invoke(SKINMOD_SET, on === true),
     redeemCode: (code: string) => ipcRenderer.invoke(ACC_REDEEM, code),
-    linkCode: (code: string) => ipcRenderer.invoke(ACC_LINK, code),
     quests: () => ipcRenderer.invoke(ACC_QUESTS),
   }),
   skins: Object.freeze({

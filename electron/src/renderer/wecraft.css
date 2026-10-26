@@ -526,3 +526,5 @@ body.tb-off .app { height: 100vh !important; }
 /* Accueil : avec un bandeau (maintenance, version), l'accueil occupe la hauteur restante au lieu de déborder */
 .main:has(> #v-home:not([hidden])) { display: flex; flex-direction: column; }
 .main:has(> #v-home:not([hidden])) > #v-home { flex: 1 1 auto; min-height: 0; }
+.htop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.htop .hacct { align-self: auto; }

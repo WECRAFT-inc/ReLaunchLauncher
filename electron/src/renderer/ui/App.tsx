@@ -89,7 +89,7 @@ const START_ERRORS = {
   maintenance: "Lancement suspendu : maintenance en cours annoncée par ReLaunch.",
   login: "Connecte-toi à ReLink pour jouer (Réglages > Compte ReLink).",
   pack: "Pack d'event : la remise en état des mods officiels a échoué (connexion ?). Réessaie dans un instant.",
-  minecraft: "Lie ton compte Minecraft officiel à ReLink pour jouer : connexion Microsoft, ou /link sur un serveur ReLink (Réglages > Compte ReLink).",
+  minecraft: "Compte Minecraft officiel requis : connecte-toi à Microsoft dans ReLaunch, ou laisse le launcher officiel s'ouvrir.",
   microsoft: "Connecte ton compte Microsoft dans Réglages > Compte ReLink (ou active « Ouvrir le launcher officiel pour jouer »).",
 } as const;
 const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
