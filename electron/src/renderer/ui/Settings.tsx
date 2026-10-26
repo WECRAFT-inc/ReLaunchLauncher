@@ -1062,9 +1062,20 @@ function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedNam
       <div className="setrow">
         <span>
           <b>{t("Ouvrir le launcher officiel pour jouer")}</b>
-          <small>{t("Désactivé : ReLaunch lance directement le jeu avec ton compte Microsoft. Activé : comme avant, ReLaunch prépare le profil puis ouvre le launcher officiel.")}</small>
+          <small>
+            {ms?.connected
+              ? t("Désactivé : ReLaunch lance directement le jeu avec ton compte Microsoft. Activé : comme avant, ReLaunch prépare le profil puis ouvre le launcher officiel.")
+              : t("Toujours activé tant que tu n'es pas connecté à Microsoft dans ReLaunch : le jeu passe par le launcher officiel.")}
+          </small>
         </span>
-        <button className="toggle" role="switch" aria-checked={tf(official === true)} disabled={official === null} onClick={flip} aria-label={t("Ouvrir le launcher officiel pour jouer")}></button>
+        <button
+          className="toggle"
+          role="switch"
+          aria-checked={tf(!ms?.connected || official === true)}
+          disabled={official === null || !ms?.connected}
+          onClick={flip}
+          aria-label={t("Ouvrir le launcher officiel pour jouer")}
+        ></button>
       </div>
     </div>
   );

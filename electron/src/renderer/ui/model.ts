@@ -201,6 +201,7 @@ export const NAVDEF: NavConfig = {
     { id: "create", on: true, bar: "v" },
     { id: "favorites", on: true, bar: "v" },
     { id: "shop", on: true, bar: "v" },
+    { id: "quests", on: true, bar: "v" },
     { id: "sep2", on: true, bar: "v" },
     { id: "pins", on: true, bar: "v" },
     { id: "spacer", on: true, bar: "v" },
@@ -224,6 +225,7 @@ export const NAVINFO: Record<string, NavInfo> = {
   create: { l: "Créer un WePack", d: "Nouvelle instance", act: "create" },
   favorites: { l: "Favoris", d: "Instances favorites", view: "favorites" },
   shop: { l: "Shop", d: "Capes, cosmétiques, grades", view: "relink", rl: "shop" },
+  quests: { l: "Avantages & Quêtes", d: "Quêtes, série de jours, quêtes d'events", view: "quests" },
   pins: { l: "Instances épinglées", d: "Affichage choisi plus bas" },
   spacer: { l: "Espace flexible", d: "Ce qui suit va au bout de la barre" },
   settings: { l: "Réglages", d: "Toujours en bas de sa barre", view: "settings", pin: true },
@@ -371,12 +373,12 @@ export const PRESETS: Record<string, () => Preset> = {
   minimal: () => ({
     cfg: { mode: "single", single: "left" },
     pinMode: "section",
-    items: onlyOn({ wecraft: 1, relaunch: 1, welive: 1, sep1: 1, create: 1, shop: 1, sep2: 1, spacer: 1, settings: 1 }),
+    items: onlyOn({ wecraft: 1, relaunch: 1, welive: 1, sep1: 1, create: 1, shop: 1, quests: 1, sep2: 1, spacer: 1, settings: 1 }),
   }),
   condensed: () => ({
     cfg: { mode: "single", single: "left" },
     pinMode: "section",
-    items: onlyOn({ wecraft: 1, relaunch: 1, welive: 1, create: 1, shop: 1, spacer: 1, settings: 1 }),
+    items: onlyOn({ wecraft: 1, relaunch: 1, welive: 1, create: 1, shop: 1, quests: 1, spacer: 1, settings: 1 }),
   }),
   all: () => ({ cfg: { mode: "single", single: "left" }, pinMode: "dock", dock: { side: "right", align: "end" }, items: NAVDEF.items.map((x) => ({ id: x.id, on: true, bar: x.bar })) }),
   split: () => ({
@@ -411,7 +413,7 @@ export const SKINS: Skin[] = [
   { n: "Event S3", sk: "#d49a72", hair: "#1a1a1a", eye: "#fbbf24", shirt: "#7c2d12", pants: "#3a3a3a", shoe: "#fb923c", saved: true },
 ];
 
-export const VIEWS = ["news", "home", "wecraft", "relaunch", "welive", "live", "relink", "settings", "favorites", "discover", "instance", "pins", "addcontent"] as const;
+export const VIEWS = ["news", "home", "wecraft", "relaunch", "welive", "live", "relink", "settings", "favorites", "discover", "instance", "pins", "addcontent", "quests"] as const;
 export type View = (typeof VIEWS)[number];
 export const THEMES = ["phenix", "relink", "aurore", "glace"] as const;
 

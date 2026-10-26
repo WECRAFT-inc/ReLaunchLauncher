@@ -454,6 +454,8 @@ export interface WeCraftApi {
     redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
     /** Code donné par /link sur un serveur ReLink (liaison du compte Minecraft, licence vérifiée en mode online). */
     linkCode(code: string): Promise<AccountResult>;
+    /** Avantages & Quêtes du joueur (lu sur ReLink). */
+    quests(): Promise<QuestsState>;
   };
   skins: {
     list(): Promise<InstalledSkin[]>;
@@ -691,6 +693,26 @@ export interface AccountState {
   /** false : pas de chiffrement système disponible, la session n'est pas gardée après fermeture. */
   persisted: boolean;
   error: string | null;
+}
+/** Quête « Avantages & Quêtes » (récompense en Éclats). */
+export interface Quest {
+  id: string;
+  category: "general" | "streak" | "event";
+  /** Event ReLink concerné (quêtes d'event). */
+  event: string | null;
+  title: string;
+  desc: string;
+  reward: number;
+  done: boolean;
+  claimed: boolean;
+}
+export interface QuestsState {
+  ok: boolean;
+  /** Message si la liste n'a pas pu être lue (hors ligne, pas connecté). */
+  error: string | null;
+  quests: Quest[];
+  /** Série de jours de jeu (streak) ; null si indisponible. */
+  streak: { current: number; longest: number; lastValidDate: string | null; days: number; dailyReward: number; milestones: { day: number; bonus: number }[] } | null;
 }
 export type AccountResult = { ok: true; state: AccountState; message?: string } | { ok: false; message: string; canceled?: boolean };
 

@@ -53,3 +53,16 @@ ReLaunch n'utilise **pas** l'identifiant de l'application Microsoft officielle. 
 3. Le Worker enregistre l'identité `minecraft_online`. Le compte compte alors comme « licence vérifiée », au même titre qu'une liaison Microsoft.
 
 **À faire côté plugin :** n'ajouter `online_mode: true` que si le serveur tourne réellement en mode online. Un serveur en mode offline ne vérifie pas la licence : sa liaison reste valable pour les events, mais ne compte pas comme « licence vérifiée ».
+
+## Tant que Mojang n'a pas validé l'application
+
+- Dans Réglages, l'option « Ouvrir le launcher officiel pour jouer » est **forcée et grisée** tant que le joueur n'est pas connecté à Microsoft dans ReLaunch.
+- L'accueil affiche une petite carte « Joue en tant que » : le compte Minecraft lié, ou une invitation à le lier, avec la récompense.
+
+## Quête « Compte Minecraft officiel » (1000 Éclats)
+
+- Elle est versée par le Worker, une seule fois par compte ReLink **et** une seule fois par compte Minecraft. Délier puis relier le même compte Minecraft à un autre profil ne rapporte rien.
+- Elle est validée par une licence vérifiée : connexion Microsoft (dans le launcher ou sur le site), ou `/link` sur un serveur en mode online.
+- Les comptes déjà vérifiés avant l'arrivée de la quête la reçoivent à leur prochaine ouverture de « Avantages & Quêtes » ou de l'accueil.
+- Route : `GET /launcher/quests` (Bearer). Elle renvoie les quêtes, la série de jours (tables `streaks` et `streak_config` existantes) et `reward` si une récompense vient d'être versée.
+- Les réclamations sont enregistrées dans `launcher_records`, collection `quest_claims`. La ligne d'Éclats a la raison `quest_custom`, avec `meta.quest = official_account`.

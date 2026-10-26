@@ -273,6 +273,10 @@ export function RelinkServersEvents() {
                     <b>{e.name}</b>
                     <small>{[dt ? fmtDate(e.start) : "", e.status].filter(Boolean).join(" · ")}</small>
                   </div>
+                  <button className="btn sm" data-go="quests" data-qev={e.id} aria-label={`${t("Quêtes de l'event")} ${e.name}`}>
+                    <Ic n="quests" />
+                    {t("Quêtes")}
+                  </button>
                 </div>
               );
             })
@@ -354,6 +358,10 @@ function EventHero({ ev }: { ev: { id: string; name: string; desc: string; statu
         <span className="eyebrow">{ev.status || t("Event ReLaunch")}</span>
         <h3>{ev.name}</h3>
         {ev.desc ? <p className="muted" style={{ maxWidth: "52ch", fontSize: "14px" }}>{ev.desc}</p> : null}
+        <button className="btn sm" data-go="quests" data-qev={ev.id} style={{ marginTop: "10px" }}>
+          <Ic n="quests" />
+          {t("Quêtes de l'event")}
+        </button>
       </div>
       {d ? (
         <div className="count" aria-label={t("Compte à rebours")}>

@@ -527,6 +527,7 @@ function registerIpc(): void {
       return { ok: false, message: e instanceof AccountError ? e.message : "Achat impossible pour le moment." };
     }
   });
+  handle(CHANNELS.accountQuests, async () => (account ? account.quests() : { ok: false, error: "Compte ReLink indisponible.", quests: [], streak: null }));
   handle(CHANNELS.accountLinkCode, async (code) => {
     if (!account || typeof code !== "string" || code.length > 20) return { ok: false, message: "Code invalide." };
     try {

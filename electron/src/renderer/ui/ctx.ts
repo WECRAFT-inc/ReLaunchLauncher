@@ -40,6 +40,8 @@ export interface Ui {
   /** Page d'une instance : identifiant et onglet. */
   page: string | null;
   itab: string;
+  /** Avantages & Quêtes : event mis en avant (renvoi depuis la fiche d'un event). */
+  qEv: string | null;
 }
 
 export interface AppCtx {

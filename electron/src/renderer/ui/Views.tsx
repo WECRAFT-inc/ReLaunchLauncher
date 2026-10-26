@@ -3,6 +3,7 @@ import { useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { useApp } from "./ctx";
 import { HomeCarousel } from "./Relink";
 import { Ic } from "./Ic";
+import { HomeAccount } from "./Quests";
 import { Menu, type MenuItem } from "./Menu";
 import { Minis } from "./Bars";
 import { InstIcon } from "./symbols";
@@ -86,6 +87,7 @@ export function Home() {
     return (
       <div className="home nocar">
         <div className="hmain">
+          <HomeAccount />
           {title}
           <div className="playrow">
             <select id="homeSel" aria-label={t("Instance ou serveur")} disabled>
@@ -123,6 +125,7 @@ export function Home() {
     <div className={`home${hasCar ? "" : " nocar"}${large ? " has-bg" : ""} bgf-${bg.url ? bg.fmt : "none"}`} style={bgStyle}>
       <div className="hmain">
         {bg.url && (bg.fmt === "mini" || bg.fmt === "reduced") ? <div className={`hbg ${bg.fmt}`} style={{ backgroundImage: `url("${bg.url}")` }} aria-hidden="true"></div> : null}
+        <HomeAccount />
         {title}
         <div className="playrow">
           <select id="homeSel" aria-label={t("Instance ou serveur")} value={sel.id} onChange={(e) => setUi({ sel: e.target.value })}>

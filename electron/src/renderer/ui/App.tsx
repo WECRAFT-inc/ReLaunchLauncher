@@ -51,6 +51,7 @@ import { EventEditor, RelaunchEvents } from "./EventEditor";
 import { Favorites, Home, homeBg, homeList, PinsPage, Soon, SOON, Wecraft } from "./Views";
 import { InstancePage } from "./InstancePage";
 import { TitleBar } from "./TitleBar";
+import { QuestsPage } from "./Quests";
 import { LivePage, MaintenanceBanner, NewsPage, VersionBanner } from "./Relink";
 import { SkinLayers, useActiveSkin, useSkinMotion, useSkinVars } from "./Skin";
 import type { MpDraft } from "./ctx";
@@ -69,8 +70,9 @@ const SECTION_NAMES: Record<View, string> = {
   instance: "Instance",
   pins: "Instances épinglées",
   addcontent: "Ajouter du contenu",
+  quests: "Avantages & Quêtes",
 };
-const SECTION_ORDER: View[] = ["home", "wecraft", "relaunch", "welive", "relink", "settings", "favorites", "discover", "live", "news", "instance", "pins", "addcontent"];
+const SECTION_ORDER: View[] = ["home", "wecraft", "relaunch", "welive", "relink", "settings", "favorites", "discover", "live", "news", "instance", "pins", "addcontent", "quests"];
 
 type FailureReason = Extract<SettingResult, { ok: false }>["reason"];
 const SAVE_ERRORS: Record<FailureReason, string> = {
@@ -119,6 +121,14 @@ export function App() {
   const [home, setHome] = useState<HomePref>(loadHome);
   const [nav, setNav] = useState<NavConfig>(() => {
     const n = load<NavConfig | null>("proto-nav5", null) ?? clone(NAVDEF);
+    // entrées ajoutées depuis (ex. « Avantages & Quêtes ») : insérées à leur place par défaut, activées
+    if (Array.isArray(n.items))
+      NAVDEF.items.forEach((d, i) => {
+        if (n.items.some((x) => x.id === d.id)) return;
+        const prev = NAVDEF.items[i - 1];
+        const at = prev ? n.items.findIndex((x) => x.id === prev.id) : -1;
+        n.items.splice(at + 1, 0, { ...d });
+      });
     normPins(n, () => true);
     return n;
   });
@@ -130,7 +140,7 @@ export function App() {
     } catch {
       // stockage indisponible
     }
-    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content" };
+    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content", qEv: null };
   });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tip, setTip] = useState<{ text: string; el: HTMLElement } | null>(null);
@@ -645,6 +655,7 @@ export function App() {
       if (go.dataset["rl"]) o.rlTab = go.dataset["rl"];
       else if (go.dataset["go"] === "relink" && ui.rlTab === "shop") o.rlTab = "profil";
       if (go.dataset["set"]) o.setTab = go.dataset["set"];
+      if (go.dataset["go"] === "quests") o.qEv = go.dataset["qev"] ?? null;
       show(go.dataset["go"]!, o);
       return;
     }
@@ -1248,6 +1259,7 @@ function ViewBody({ v }: { v: View }) {
   if (v === "relaunch") return <RelaunchEvents />;
   if (v === "news") return <NewsPage />;
   if (v === "live") return <LivePage />;
+  if (v === "quests") return <QuestsPage />;
   const s = SOON[v]!;
   return <Soon title={s.title} sub={s.sub} text={s.text} />;
 }

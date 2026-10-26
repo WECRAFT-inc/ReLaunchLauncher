@@ -13,7 +13,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AccountState } from "../../shared/api";
+import type { AccountState, Quest, QuestsState } from "../../shared/api";
 import { checkUrl, HttpError, type NetOptions } from "../net/download";
 import { str, WORKER_HOSTS, WORKER_URL } from "./worker";
 
@@ -401,6 +401,39 @@ export class RelinkAccount {
     const r = await this.call("POST", "/launcher/skins/redeem", { auth: true, json: { code: c } });
     const skinId = typeof r["skinId"] === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(r["skinId"]) ? r["skinId"] : "";
     return { state: await this.refresh(), skinId, skinName: str(r["skinName"], 60) || skinId };
+  }
+
+  /** Avantages & Quêtes : liste lue sur ReLink (données du serveur, rien n'est calculé ici). */
+  async quests(): Promise<QuestsState> {
+    await this.load();
+    if (!this.saved) return { ok: false, error: "Connecte-toi à ReLink pour voir tes quêtes.", quests: [], streak: null };
+    try {
+      const r = await this.call("GET", "/launcher/quests", { auth: true });
+      const num = (v: unknown, max = 1e9) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(max, Math.floor(v))) : 0);
+      const quests: Quest[] = (Array.isArray(r["quests"]) ? (r["quests"] as unknown[]) : []).slice(0, 200).flatMap((q0): Quest[] => {
+        const q = obj(q0);
+        const id = typeof q["id"] === "string" && /^[A-Za-z0-9_:-]{1,100}$/.test(q["id"]) ? q["id"] : "";
+        const cat = q["category"] === "streak" || q["category"] === "event" ? q["category"] : "general";
+        if (!id) return [];
+        const ev = typeof q["event"] === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(q["event"]) ? q["event"] : null;
+        return [{ id, category: cat, event: ev, title: str(q["title"], 120) || id, desc: str(q["desc"], 600), reward: num(q["reward"], 1e6), done: q["done"] === true, claimed: q["claimed"] === true }];
+      });
+      const s = obj(r["streak"]);
+      const streak = r["streak"]
+        ? {
+            current: num(s["current"], 10000),
+            longest: num(s["longest"], 10000),
+            lastValidDate: typeof s["lastValidDate"] === "string" ? str(s["lastValidDate"], 40) : null,
+            days: num(s["days"], 365),
+            dailyReward: num(s["dailyReward"], 1e6),
+            milestones: (Array.isArray(s["milestones"]) ? (s["milestones"] as unknown[]) : []).slice(0, 50).map((m) => ({ day: num(obj(m)["day"], 365), bonus: num(obj(m)["bonus"], 1e6) })),
+          }
+        : null;
+      if (r["reward"]) await this.refresh().catch(() => undefined); // récompense versée à l'instant : solde d'Éclats à jour
+      return { ok: true, error: null, quests, streak };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e), quests: [], streak: null };
+    }
   }
 
   /** Skins du launcher que le joueur possède (offerts, gagnés), d'après le dernier état connu. */
