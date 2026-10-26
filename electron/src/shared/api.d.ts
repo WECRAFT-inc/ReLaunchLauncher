@@ -213,7 +213,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string; offline?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "minecraft" | "microsoft" };
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean; viaOfficial?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "minecraft" | "microsoft" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -452,6 +452,8 @@ export interface WeCraftApi {
     buySkin(relinkId: string): Promise<AccountResult>;
     /** Débloque un skin avec un code (event, succès, partenaire…). */
     redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
+    /** Code donné par /link sur un serveur ReLink (liaison du compte Minecraft, licence vérifiée en mode online). */
+    linkCode(code: string): Promise<AccountResult>;
   };
   skins: {
     list(): Promise<InstalledSkin[]>;

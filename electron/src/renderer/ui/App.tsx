@@ -87,7 +87,7 @@ const START_ERRORS = {
   maintenance: "Lancement suspendu : maintenance en cours annoncée par ReLaunch.",
   login: "Connecte-toi à ReLink pour jouer (Réglages > Compte ReLink).",
   pack: "Pack d'event : la remise en état des mods officiels a échoué (connexion ?). Réessaie dans un instant.",
-  minecraft: "Lie ton compte Minecraft officiel à ReLink pour jouer (Réglages > Compte ReLink, ou depuis le site).",
+  minecraft: "Lie ton compte Minecraft officiel à ReLink pour jouer : connexion Microsoft, ou /link sur un serveur ReLink (Réglages > Compte ReLink).",
   microsoft: "Connecte ton compte Microsoft dans Réglages > Compte ReLink (ou active « Ouvrir le launcher officiel pour jouer »).",
 } as const;
 const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
@@ -503,6 +503,7 @@ export function App() {
           if (res.reason === "login" || res.reason === "minecraft" || res.reason === "microsoft") setUi({ view: "settings", setTab: "compte" });
           return;
         }
+        if (res.viaOfficial) toast("Lancement par le launcher officiel (connexion Microsoft directe indisponible ou non faite).", 5000);
         if (res.offline) toast("Service ReLink injoignable : le jeu se lance, mais les serveurs d'event refuseront la connexion tant que ta session ReLink n'est pas vérifiée.", 7000);
         setDefaultRamState(r);
         setLaunchUi({ box: true, name: req.name || "Lancement", status: null, error: null });

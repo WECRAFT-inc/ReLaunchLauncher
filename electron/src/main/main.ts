@@ -514,6 +514,15 @@ function registerIpc(): void {
       return { ok: false, message: e instanceof AccountError ? e.message : "Achat impossible pour le moment." };
     }
   });
+  handle(CHANNELS.accountLinkCode, async (code) => {
+    if (!account || typeof code !== "string" || code.length > 20) return { ok: false, message: "Code invalide." };
+    try {
+      const st = await account.linkCode(code);
+      return { ok: true, state: st, message: st.user?.minecraftVerified ? "Compte Minecraft lié, licence vérifiée." : "Compte Minecraft lié (serveur sans vérification de licence : rejoins un serveur ReLink en mode online pour la vérifier)." };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Code refusé pour le moment." };
+    }
+  });
   handle(CHANNELS.accountRedeem, async (code) => {
     if (!account || typeof code !== "string" || code.length > 40) return { ok: false, message: "Code invalide." };
     try {
@@ -778,10 +787,12 @@ function registerIpc(): void {
       const st = await account.state();
       if (!st.user?.minecraftVerified) return { ok: false, reason: "minecraft" };
     }
-    // lancement direct (défaut) : session Microsoft de ReLaunch ; sinon le launcher officiel
+    // lancement direct (défaut) avec la session Microsoft de ReLaunch. Repli automatique sur le launcher officiel
+    // si le joueur n'est pas connecté à Microsoft dans ReLaunch, ou si Microsoft / Mojang refusent la connexion
+    // directe (application WeCraft non autorisée ou bloquée) : les instances WeCraft restent jouables.
     const official = settings ? await settings.openOfficial() : false;
-    const ses = official ? null : await microsoft?.session();
-    if (!official && !ses) return { ok: false, reason: "microsoft" };
+    const ses = official ? null : await microsoft?.session().catch(() => null);
+    const fallback = !official && !ses;
     // pack d'event verrouillé : mods officiels remis en état, mods ajoutés à la corbeille
     try {
       const fix = await modpacks?.enforceLocked(inst.folder);
@@ -821,7 +832,8 @@ function registerIpc(): void {
       await settings?.setRam(ram);
       await instances?.rememberRam(id, ram);
     }
-    return started.ok && gate === "offline" ? { ...started, offline: true } : started;
+    if (!started.ok) return started;
+    return { ...started, ...(gate === "offline" ? { offline: true } : {}), ...(fallback ? { viaOfficial: true } : {}) };
   });
 
   ipcMain.handle(CHANNELS.launchStatus, async (event, job: unknown): Promise<LaunchStatus | null> => {

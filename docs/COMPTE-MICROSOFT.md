@@ -37,3 +37,19 @@ ReLaunch **ne lit jamais** les comptes enregistrés dans le launcher officiel. C
 4. **Liaison depuis le site (facultatif).**
    - Dans la même application Azure, ajoute la plateforme « Web » avec l'URI de retour du site, crée un secret client, puis ajoute-le au Worker : `MICROSOFT_CLIENT_SECRET`.
    - Le site envoie ensuite `{ code, redirect_uri }` à `POST /me/minecraft/microsoft`, avec la session ReLink du joueur.
+
+## Sans l'accord de Mojang, ou si l'accès est bloqué : repli prévu dans le code
+
+ReLaunch n'utilise **pas** l'identifiant de l'application Microsoft officielle. Ce serait se faire passer pour Microsoft, et la page de connexion afficherait « Minecraft Launcher » au joueur.
+
+**Repli au lancement.** Quand la connexion directe n'est pas possible, les instances WeCraft se lancent **automatiquement par le launcher officiel**, avec un message. C'est le cas :
+- si l'application WeCraft n'est pas configurée (`MICROSOFT_CLIENT_ID` absent) ;
+- si Mojang ne l'a pas autorisée ou la bloque ;
+- si le joueur n'est pas connecté à Microsoft dans ReLaunch.
+
+**Liaison et vérification de la licence sans Microsoft.** Le joueur passe par `/link` sur un serveur ReLink en mode online (`online-mode=true`) :
+1. Le plugin appelle `POST /mc/link/request` avec `{ mc_uuid, mc_username, online_mode: true }`.
+2. Le joueur entre le code dans ReLaunch (Réglages > Compte ReLink > « Lier avec /link ») ou sur le site.
+3. Le Worker enregistre l'identité `minecraft_online`. Le compte compte alors comme « licence vérifiée », au même titre qu'une liaison Microsoft.
+
+**À faire côté plugin :** n'ajouter `online_mode: true` que si le serveur tourne réellement en mode online. Un serveur en mode offline ne vérifie pas la licence : sa liaison reste valable pour les events, mais ne compte pas comme « licence vérifiée ».

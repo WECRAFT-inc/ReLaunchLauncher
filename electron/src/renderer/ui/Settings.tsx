@@ -968,6 +968,43 @@ function AccountGroup() {
   );
 }
 
+/** Liaison par /link : le joueur rejoint un serveur ReLink en mode online, tape /link, et entre le code ici. */
+function LinkCodeRow() {
+  const { toast, setAccount } = useApp();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="setrow">
+      <span>
+        <b>{t("Lier avec /link")}</b>
+        <small>{t("Rejoins un serveur ReLink avec le launcher officiel, tape /link en jeu, puis entre le code à 6 chiffres. Sur un serveur en mode online, Mojang vérifie ta licence.")}</small>
+      </span>
+      <span className="row" style={{ gap: "8px" }}>
+        <input type="text" className="mono" inputMode="numeric" value={code} maxLength={6} placeholder="123456" aria-label={t("Code /link")} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} style={{ width: "100px" }} />
+        <button
+          className="btn sm pri"
+          disabled={busy || code.length !== 6}
+          onClick={() => {
+            setBusy(true);
+            void window.wecraft.account
+              .linkCode(code)
+              .then((r) => {
+                if (r.ok) {
+                  setAccount(r.state);
+                  setCode("");
+                }
+                toast(r.message ?? "");
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          {busy ? t("Vérification…") : t("Lier")}
+        </button>
+      </span>
+    </div>
+  );
+}
+
 /** Compte Minecraft officiel (Microsoft) : connexion dans le navigateur, liaison automatique au compte ReLink. */
 function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedName: string | null }) {
   const { toast, setAccount } = useApp();
@@ -1008,7 +1045,7 @@ function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedNam
               : verified
                 ? `${t("Lié à ReLink")} (${linkedName ?? ""}) ${t("depuis le site : connecte-toi ici pour jouer sans le launcher officiel.")}`
                 : ms && !ms.available
-                  ? t("Connexion Microsoft pas encore disponible (application WeCraft en attente d'autorisation).")
+                  ? t("Connexion directe pas encore disponible : le jeu passe par le launcher officiel. Lie ton compte avec /link ci-dessous.")
                   : t("Ton navigateur s'ouvre sur Microsoft. ReLaunch ne voit jamais ton mot de passe.")}
           </small>
         </span>
@@ -1020,6 +1057,7 @@ function MicrosoftGroup({ verified, linkedName }: { verified: boolean; linkedNam
           )}
         </span>
       </div>
+      {!verified ? <LinkCodeRow /> : null}
       {ms && !ms.persisted ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Chiffrement système indisponible : la connexion Microsoft ne sera pas gardée après la fermeture de ReLaunch.")}</p> : null}
       <div className="setrow">
         <span>

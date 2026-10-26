@@ -377,6 +377,14 @@ export class RelinkAccount {
     return this.refresh();
   }
 
+  /** Code /link (6 chiffres) donné en jeu sur un serveur ReLink. */
+  async linkCode(code: string): Promise<AccountState> {
+    const c = String(code).replace(/\D/g, "");
+    if (c.length !== 6) throw new AccountError("Code invalide : 6 chiffres, donnés par /link en jeu.");
+    await this.call("POST", "/link/confirm", { auth: true, json: { code: c } });
+    return this.refresh();
+  }
+
   /** Achat d'un skin du launcher en Éclats (débit fait par le Worker, de façon atomique). */
   async buySkin(skinId: string): Promise<{ state: AccountState; message: string }> {
     if (!/^[A-Za-z0-9_-]{1,100}$/.test(skinId)) throw new AccountError("Skin inconnu.");

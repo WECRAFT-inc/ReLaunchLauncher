@@ -22,6 +22,7 @@ export const CHANNELS = {
   accountSkinImage: "account:skin-image",
   accountBuySkin: "account:buy-skin",
   accountRedeem: "account:redeem-code",
+  accountLinkCode: "account:link-code",
   skinsList: "skins:list",
   skinsImport: "skins:import-local",
   skinsInstall: "skins:install",
