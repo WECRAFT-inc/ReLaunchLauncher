@@ -73,9 +73,18 @@ jobs:
         working-directory: electron
         run: npm test
 
+      # electron-builder télécharge ses outils (NSIS, winCodeSign) sur GitHub : une erreur réseau passagère
+      # (504, connexion coupée) faisait échouer la publication. Jusqu'à 3 essais, sans cache partagé.
       - name: Compilation de l'installeur
         working-directory: electron
-        run: npm run dist:win
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            npm run dist:win
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($i -lt 3) { Write-Host "Essai $i échoué (réseau ?) : nouvel essai dans 30 s."; Start-Sleep -Seconds 30 }
+          }
+          exit 1
 
       - name: Nom et empreinte SHA-256
         shell: pwsh

@@ -39,8 +39,16 @@ jobs:
       - name: Tests (bloquants)
         run: npm test
 
+      # Jusqu'à 3 essais : electron-builder télécharge ses outils sur GitHub (erreurs 504 passagères).
       - name: Compilation de l'installeur (sans publication)
-        run: npm run dist:win
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            npm run dist:win
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($i -lt 3) { Write-Host "Essai $i échoué (réseau ?) : nouvel essai dans 30 s."; Start-Sleep -Seconds 30 }
+          }
+          exit 1
 
       - name: Empreinte SHA-256
         shell: pwsh
