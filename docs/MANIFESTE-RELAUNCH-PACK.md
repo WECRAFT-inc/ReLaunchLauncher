@@ -150,3 +150,25 @@ Les mods absents de Modrinth et non hébergés vont dans les overrides. Ils sont
   - `options.txt` et `servers.dat` restent sur le PC.
 - **Import :** « Créer un WePack », puis « Importer », puis le fichier `.rlpack`. Le pack est toujours installé dans une **nouvelle** instance, jamais verrouillé.
 - **Sécurité :** s'il contient des mods qui ne viennent ni de Modrinth ni de WeCraft, le launcher en montre la liste et demande l'accord du joueur avant d'installer, puisqu'un mod est du code exécuté par le jeu.
+
+## Vérification des packs d'event avant chaque lancement (26/10/2026)
+
+Pour un pack verrouillé (`locked`), signé et installé depuis ReLaunch, le launcher fait ces contrôles avant chaque lancement :
+
+1. **Manifeste revérifié.** Le manifeste installé est revérifié avec la clé épinglée. La signature est gardée à l'installation dans `relaunch_pack.json` (`manifestSig`).
+   - Pour une installation plus ancienne, elle est retéléchargée si cette version est encore celle annoncée.
+   - Un manifeste modifié sur le PC (mods ajoutés à la liste, verrou retiré) bloque le lancement avec le message « Pack d'event modifié… ».
+2. **Version imposée.** La version de Minecraft et le loader sont remis à ceux du manifeste dans `wecraft.json`. Le jeu est lancé avec ces valeurs.
+3. **Fichiers officiels remis en état.** Cela concerne `mods/` et `resourcepacks/`, sauf les dossiers modifiables (shaders).
+   - Les fichiers du manifeste sont revérifiés par empreinte, puis retéléchargés si besoin.
+   - Ceux de l'archive overrides sont comparés à l'archive officielle (cache `cache/rlpack/<sha256>.zip`, empreinte du manifeste signé), puis réécrits s'ils diffèrent.
+4. **Ajouts retirés.** Les ajouts du joueur partent à la corbeille, y compris les mods cachés ou renommés et les packs de ressources (fichiers ou dossiers).
+
+**Limite :** cette vérification se fait sur le PC du joueur. Elle évite les modifications involontaires et la triche simple, mais quelqu'un de déterminé peut jouer avec un autre launcher. La vraie garantie se fait côté serveur (mode online, plugin ou anti-triche).
+
+## Event « Compte Microsoft obligatoire » (panneau > Events)
+
+- **Case cochée :** le modpack de l'event ne se lance qu'avec le compte Microsoft connecté dans ReLaunch, sans repli sur le launcher officiel. Ce compte doit être celui lié au compte ReLink du joueur, qui doit être connecté.
+- **Case décochée :** le comportement normal s'applique. Le compte officiel reste requis, via ReLaunch ou le launcher officiel.
+- Tant que Mojang n'a pas validé l'application WeCraft, un event avec cette case cochée ne peut être lancé par personne.
+- **Côté serveur :** il faut garder le mode online, ou faire vérifier par le plugin que le compte ReLink est lié à Microsoft.

@@ -271,7 +271,7 @@ export function RelinkServersEvents() {
                   </div>
                   <div>
                     <b>{e.name}</b>
-                    <small>{[dt ? fmtDate(e.start) : "", e.status].filter(Boolean).join(" · ")}</small>
+                    <small>{[dt ? fmtDate(e.start) : "", e.status, e.requireMicrosoft ? t("Compte Microsoft requis") : ""].filter(Boolean).join(" · ")}</small>
                   </div>
                   <button className="btn sm" data-go="quests" data-qev={e.id} aria-label={`${t("Quêtes de l'event")} ${e.name}`}>
                     <Ic n="quests" />

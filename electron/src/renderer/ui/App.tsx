@@ -91,6 +91,9 @@ const START_ERRORS = {
   pack: "Pack d'event : la remise en état des mods officiels a échoué (connexion ?). Réessaie dans un instant.",
   minecraft: "Compte Minecraft officiel requis : connecte-toi à Microsoft dans ReLaunch, ou laisse le launcher officiel s'ouvrir.",
   microsoft: "Connecte ton compte Microsoft dans Réglages > Compte ReLink (ou active « Ouvrir le launcher officiel pour jouer »).",
+  "pack-integrity": "Pack d'event modifié ou impossible à vérifier : mets-le à jour depuis la page ReLaunch.",
+  "event-microsoft": "Cet event exige ton compte Microsoft connecté dans ReLaunch (et lié à ton compte ReLink) : Réglages > Compte ReLink.",
+  "event-relink": "Cet event exige ton compte ReLink : connecte-toi dans Réglages > Compte ReLink.",
 } as const;
 const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
   invalid: "Instance introuvable : la liste a peut-être changé.",
@@ -510,7 +513,7 @@ export function App() {
       .then((res) => {
         if (!res.ok) {
           toast(START_ERRORS[res.reason], 4000);
-          if (res.reason === "login" || res.reason === "minecraft" || res.reason === "microsoft") setUi({ view: "settings", setTab: "compte" });
+          if (res.reason === "login" || res.reason === "minecraft" || res.reason === "microsoft" || res.reason === "event-microsoft" || res.reason === "event-relink") setUi({ view: "settings", setTab: "compte" });
           return;
         }
         if (res.viaOfficial) toast("Lancement par le launcher officiel (connexion Microsoft directe indisponible ou non faite).", 5000);

@@ -186,6 +186,8 @@ export interface InstallInput {
   trash: (file: string) => Promise<void>;
   /** Contenu du manifeste tel que publié (gardé pour la réparation). */
   manifestText: string;
+  /** Signature Ed25519 du manifeste (base64), gardée pour revérifier le pack d'event avant chaque lancement. */
+  manifestSig?: string | null;
 }
 
 /** Installe ou met à jour un modpack ReLaunch dans `folder` (dossier déjà créé). Renvoie les avertissements. */
@@ -259,7 +261,7 @@ export async function installRelaunchPack(x: InstallInput): Promise<{ warnings: 
   await writeFile(wjFile, JSON.stringify(wj, null, 2), "utf8");
   const packFiles = [...plan.files.map((f) => f.path), ...overridesFiles].filter((p) => /^(mods|resourcepacks|shaderpacks)\//.test(p));
   await writeFile(path.join(folder, PACK_FILE), JSON.stringify({ name: plan.name, version: plan.version, source: x.source, files: packFiles }, null, 2), "utf8");
-  await writeFile(path.join(folder, RP_FILE), JSON.stringify({ signed: x.signed, installedAt: new Date().toISOString(), overridesFiles, manifest: x.manifestText }, null, 2), "utf8");
+  await writeFile(path.join(folder, RP_FILE), JSON.stringify({ signed: x.signed, installedAt: new Date().toISOString(), overridesFiles, manifest: x.manifestText, manifestSig: x.manifestSig ?? null }, null, 2), "utf8");
   if (plan.locked && x.signed) {
     // modpack d'événement : tout le contenu officiel est imposé, seuls les shaders restent au joueur
     const evId = plan.id.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 64) || "event";
@@ -272,45 +274,129 @@ export async function installRelaunchPack(x: InstallInput): Promise<{ warnings: 
 }
 
 /** Copie installée d'un modpack ReLaunch (null si ce dossier n'en est pas un). */
-export async function readInstalledPack(folder: string, workerHost: string): Promise<{ plan: RpPlan; signed: boolean; overridesFiles: string[]; manifest: string } | null> {
+export async function readInstalledPack(folder: string, workerHost: string): Promise<{ plan: RpPlan; signed: boolean; overridesFiles: string[]; manifest: string; manifestSig: string | null } | null> {
   try {
     const o = obj(JSON.parse(await readFile(path.join(folder, RP_FILE), "utf8")));
     const manifest = typeof o["manifest"] === "string" ? o["manifest"] : "";
     const plan = planRelaunchPack(JSON.parse(manifest), workerHost);
     const overridesFiles = Array.isArray(o["overridesFiles"]) ? (o["overridesFiles"] as unknown[]).map(rpPath).filter((p): p is string => !!p) : [];
-    return { plan, signed: o["signed"] === true, overridesFiles, manifest };
+    const sig = typeof o["manifestSig"] === "string" && /^[A-Za-z0-9+/=]{40,200}$/.test(o["manifestSig"]) ? o["manifestSig"] : null;
+    return { plan, signed: o["signed"] === true, overridesFiles, manifest, manifestSig: sig };
   } catch {
     return null;
   }
 }
 
+/** Pack d'event modifié ou impossible à revérifier : le lancement est refusé. */
+export class PackIntegrityError extends Error {}
+
+export interface EnforceInput {
+  net: NetOptions & { userAgent: string };
+  workerHost: string;
+  trash: (file: string) => Promise<void>;
+  /**
+   * Revérifie le manifeste installé avec la clé épinglée. Reçoit la signature gardée à l'installation (ou null
+   * pour une installation plus ancienne) ; renvoie la signature valide (base64, éventuellement retéléchargée),
+   * ou null si le manifeste n'est pas authentique ou ne peut pas être vérifié.
+   */
+  verifyManifest: (plan: RpPlan, manifestText: string, sig: string | null) => Promise<string | null>;
+  /** Archive overrides officielle (empreinte du manifeste signé vérifiée), ou null si introuvable. */
+  overridesZip: (plan: RpPlan) => Promise<string | null>;
+}
+
+const sha256File = async (file: string): Promise<string | null> => {
+  try {
+    return createHash("sha256").update(await readFile(file)).digest("hex");
+  } catch {
+    return null;
+  }
+};
+
 /**
- * Pack d'event verrouillé, avant chaque lancement : chaque mod officiel est présent et intact (sinon il est
- * retéléchargé et revérifié), et tout mod ajouté par le joueur part à la corbeille. Les configs ne sont pas
- * remises à zéro (les mods les réécrivent en jouant).
+ * Pack d'event verrouillé, avant chaque lancement :
+ *  1. le manifeste installé est revérifié (signature Ed25519, clé épinglée) : un manifeste modifié sur le PC
+ *     (mods ajoutés à la liste, verrou retiré) est refusé ;
+ *  2. version de Minecraft et loader remis à ceux du pack ;
+ *  3. chaque fichier officiel hors dossiers modifiables (mods, packs de ressources…) est présent et intact,
+ *     sinon retéléchargé et revérifié ; les mods et packs fournis par l'archive overrides sont comparés à
+ *     l'archive officielle et réécrits s'ils diffèrent ;
+ *  4. tout mod ajouté (y compris fichiers cachés ou renommés) et tout pack de ressources ajouté part à la
+ *     corbeille ; seuls les dossiers modifiables du manifeste signé (les shaders) restent au joueur.
+ * Les configs ne sont pas remises à zéro (les mods les réécrivent en jouant).
+ * Limite : c'est une vérification côté joueur. Elle évite les modifications involontaires et la triche simple,
+ * mais seul le serveur peut réellement garantir ce qui se connecte.
  */
-export async function enforceLockedPack(folder: string, x: { net: NetOptions & { userAgent: string }; workerHost: string; trash: (file: string) => Promise<void> }): Promise<{ restored: number; removed: string[] } | null> {
+export async function enforceLockedPack(folder: string, x: EnforceInput): Promise<{ restored: number; removed: string[]; event: string | null; mc: string; loader: RpPlan["loader"]; loaderVersion: string | null } | null> {
   const inst = await readInstalledPack(folder, x.workerHost);
   if (!inst || !inst.signed || !inst.plan.locked) return null;
+  const { plan } = inst;
+  // 1. manifeste authentique
+  const sig = await x.verifyManifest(plan, inst.manifest, inst.manifestSig);
+  if (!sig) throw new PackIntegrityError("Pack d'event modifié ou impossible à vérifier : mets-le à jour depuis ReLaunch.");
+  const rpFile = path.join(folder, RP_FILE);
+  if (sig !== inst.manifestSig) {
+    const o = obj(JSON.parse(await readFile(rpFile, "utf8")));
+    await writeFile(rpFile, JSON.stringify({ ...o, manifestSig: sig }, null, 2), "utf8");
+  }
+  // 2. version et loader imposés
+  const wjFile = path.join(folder, "wecraft.json");
+  const wj = obj(await readFile(wjFile, "utf8").then((t) => JSON.parse(t) as unknown, () => ({})));
+  const want = { version: plan.mc, loader: plan.loader ?? undefined, loader_version: plan.loaderVersion ?? undefined };
+  if (wj["version"] !== want.version || wj["loader"] !== want.loader || wj["loader_version"] !== want.loader_version) {
+    wj["version"] = want.version;
+    if (want.loader) wj["loader"] = want.loader;
+    else delete wj["loader"];
+    if (want.loader_version) wj["loader_version"] = want.loader_version;
+    else delete wj["loader_version"];
+    await writeFile(wjFile, JSON.stringify(wj, null, 2), "utf8");
+  }
+  // 3. fichiers officiels
   let restored = 0;
-  const official = new Set([...inst.plan.files.map((f) => f.path.toLowerCase()), ...inst.overridesFiles.map((p) => p.toLowerCase())]);
-  await runLimited(inst.plan.files.filter((f) => f.path.startsWith("mods/")), 4, async (f) => {
+  const guarded = (rel: string) => /^(mods|resourcepacks)\//.test(rel) && !isEditable(plan, rel);
+  await runLimited(plan.files.filter((f) => guarded(f.path)), 4, async (f) => {
     const dest = path.join(folder, ...f.path.split("/"));
     if (await fileMatches(dest, f)) return;
+    await mkdir(path.dirname(dest), { recursive: true });
     await download(f, dest, x.net, x.workerHost);
     restored++;
   });
-  const removed: string[] = [];
-  const modsDir = path.join(folder, "mods");
-  for (const name of await readdir(modsDir).catch(() => [] as string[])) {
-    const rel = `mods/${name}`;
-    if (official.has(rel.toLowerCase()) || name.startsWith(".")) continue;
-    const file = path.join(modsDir, name);
-    if (!(await stat(file).then((s) => s.isFile(), () => false))) continue;
-    await x.trash(file);
-    removed.push(name);
+  const ovGuarded = inst.overridesFiles.filter(guarded);
+  if (ovGuarded.length) {
+    const zip = plan.overrides ? await x.overridesZip(plan) : null;
+    if (!zip) throw new PackIntegrityError("Fichiers officiels de l'event introuvables : mets le pack à jour depuis ReLaunch.");
+    const { entries } = await listZip(zip);
+    const byName = new Map(entries.map((e) => [rpPath(e.name)?.toLowerCase() ?? "", e]));
+    for (const rel of ovGuarded) {
+      const e = byName.get(rel.toLowerCase());
+      if (!e) continue;
+      const data = await readEntry(zip, e, MAX_OVERRIDE_ENTRY);
+      const dest = path.join(folder, ...rel.split("/"));
+      if ((await sha256File(dest)) === createHash("sha256").update(data).digest("hex")) continue;
+      await mkdir(path.dirname(dest), { recursive: true });
+      await writeFile(`${dest}.rlpart`, data);
+      await rename(`${dest}.rlpart`, dest);
+      restored++;
+    }
   }
-  return { restored, removed };
+  // 4. ajouts du joueur
+  const official = new Set([...plan.files.map((f) => f.path.toLowerCase()), ...inst.overridesFiles.map((p) => p.toLowerCase())]);
+  const removed: string[] = [];
+  for (const dir of ["mods", "resourcepacks"]) {
+    if (isEditable(plan, dir)) continue;
+    const base = path.join(folder, dir);
+    for (const name of await readdir(base).catch(() => [] as string[])) {
+      const rel = `${dir}/${name}`;
+      if (official.has(rel.toLowerCase())) continue;
+      const file = path.join(base, name);
+      const st = await stat(file).catch(() => null);
+      if (!st) continue;
+      // mods : seuls les fichiers comptent (les loaders ne lisent pas les sous-dossiers) ; packs : fichiers et dossiers
+      if (dir === "mods" && !st.isFile()) continue;
+      await x.trash(file);
+      removed.push(rel);
+    }
+  }
+  return { restored, removed, event: plan.event, mc: plan.mc, loader: plan.loader, loaderVersion: plan.loaderVersion };
 }
 
 // ---------------------------------------------------------------- export / import entre joueurs (.rlpack)

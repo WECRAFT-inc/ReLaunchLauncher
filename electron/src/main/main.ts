@@ -20,6 +20,7 @@ import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLo
 import { explainWorkerError, RelinkClient, WORKER_HOSTS, WORKER_URL } from "./relink/worker";
 import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore, verifyDetached } from "./skins/skins";
 import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
+import { PackIntegrityError } from "./modpacks/relaunchPack";
 import { syncSkinMod } from "./launch/skinMod";
 import { trashFolder } from "./instances/trash";
 import { readEventManifest } from "./events/eventLock";
@@ -291,6 +292,7 @@ async function start(): Promise<void> {
       verify: verifyDetached,
       lookupHosted: (hashes) => hostedByHash(hashes, WORKER_URL, WORKER_HOSTS, ua),
       lookupModrinth: (hashes) => modrinthByHash(hashes, ua),
+      cachedPacks: async () => (relink ? ((await relink.cached()).data?.modpacks ?? []) : []),
     },
     confirmShared: async (name, mods) => {
       const opts = {
@@ -791,24 +793,39 @@ function registerIpc(): void {
     if (!inst.version) return { ok: false, reason: "no-version" };
     if (modpacks?.busy()) return { ok: false, reason: "busy" }; // mods en cours de téléchargement
     if (relink?.policy().blockLaunch) return { ok: false, reason: "maintenance" }; // maintenance décidée dans le panneau ReLink
+    // pack d'event verrouillé : manifeste revérifié, version imposée, fichiers officiels remis en état,
+    // mods et packs ajoutés à la corbeille
+    let fix: Awaited<ReturnType<NonNullable<typeof modpacks>["enforceLocked"]>> = null;
+    try {
+      fix = (await modpacks?.enforceLocked(inst.folder)) ?? null;
+      if (fix && (fix.restored || fix.removed.length)) void appLog?.info("Modpacks", `Pack d'event remis en état : ${fix.restored} fichier(s) officiel(s) restauré(s), ${fix.removed.length} ajout(s) retiré(s)${fix.removed.length ? ` (${fix.removed.slice(0, 10).join(", ")})` : ""}.`);
+    } catch (e) {
+      void appLog?.error("Modpacks", `Pack d'event : vérification impossible (${e instanceof Error ? e.message : String(e)}).`);
+      return { ok: false, reason: e instanceof PackIntegrityError ? "pack-integrity" : "pack" };
+    }
+    // event qui exige le compte Microsoft connecté dans ReLaunch (réglé par event dans le panneau)
+    const evId = fix?.event ?? null;
+    const ev = evId && relink ? ((await relink.cached()).data?.events ?? []).find((e) => e.id === evId) : undefined;
+    const needMs = ev?.requireMicrosoft === true;
     // Aucune connexion exigée par ReLaunch. Le compte Minecraft officiel est toujours requis, mais vérifié par
     // Microsoft lui-même : connexion Microsoft dans ReLaunch (lancement direct) ou, sinon, le launcher officiel.
     // Si le joueur est aussi connecté à ReLink, son compte Microsoft y est lié (quête « 1re liaison »).
-    if (account && (await account.state()).loggedIn) await linkOfficial().catch(() => null);
+    const loggedIn = !!account && (await account.state()).loggedIn;
+    if (needMs && !loggedIn) return { ok: false, reason: "event-relink" };
+    if (loggedIn) await linkOfficial().catch(() => null);
     // lancement direct (défaut) avec la session Microsoft de ReLaunch. Repli automatique sur le launcher officiel
     // si le joueur n'est pas connecté à Microsoft dans ReLaunch, ou si Microsoft / Mojang refusent la connexion
     // directe (application WeCraft non autorisée ou bloquée) : les instances WeCraft restent jouables.
-    const official = settings ? await settings.openOfficial() : false;
+    // Event « Microsoft obligatoire » : jamais de repli, et le compte connecté doit être celui lié à ReLink.
+    const official = needMs ? false : settings ? await settings.openOfficial() : false;
     const ses = official ? null : await microsoft?.session().catch(() => null);
-    const fallback = !official && !ses;
-    // pack d'event verrouillé : mods officiels remis en état, mods ajoutés à la corbeille
-    try {
-      const fix = await modpacks?.enforceLocked(inst.folder);
-      if (fix && (fix.restored || fix.removed.length)) void appLog?.info("Modpacks", `Pack d'event remis en état : ${fix.restored} mod(s) retéléchargé(s), ${fix.removed.length} mod(s) ajouté(s) retiré(s)${fix.removed.length ? ` (${fix.removed.slice(0, 10).join(", ")})` : ""}.`);
-    } catch (e) {
-      void appLog?.error("Modpacks", `Pack d'event : remise en état impossible (${e instanceof Error ? e.message : String(e)}).`);
-      return { ok: false, reason: "pack" };
+    if (needMs) {
+      if (!ses) return { ok: false, reason: "event-microsoft" };
+      const st = account ? await account.state() : null;
+      const dashed = ses.uuid.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+      if (!st?.user?.minecraftVerified || st.user.minecraftUuid !== dashed) return { ok: false, reason: "event-microsoft" };
     }
+    const fallback = !official && !ses;
     // skin ReLink en jeu : mod de skins compatible (instances moddées, hors event) ; un échec ne bloque pas
     if (modpacks && !(await readEventManifest(inst.folder))) {
       try {
@@ -829,9 +846,10 @@ function registerIpc(): void {
       {
         gameDir: inst.path,
         profileName: profileNameFor(inst.display || defaultInstanceName(inst.path)),
-        mc: inst.version,
-        loader: inst.loader,
-        loaderVersion: inst.loaderVersion,
+        // pack d'event : version et loader du manifeste signé
+        mc: fix ? fix.mc : inst.version,
+        loader: fix ? fix.loader : inst.loader,
+        loaderVersion: fix ? fix.loaderVersion : inst.loaderVersion,
       },
       { ram, repair: o.repair === true, ...(ses ? { direct: { name: ses.name, uuid: ses.uuid, accessToken: ses.accessToken, brand: app.getVersion() } } : {}) },
     );

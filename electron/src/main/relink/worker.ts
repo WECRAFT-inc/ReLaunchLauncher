@@ -95,7 +95,7 @@ export function decodeEvent(v: unknown): RelinkEvent | null {
   const i = id(o["id"]);
   const n = pick(o, ["n", "name", "title"], 100);
   if (!i || !n) return null;
-  return { id: i, name: n, desc: pick(o, ["d", "desc", "description", "body"], 1000), status: pick(o, ["status", "state"], 20), start: date(o["start"] ?? o["startsAt"] ?? o["date"]), end: date(o["end"] ?? o["endsAt"]), server: id(o["server"]), pack: id(o["pack"] ?? o["modpack"]) };
+  return { id: i, name: n, desc: pick(o, ["d", "desc", "description", "body"], 1000), status: pick(o, ["status", "state"], 20), start: date(o["start"] ?? o["startsAt"] ?? o["date"]), end: date(o["end"] ?? o["endsAt"]), server: id(o["server"]), pack: id(o["pack"] ?? o["modpack"]), requireMicrosoft: o["requireMicrosoft"] === true };
 }
 export function decodePartner(v: unknown): RelinkPartner | null {
   const o = obj(v);

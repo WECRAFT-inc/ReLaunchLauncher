@@ -92,6 +92,8 @@ export interface ModpackDeps {
     lookupHosted: (sha512s: string[]) => Promise<Record<string, { url: string }>>;
     /** Modrinth : SHA-1 -> fichier exact (export entre joueurs). */
     lookupModrinth: (sha1s: string[]) => Promise<Record<string, { url: string; sha512: string }>>;
+    /** Modpacks officiels annoncés par ReLink (dernier relevé), pour revérifier un pack d'event installé. */
+    cachedPacks?: () => Promise<RelinkModpack[]>;
   };
   /** Accord du joueur avant d'installer un pack partagé qui contient des mods hors Modrinth. */
   confirmShared?: (name: string, unknownMods: string[]) => Promise<boolean>;
@@ -214,7 +216,8 @@ export class ModpackService {
       progress(0, 0, "Téléchargement du manifeste signé...");
       const man = await rl.fetchBytes(rl.assetUrl(v.id, false), 4 * 1024 * 1024);
       if (createHash("sha256").update(man).digest("hex") !== v.sha256) throw new Error("Manifeste refusé : empreinte SHA-256 différente de celle annoncée.");
-      if (!rl.verify(man, await rl.fetchBytes(rl.assetUrl(v.id, true), 4096), rl.publicKey)) throw new Error("Manifeste refusé : signature invalide.");
+      const manSig = await rl.fetchBytes(rl.assetUrl(v.id, true), 4096);
+      if (!rl.verify(man, manSig, rl.publicKey)) throw new Error("Manifeste refusé : signature invalide.");
       const manifestText = man.toString("utf8");
       const plan = planRelaunchPack(JSON.parse(manifestText) as unknown, rl.workerHost);
       if (plan.id !== pack.id || plan.version !== v.version) throw new Error("Manifeste refusé : il ne correspond pas au modpack annoncé.");
@@ -249,7 +252,7 @@ export class ModpackService {
         }
       }
       try {
-        const r = await installRelaunchPack({ folder, plan, overridesZip: ovFile, previous, signed: true, source: "ReLaunch", net: this.netx(), workerHost: rl.workerHost, progress, trash: this.trash, manifestText });
+        const r = await installRelaunchPack({ folder, plan, overridesZip: ovFile, previous, signed: true, source: "ReLaunch", net: this.netx(), workerHost: rl.workerHost, progress, trash: this.trash, manifestText, manifestSig: manSig.toString("base64") });
         await this.d.instances.list(true);
         return {
           summary: `${plan.name} ${plan.version} ${previous ? "mis à jour" : "installé"} : Minecraft ${plan.mc}${plan.loader ? ` · ${plan.loader} ${plan.loaderVersion ?? ""}`.trimEnd() : ""}, ${plan.files.length} fichier${plan.files.length > 1 ? "s" : ""} vérifié${plan.files.length > 1 ? "s" : ""} (${r.downloaded} téléchargé${r.downloaded > 1 ? "s" : ""}).${plan.locked ? " Pack d'event : seuls les shaders peuvent être changés." : ""}`,
@@ -306,10 +309,40 @@ export class ModpackService {
   }
 
   /** Avant le lancement d'un pack d'event verrouillé : mods officiels remis en état, mods ajoutés retirés. */
-  async enforceLocked(folder: string): Promise<{ restored: number; removed: string[] } | null> {
-    const host = this.d.relaunch?.workerHost;
-    if (!host) return null;
-    return enforceLockedPack(folder, { net: this.netx(), workerHost: host, trash: this.trash });
+  async enforceLocked(folder: string): Promise<Awaited<ReturnType<typeof enforceLockedPack>>> {
+    const rl = this.d.relaunch;
+    if (!rl) return null;
+    const packs = async () => (rl.cachedPacks ? await rl.cachedPacks().catch(() => [] as RelinkModpack[]) : []);
+    const cacheDir = path.join(path.dirname(this.d.instancesDir), "cache", "rlpack");
+    return enforceLockedPack(folder, {
+      net: this.netx(),
+      workerHost: rl.workerHost,
+      trash: this.trash,
+      verifyManifest: async (plan, text, sig) => {
+        if (!rl.publicKey) return null;
+        const man = Buffer.from(text, "utf8");
+        if (sig && rl.verify(man, Buffer.from(sig, "base64"), rl.publicKey)) return sig;
+        // installation antérieure (signature non gardée) : signature retéléchargée si cette version est annoncée
+        const v = (await packs()).find((m) => m.id === plan.id)?.latest;
+        if (!v || v.version !== plan.version || v.sha256 !== createHash("sha256").update(man).digest("hex")) return null;
+        const fresh = await rl.fetchBytes(rl.assetUrl(v.id, true), 4096).catch(() => null);
+        return fresh && rl.verify(man, fresh, rl.publicKey) ? fresh.toString("base64") : null;
+      },
+      overridesZip: async (plan) => {
+        const want = plan.overrides?.sha256;
+        if (!want || !rl.publicKey) return null;
+        const file = path.join(cacheDir, `${want}.zip`);
+        const hash = await readFile(file).then((b) => createHash("sha256").update(b).digest("hex"), () => null);
+        if (hash === want) return file; // empreinte venant du manifeste signé
+        const ov = (await packs()).find((m) => m.id === plan.id)?.latest?.overrides;
+        if (!ov || ov.sha256 !== want) return null;
+        const data = await rl.fetchBytes(rl.assetUrl(ov.id, false), 96 * 1024 * 1024).catch(() => null);
+        if (!data || createHash("sha256").update(data).digest("hex") !== want) return null;
+        await mkdir(cacheDir, { recursive: true });
+        await writeFile(file, data);
+        return file;
+      },
+    });
   }
 
   /** Installe une version de modpack Modrinth (Découvrir > Modpacks > Installer) dans une nouvelle instance. */

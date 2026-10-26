@@ -213,7 +213,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string; offline?: boolean; viaOfficial?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "minecraft" | "microsoft" };
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean; viaOfficial?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "pack-integrity" | "minecraft" | "microsoft" | "event-microsoft" | "event-relink" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -606,6 +606,8 @@ export interface RelinkEvent {
   end: string;
   server: string;
   pack: string;
+  /** Event réservé au compte Microsoft connecté dans ReLaunch (lié au compte ReLink). */
+  requireMicrosoft: boolean;
 }
 export interface RelinkPartner {
   id: string;
