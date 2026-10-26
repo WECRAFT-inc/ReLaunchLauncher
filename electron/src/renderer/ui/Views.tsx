@@ -1,5 +1,5 @@
 // Pages Accueil, WeCraft, Favoris, Instances épinglées et pages « bientôt ».
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { useApp } from "./ctx";
 import { HomeCarousel } from "./Relink";
 import { Ic } from "./Ic";
@@ -169,7 +169,7 @@ export function instMenu(x: Inst, groups: InstGroup[], moveTo: (gid: string) => 
 }
 
 export function Wecraft() {
-  const { inst, hidden, ui, setUi, byId, pref, groups, setGroups, nav } = useApp();
+  const { inst, hidden, ui, setUi, pref, groups, setGroups, nav } = useApp();
   const imgs = bgFmtOf(pref) !== "off";
   const recent = inst
     .filter((x) => x.last)
@@ -331,11 +331,6 @@ export function Wecraft() {
   const ungrouped = rows.filter((r) => !inGroup(r.id));
   const userGroups = groups.filter((g) => g.id !== INACTIVE_ID);
   const ina = groups.find((g) => g.id === INACTIVE_ID);
-  const del = ui.delId ? byId(ui.delId) : undefined;
-  const noRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (ui.delId) noRef.current?.focus();
-  }, [ui.delId]);
   const nPins = pinCount(nav);
   return (
     <>
@@ -437,20 +432,6 @@ export function Wecraft() {
         {ina ? section(INACTIVE_ID, "Inactives", rows.filter((r) => ina.ids.includes(r.id)), { fixed: true, hint: "Aucune instance inactive." }) : null}
         {rows.length ? null : <div className="empty">{inst.length ? t("Aucune instance ne correspond.") : t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}</div>}
         {hidden ? <p className="faint" style={{ fontSize: "12.5px" }}>{`${hidden} instance${hidden > 1 ? "s masquées" : " masquée"} (réglage de WeCraft).`}</p> : null}
-        <div className="confirm gl" id="delBox" hidden={!del}>
-          <span style={{ fontSize: "13.5px" }}>
-            {t("Supprimer")} <b id="delName">{del?.n ?? ""}</b> ? Le dossier et tout son contenu (mods, mondes, captures) partent à la corbeille de Windows.
-            <span id="delSrc">{del && del.s !== "WeCraft" ? ` Cette instance vient de ${del.s} : elle disparaîtra aussi de ${del.s}.` : ""}</span>
-          </span>
-          <span className="row">
-            <button className="btn sm" data-act="delNo" ref={noRef}>
-              {t("Annuler")}
-            </button>
-            <button className="btn sm danger" data-act="delYes">
-              {t("Supprimer")}
-            </button>
-          </span>
-        </div>
       </div>
     </>
   );

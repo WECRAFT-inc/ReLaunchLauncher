@@ -420,3 +420,34 @@ export function DiscordAsk({ open, onAnswer }: { open: boolean; onAnswer: (on: b
     </div>
   );
 }
+
+/** Confirmation de suppression d'une instance, affichée quelle que soit la page (WeCraft, instance, accueil). */
+export function DeleteConfirm() {
+  const { ui, setUi, byId, confirmDelete } = useApp();
+  const del = ui.delId ? byId(ui.delId) : undefined;
+  const noRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (del) noRef.current?.focus();
+  }, [del]);
+  return (
+    <div className="overlay" hidden={!del} data-a="m-delete" data-name="Supprimer l'instance">
+      <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="delTitle" style={{ width: "min(480px,100%)" }}>
+        <header>
+          <h3 id="delTitle">{`${t("Supprimer")} « ${del?.n ?? ""} » ?`}</h3>
+        </header>
+        <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: "10px", fontSize: "13.5px" }}>
+          <p>{t("Le dossier et tout son contenu (mods, mondes, captures) partent à la corbeille de Windows : tu pourras les récupérer.")}</p>
+          {del && del.s !== "WeCraft" ? <p className="muted">{`${t("Cette instance vient de")} ${del.s} : ${t("elle disparaîtra aussi de")} ${del.s}.`}</p> : null}
+        </div>
+        <div className="mfoot">
+          <button className="btn" ref={noRef} onClick={() => setUi({ delId: null })}>
+            {t("Annuler")}
+          </button>
+          <button className="btn danger" onClick={() => confirmDelete()}>
+            {t("Supprimer")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

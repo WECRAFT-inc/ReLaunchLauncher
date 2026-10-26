@@ -38,7 +38,7 @@ import {
   type Pref,
   type View,
 } from "./model";
-import { DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
+import { DeleteConfirm, DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
 import { handleEscape, useEscapeLayer } from "./keys";
 import { BASE_THEMES, cleanRotation, previewRotation, useThemeRotation } from "./theme";
 import { setLang } from "./i18n";
@@ -1050,6 +1050,7 @@ export function App() {
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <InstanceEditor x={editInst ? (byId(editInst) ?? null) : null} onClose={() => setEditInst(null)} />
       <EventEditor id={editEvent} onClose={() => setEditEvent(null)} />
+      <DeleteConfirm />
       <DiscordAsk
         open={discordAsk && !upd}
         onAnswer={(on) => {

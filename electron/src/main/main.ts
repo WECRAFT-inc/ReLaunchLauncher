@@ -21,6 +21,7 @@ import { explainWorkerError, RelinkClient, WORKER_HOSTS, WORKER_URL } from "./re
 import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore, verifyDetached } from "./skins/skins";
 import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
 import { syncSkinMod } from "./launch/skinMod";
+import { trashFolder } from "./instances/trash";
 import { readEventManifest } from "./events/eventLock";
 import { AccountError, RelinkAccount } from "./relink/account";
 import { MicrosoftAccount } from "./auth/microsoft";
@@ -102,6 +103,10 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on("window-all-closed", () => app.quit());
+// diagnostic : un plantage est noté dans les journaux (Réglages > Logs) au lieu de disparaître sans trace
+app.on("render-process-gone", (_e, _wc, d) => void appLog?.error("Application", `Interface arrêtée (${d.reason}, code ${d.exitCode}).`));
+app.on("child-process-gone", (_e, d) => void appLog?.error("Application", `Processus ${d.type} arrêté (${d.reason}, code ${d.exitCode}).`));
+process.on("uncaughtException", (e) => void appLog?.error("Application", `Erreur non gérée : ${e instanceof Error ? e.message : String(e)}`));
 
 // ---------------------------------------------------------------- règles appliquées à tout contenu web
 app.on("web-contents-created", (_event, contents: WebContents) => {
@@ -706,7 +711,15 @@ function registerIpc(): void {
     if (!instances || confirmed !== true) return { ok: false, reason: "invalid" };
     if (launcher?.busy() || modpacks?.busy()) return { ok: false, reason: "busy" };
     // corbeille de Windows uniquement : jamais d'effacement définitif
-    return instances.remove(id, (folder) => shell.trashItem(folder));
+    // processus séparé sous Windows : un échec de la corbeille ne peut plus fermer ReLaunch
+    return instances.remove(id, async (folder) => {
+      try {
+        await trashFolder(folder, (f) => shell.trashItem(f));
+      } catch (e) {
+        void appLog?.error("Instances", `Corbeille : ${e instanceof Error ? e.message : String(e)}`);
+        throw e;
+      }
+    });
   });
 
   // ---------------------------------------------------------------- créer une instance « Sur mesure »
