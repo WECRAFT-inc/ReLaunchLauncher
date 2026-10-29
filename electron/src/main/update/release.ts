@@ -7,7 +7,7 @@
 import { unlink } from "node:fs/promises";
 import { downloadVerified, fetchBytes, fetchJson, type NetOptions } from "../net/download";
 import { INSTALLER_NAME } from "./pending";
-import { checkUpdateSignature, UpdateRefused } from "./signature";
+import { checkUpdateSignature, isNewer, UpdateRefused } from "./signature";
 
 export const GITHUB_REPO = "Rexidelamort/WeCraft-Releases";
 /** Nom de l'installeur publié dans chaque release (le seul .exe retenu). */
@@ -48,9 +48,29 @@ async function readSmall(url: string, opts: NetOptions): Promise<string> {
  * Seul l'installeur « ReLaunch.exe » est retenu (jamais un autre .exe,
  * par exemple le WeCraft.exe de la version Python) ; un tag qui ne donne pas un nom sûr = pas d'installeur.
  */
-export async function fetchLatestRelease(opts: NetOptions = {}, repo: string = GITHUB_REPO): Promise<ReleaseInfo> {
+export async function fetchLatestRelease(opts: NetOptions = {}, repo: string = GITHUB_REPO, beta = false): Promise<ReleaseInfo> {
+  if (beta) {
+    const d = await pickBeta(opts, repo);
+    if (d) return parseRelease(d, opts, repo);
+  }
   const d = await fetchJson<Record<string, unknown>>(`https://api.github.com/repos/${repo}/releases/latest`, 2 * 1024 * 1024, {}, net(opts));
   return parseRelease(d, opts, repo);
+}
+
+/**
+ * Canal bêta (« Participer à la bêta ») : la release publiée la plus récente, préversions comprises
+ * (jamais un brouillon), qui contient l'installeur ReLaunch. null si aucune : on revient à « latest ».
+ */
+async function pickBeta(opts: NetOptions, repo: string): Promise<Record<string, unknown> | null> {
+  const list = await fetchJson<unknown>(`https://api.github.com/repos/${repo}/releases?per_page=30`, 4 * 1024 * 1024, {}, net(opts));
+  let best: Record<string, unknown> | null = null;
+  for (const r of Array.isArray(list) ? (list as Record<string, unknown>[]) : []) {
+    if (r["draft"] === true || typeof r["tag_name"] !== "string") continue;
+    const assets = Array.isArray(r["assets"]) ? (r["assets"] as Asset[]) : [];
+    if (!assets.some((a) => typeof a.name === "string" && a.name.toLowerCase() === PUBLISHED_NAME.toLowerCase())) continue;
+    if (!best || isNewer(r["tag_name"], String(best["tag_name"]))) best = r;
+  }
+  return best;
 }
 
 /** Empreinte et signature publiées pour UNE version (release « v<version> »), sinon null. */

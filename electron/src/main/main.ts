@@ -1,7 +1,7 @@
 // Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -17,6 +17,17 @@ import { InstanceService } from "./instances/service";
 import { loaderVersionList } from "./install/loaderList";
 import { isSafeVersionId } from "./install/vanilla";
 import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLook";
+import { explainWorkerError, RelinkClient, WORKER_HOSTS, WORKER_URL } from "./relink/worker";
+import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore, verifyDetached } from "./skins/skins";
+import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
+import { PackIntegrityError } from "./modpacks/relaunchPack";
+import { syncSkinMod } from "./launch/skinMod";
+import { trashFolder } from "./instances/trash";
+import { readEventManifest } from "./events/eventLock";
+import { AccountError, RelinkAccount } from "./relink/account";
+import { MicrosoftAccount } from "./auth/microsoft";
+import { isOfflineName, offlineLockedUntil, offlineSession, offlineUuid } from "./auth/offline";
+import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
 import { mkdir } from "node:fs/promises";
@@ -62,6 +73,10 @@ let modpacks: ModpackService | null = null;
 let presence: DiscordPresence | null = null;
 let updateEnv: UpdateEnv | null = null;
 let media: MediaStore | null = null;
+let relink: RelinkClient | null = null;
+let skins: SkinStore | null = null;
+let account: RelinkAccount | null = null;
+let microsoft: MicrosoftAccount | null = null;
 let appLog: AppLogger | null = null;
 let healthyDone = false;
 let migrated: string[] = [];
@@ -90,6 +105,10 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on("window-all-closed", () => app.quit());
+// diagnostic : un plantage est noté dans les journaux (Réglages > Logs) au lieu de disparaître sans trace
+app.on("render-process-gone", (_e, _wc, d) => void appLog?.error("Application", `Interface arrêtée (${d.reason}, code ${d.exitCode}).`));
+app.on("child-process-gone", (_e, d) => void appLog?.error("Application", `Processus ${d.type} arrêté (${d.reason}, code ${d.exitCode}).`));
+process.on("uncaughtException", (e) => void appLog?.error("Application", `Erreur non gérée : ${e instanceof Error ? e.message : String(e)}`));
 
 // ---------------------------------------------------------------- règles appliquées à tout contenu web
 app.on("web-contents-created", (_event, contents: WebContents) => {
@@ -134,6 +153,12 @@ async function serveAsset(request: Request): Promise<Response> {
       if (u.host === "wecraft") pathname = decodeURIComponent(u.pathname);
     } catch {
       pathname = "";
+    }
+    if (skins && pathname.startsWith("/skin/")) {
+      const k = await skins.serve(pathname);
+      return k
+        ? new Response(new Uint8Array(k.data), { status: 200, headers: { "Content-Type": k.type, "X-Content-Type-Options": "nosniff", "Cache-Control": "max-age=3600", "Cross-Origin-Resource-Policy": "same-origin", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:" } })
+        : new Response("Introuvable", { status: 404 });
     }
     const r = pathname ? await media.serve(pathname) : null;
     if (r) {
@@ -220,10 +245,39 @@ async function start(): Promise<void> {
   } else {
     void cleanupLeftovers(updateEnv);
   }
-  updater = new UpdateService({ env: updateEnv, quit: () => app.quit() });
   settings = new Settings(store, configFile(env));
+  const st = settings;
+  updater = new UpdateService({ env: updateEnv, quit: () => app.quit(), beta: () => st.beta() });
   instances = new InstanceService(store, env);
   media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
+  const ua = `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`;
+  relink = new RelinkClient({ dataDir: wecraftDataDir(env), userAgent: ua });
+  account = new RelinkAccount({
+    dataDir: wecraftDataDir(env),
+    userAgent: ua,
+    secrets: safeStorage,
+    openExternal: async (url) => {
+      if (!url.startsWith("https://discord.com/oauth2/authorize?")) throw new Error("Adresse de connexion refusée.");
+      await shell.openExternal(url);
+    },
+  });
+  const acc = account;
+  microsoft = new MicrosoftAccount({
+    dataDir: wecraftDataDir(env),
+    secrets: safeStorage,
+    clientId: () => acc.microsoftClientId(),
+    openExternal: async (url) => {
+      if (!url.startsWith("https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?")) throw new Error("Adresse de connexion refusée.");
+      await shell.openExternal(url);
+    },
+  });
+  const rl = relink;
+  skins = new SkinStore({
+    dataDir: wecraftDataDir(env),
+    publicKey: RELINK_SIGNING_PUBLIC_KEY,
+    assetUrl: (assetId, signature) => rl.assetUrl(assetId, signature),
+    fetchBytes: (url, max) => fetchBytes(url, max, {}, { allowedHosts: WORKER_HOSTS, signal: AbortSignal.timeout(60000), headers: { "User-Agent": ua } }),
+  });
   modpacks = new ModpackService({
     media,
     log: appLog,
@@ -231,6 +285,30 @@ async function start(): Promise<void> {
     instances,
     userAgent: `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`,
     trash: (f) => shell.trashItem(f), // mods retirés : corbeille de Windows uniquement
+    relaunch: {
+      workerHost: new URL(WORKER_URL).host,
+      publicKey: RELINK_SIGNING_PUBLIC_KEY,
+      fetchBytes: (url, max) => fetchBytes(url, max, {}, { allowedHosts: WORKER_HOSTS, signal: AbortSignal.timeout(120000), headers: { "User-Agent": ua } }),
+      assetUrl: (id, signature) => rl.assetUrl(id, signature),
+      verify: verifyDetached,
+      lookupHosted: (hashes) => hostedByHash(hashes, WORKER_URL, WORKER_HOSTS, ua),
+      lookupModrinth: (hashes) => modrinthByHash(hashes, ua),
+      cachedPacks: async () => (relink ? ((await relink.cached()).data?.modpacks ?? []) : []),
+    },
+    confirmShared: async (name, mods) => {
+      const opts = {
+        type: "warning" as const,
+        title: "Pack partagé",
+        message: `« ${name} » contient ${mods.length} mod${mods.length > 1 ? "s" : ""} qui ne vien${mods.length > 1 ? "nent" : "t"} ni de Modrinth ni de WeCraft.`,
+        detail: `Un mod est un programme exécuté par le jeu. N'installe ce pack que si tu fais confiance à la personne qui te l'a envoyé.\n\n${mods.slice(0, 15).join("\n")}${mods.length > 15 ? `\n… et ${mods.length - 15} autre(s)` : ""}`,
+        buttons: ["Annuler", "Installer quand même"],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      };
+      const r = mainWindow ? await dialog.showMessageBox(mainWindow, opts) : await dialog.showMessageBox(opts);
+      return r.response === 1;
+    },
   });
   const launchLog = fileLogger(path.join(wecraftDataDir(env), "logs", "lancement.log"));
   launcher = new LaunchService({
@@ -268,6 +346,9 @@ function createWindow(): void {
     backgroundColor: "#0A0B10",
     show: false,
     autoHideMenuBar: true,
+    // Barre de titre dessinée par l'interface (couleurs du thème) ; Windows garde l'ombre, le redimensionnement
+    // et l'ancrage (Aero Snap). Les boutons réduire / agrandir / fermer passent par les canaux win:* ci-dessous.
+    titleBarStyle: "hidden",
     icon: path.join(RENDERER_ROOT, "assets", "relaunch_logo.png"),
     webPreferences: secureWebPreferences(PRELOAD, !app.isPackaged),
   });
@@ -332,7 +413,7 @@ function registerIpc(): void {
     openExternal: (url) => shell.openExternal(url),
     launching: () => launcher?.busy() ?? false,
     pickMrpack: async () => {
-      const opts = { title: "Importer un modpack Modrinth (.mrpack)", properties: ["openFile" as const], filters: [{ name: "Modpack Modrinth", extensions: ["mrpack"] }] };
+      const opts = { title: "Importer un modpack (.mrpack ou .rlpack)", properties: ["openFile" as const], filters: [{ name: "Modpack Modrinth ou ReLaunch", extensions: ["mrpack", "rlpack"] }] };
       const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
     },
@@ -358,6 +439,226 @@ function registerIpc(): void {
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
     },
   });
+  handle(CHANNELS.relinkState, async (force) => (relink ? relink.refresh("stable", force === true) : { ok: false, stale: true, fetchedAt: null, error: "Indisponible.", data: null }));
+  handle(CHANNELS.relinkNotifications, async () => (relink ? relink.notifications("stable") : { items: [], error: "Indisponible." }));
+  const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
+  /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
+  const linkOfficial = async (): Promise<string | null> => {
+    if (!account || !microsoft) return null;
+    const st = await account.state();
+    if (!st.loggedIn) return null;
+    const ses = await microsoft.session();
+    if (!ses) return null;
+    const dashed = ses.uuid.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+    if (st.user?.minecraftVerified && st.user.minecraftUuid === dashed) return null;
+    try {
+      await account.linkMinecraft(ses.accessToken);
+      return null;
+    } catch (e) {
+      return e instanceof AccountError ? e.message : "Liaison du compte Minecraft impossible.";
+    }
+  };
+  const noMs = { connected: false, profile: null, loginPending: false, available: false, persisted: false, error: "Indisponible." };
+  handle(CHANNELS.msState, async () => (microsoft ? microsoft.state() : noMs));
+  handle(CHANNELS.msLogin, async () => {
+    if (!microsoft) return noMs;
+    const st = await microsoft.login();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    if (st.connected) {
+      const err = await linkOfficial();
+      if (err) return { ...st, error: err };
+    }
+    return st;
+  });
+  handle(CHANNELS.msLogout, async () => (microsoft ? microsoft.logout() : noMs));
+  handle(CHANNELS.msGetOfficial, async () => (settings ? settings.openOfficial() : false));
+  handle(CHANNELS.msSetOfficial, async (on) => (settings && typeof on === "boolean" ? settings.setOpenOfficial(on) : false));
+  // Compte hors-ligne : simple pseudo (porté de Cubic), sans Microsoft ni jeton ; le pseudo est revalidé ici.
+  // Compte hors-ligne : le pseudo est géré par le Worker ReLink (format, pas de pseudo officiel, unicité, verrou de 90 jours).
+  // Une copie locale (pseudo + date de choix) permet de jouer sans connexion ; le Worker reste la référence.
+  type OfflineView = { ok: true; state: { name: string | null; uuid: string | null; active: boolean; lockedUntil: number | null; loggedIn: boolean } };
+  const offlineState = async (): Promise<OfflineView["state"]> => {
+    const cache = settings ? await settings.offlineAccount() : { name: null, active: false, changedAt: null };
+    const loggedIn = !!account && (await account.state()).loggedIn;
+    let { name, changedAt } = cache;
+    let lockedUntil = name ? offlineLockedUntil(changedAt) : null; // affichage seulement ; le Worker applique la règle
+    let active = cache.active;
+    if (loggedIn && account) {
+      try {
+        const v = await account.offline("GET");
+        active = v.name !== null && v.name === cache.name && cache.active;
+        name = v.name;
+        changedAt = v.changedAt;
+        lockedUntil = v.lockedUntil;
+        if (settings && (v.name !== cache.name || v.changedAt !== cache.changedAt)) await settings.setOfflineAccount(v.name, active, v.changedAt);
+      } catch {
+        /* Worker injoignable : on garde la copie locale */
+      }
+    }
+    return { name, uuid: name ? offlineUuid(name) : null, active: active && name !== null, lockedUntil, loggedIn };
+  };
+  const offlineFail = (e: unknown): { ok: false; reason: string; [k: string]: unknown } => {
+    if (!(e instanceof AccountError)) return { ok: false, reason: "write-failed" };
+    const code = e.data["code"];
+    const until = typeof e.data["lockedUntil"] === "string" ? Date.parse(e.data["lockedUntil"]) : NaN;
+    if (code === "cooldown" && Number.isFinite(until)) return { ok: false, reason: "cooldown", until };
+    if (code === "taken_official") return { ok: false, reason: "taken", officialName: typeof e.data["officialName"] === "string" && e.data["officialName"] ? e.data["officialName"] : "?" };
+    if (code === "taken_relink") return { ok: false, reason: "taken-relink" };
+    if (code === "invalid") return { ok: false, reason: "invalid" };
+    return { ok: false, reason: "unverified", message: e.message };
+  };
+  const offlineLoggedIn = async () => !!account && (await account.state()).loggedIn;
+  handle(CHANNELS.offlineState, offlineState);
+  handle(CHANNELS.offlineSet, async (name) => {
+    const n = typeof name === "string" ? name.trim() : "";
+    if (!isOfflineName(n)) return { ok: false, reason: "invalid" };
+    if (!account || !settings || !(await offlineLoggedIn())) return { ok: false, reason: "login" };
+    try {
+      const v = await account.offline("PUT", n);
+      if (!v.name || !(await settings.setOfflineAccount(v.name, true, v.changedAt))) return { ok: false, reason: "write-failed" };
+    } catch (e) {
+      return offlineFail(e);
+    }
+    return { ok: true, state: await offlineState() };
+  });
+  handle(CHANNELS.offlineSetActive, async (on) => {
+    if (!settings || typeof on !== "boolean" || !(await settings.setOfflineActive(on))) return { ok: false, reason: "write-failed" };
+    return { ok: true, state: await offlineState() };
+  });
+  handle(CHANNELS.offlineRemove, async () => {
+    if (!account || !settings || !(await offlineLoggedIn())) return { ok: false, reason: "login" };
+    try {
+      await account.offline("DELETE");
+      if (!(await settings.setOfflineAccount(null))) return { ok: false, reason: "write-failed" };
+    } catch (e) {
+      return offlineFail(e);
+    }
+    return { ok: true, state: await offlineState() };
+  });
+  handle(CHANNELS.accountState, async () => (account ? account.state() : noAccount));
+  handle(CHANNELS.accountLogin, async () => {
+    if (!account) return noAccount;
+    let st = await account.login();
+    if (st.loggedIn && (await linkOfficial()) === null) st = await account.state();
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus(); // retour dans ReLaunch après l'accord sur Discord
+    }
+    return st;
+  });
+  handle(CHANNELS.accountLogout, async () => (account ? account.logout() : noAccount));
+  handle(CHANNELS.accountRefresh, async () => (account ? account.refresh() : noAccount));
+  handle(CHANNELS.accountSkinUpload, async (model) => {
+    if (!account) return { ok: false, message: "Indisponible." };
+    const opts = { title: "Skin Minecraft (PNG 64 × 64)", properties: ["openFile" as const], filters: [{ name: "Image PNG", extensions: ["png"] }] };
+    const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
+    if (r.canceled || !r.filePaths[0]) return { ok: false, message: "", canceled: true };
+    try {
+      const st = await stat(r.filePaths[0]);
+      if (!st.isFile() || st.size > 64 * 1024) return { ok: false, message: "Image trop lourde (64 Ko maximum)." };
+      const png = await readFile(r.filePaths[0]);
+      const variant = model === "slim" ? "slim" : "classic";
+      const state = await account.uploadMinecraftSkin(png, variant);
+      // compte Microsoft connecté : le skin est aussi appliqué au profil Minecraft officiel (visible partout)
+      if (microsoft && (await microsoft.state()).connected) {
+        const err = await microsoft.uploadSkin(png, variant);
+        return { ok: true, state, message: err ? `Skin envoyé à ReLink, mais pas à Mojang : ${err}` : "Skin envoyé à ReLink et appliqué à ton compte Minecraft officiel." };
+      }
+      return { ok: true, state };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Image illisible." };
+    }
+  });
+  handle(CHANNELS.accountSkinRemove, async () => {
+    if (!account) return { ok: false, message: "Indisponible." };
+    try {
+      return { ok: true, state: await account.removeMinecraftSkin() };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Suppression impossible." };
+    }
+  });
+  handle(CHANNELS.accountSkinImage, async () => (account ? account.minecraftSkinImage() : null));
+  handle(CHANNELS.skinModGet, async () => (settings ? settings.skinMod() : true));
+  handle(CHANNELS.skinModSet, async (on) => (settings && typeof on === "boolean" ? settings.setSkinMod(on) : false));
+  handle(CHANNELS.accountBuySkin, async (relinkId) => {
+    if (!account || typeof relinkId !== "string") return { ok: false, message: "Indisponible." };
+    try {
+      const r = await account.buySkin(relinkId);
+      return { ok: true, state: r.state, message: r.message };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Achat impossible pour le moment." };
+    }
+  });
+  handle(CHANNELS.accountQuests, async () => (account ? account.quests() : { ok: false, error: "Compte ReLink indisponible.", quests: [], streak: null }));
+  handle(CHANNELS.accountRedeem, async (code) => {
+    if (!account || typeof code !== "string" || code.length > 40) return { ok: false, message: "Code invalide." };
+    try {
+      const r = await account.redeemCode(code);
+      return { ok: true, state: r.state, skinId: r.skinId, skinName: r.skinName, message: `« ${r.skinName} » débloqué.` };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Code refusé pour le moment." };
+    }
+  });
+  handle(CHANNELS.mpOfficialInstalled, async () => (modpacks ? modpacks.officialInstalled() : []));
+  handle(CHANNELS.mpInstallOfficial, async (relinkId) => {
+    if (!modpacks || !relink) return { ok: false, reason: "invalid" };
+    if (launcher?.busy()) return { ok: false, reason: "busy" };
+    const item = (await relink.cached()).data?.modpacks.find((m) => m.id === relinkId); // seulement un modpack annoncé par le Worker
+    if (!item) return { ok: false, reason: "invalid" };
+    return modpacks.installOfficial(item);
+  });
+  handle(CHANNELS.mpExportShared, async (instanceId) => {
+    if (!modpacks || !instances) return { ok: false, message: "Indisponible." };
+    const inst = instances.target(instanceId);
+    if (!inst) return { ok: false, message: "Instance introuvable." };
+    const opts = { title: "Exporter le pack (.rlpack)", defaultPath: `${(inst.display || "pack").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 60)}.rlpack`, filters: [{ name: "Pack ReLaunch", extensions: ["rlpack"] }] };
+    const r = mainWindow ? await dialog.showSaveDialog(mainWindow, opts) : await dialog.showSaveDialog(opts);
+    if (r.canceled || !r.filePath) return { ok: false, message: "", canceled: true };
+    const dest = /\.rlpack$/i.test(r.filePath) ? r.filePath : `${r.filePath}.rlpack`;
+    return modpacks.exportShared(instanceId, dest);
+  });
+  handle(CHANNELS.skinsList, async () => (skins ? skins.list() : []));
+  handle(CHANNELS.skinsImport, async () => {
+    if (!skins) return { ok: false, message: "Indisponible." };
+    const opts = { title: "Aperçu d'un skin ReLaunch (.rlskin)", properties: ["openFile" as const], filters: [{ name: "Skin ReLaunch", extensions: ["rlskin", "zip"] }] };
+    const r = mainWindow ? await dialog.showOpenDialog(mainWindow, opts) : await dialog.showOpenDialog(opts);
+    if (r.canceled || !r.filePaths[0]) return { ok: false, message: "", canceled: true };
+    try {
+      return { ok: true, skin: await skins.importLocal(r.filePaths[0]) };
+    } catch (e) {
+      return { ok: false, message: e instanceof SkinError ? e.message : "Fichier skin illisible." };
+    }
+  });
+  handle(CHANNELS.skinsInstall, async (relinkId) => {
+    if (!skins || !relink) return { ok: false, message: "Indisponible." };
+    const st = await relink.cached();
+    const item = st.data?.skins.find((x) => x.id === relinkId); // seulement un skin annoncé par le Worker
+    if (!item) return { ok: false, message: "Skin introuvable dans le catalogue ReLink." };
+    const u = item.unlock;
+    if ((u.event || u.shop > 0 || u.achievement || u.premium) && !(await account?.owns(item.id))) {
+      return { ok: false, message: (await account?.state())?.loggedIn ? "Tu ne possèdes pas encore ce skin : débloque-le (event, boutique, succès…) puis réessaie." : "Connecte-toi à ReLink pour obtenir ce skin." };
+    }
+    try {
+      return { ok: true, skin: await skins.installRemote(item) };
+    } catch (e) {
+      return { ok: false, message: e instanceof SkinError ? e.message : explainWorkerError(e) };
+    }
+  });
+  handle(CHANNELS.skinsRemove, async (key) => (skins ? skins.remove(key) : false));
+  // Boutons de la barre de titre (fenêtre principale seulement, aucune donnée reçue)
+  handle(CHANNELS.winMinimize, async () => void mainWindow?.minimize());
+  handle(CHANNELS.winMaximize, async () => {
+    if (!mainWindow) return false;
+    if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+    else if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+    return mainWindow.isMaximized();
+  });
+  handle(CHANNELS.winClose, async () => void mainWindow?.close());
+  handle(CHANNELS.winState, async () => ({ maximized: !!mainWindow?.isMaximized(), fullscreen: !!mainWindow?.isFullScreen() }));
   ipcMain.handle(CHANNELS.getInfo, async (event): Promise<AppInfo> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     const env = pathEnv();
@@ -404,12 +705,24 @@ function registerIpc(): void {
 
   ipcMain.handle(CHANNELS.updateInstall, async (event): Promise<boolean> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (relink?.policy().updatesKilled) return false; // mises à jour suspendues depuis le panneau ReLink (kill switch)
     return updater?.install() ?? false;
   });
 
   ipcMain.handle(CHANNELS.updateStatus, async (event): Promise<UpdateStatus> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     return updater?.status() ?? { phase: "idle", done: 0, total: 0, message: "" };
+  });
+
+  ipcMain.handle(CHANNELS.updateGetBeta, async (event): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    return settings ? settings.beta() : false;
+  });
+
+  ipcMain.handle(CHANNELS.updateSetBeta, async (event, on: unknown): Promise<boolean> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (typeof on !== "boolean" || !settings) return false;
+    return settings.setBeta(on);
   });
 
   ipcMain.handle(CHANNELS.updatePage, async (event): Promise<boolean> => {
@@ -455,7 +768,15 @@ function registerIpc(): void {
     if (!instances || confirmed !== true) return { ok: false, reason: "invalid" };
     if (launcher?.busy() || modpacks?.busy()) return { ok: false, reason: "busy" };
     // corbeille de Windows uniquement : jamais d'effacement définitif
-    return instances.remove(id, (folder) => shell.trashItem(folder));
+    // processus séparé sous Windows : un échec de la corbeille ne peut plus fermer ReLaunch
+    return instances.remove(id, async (folder) => {
+      try {
+        await trashFolder(folder, (f) => shell.trashItem(f));
+      } catch (e) {
+        void appLog?.error("Instances", `Corbeille : ${e instanceof Error ? e.message : String(e)}`);
+        throw e;
+      }
+    });
   });
 
   // ---------------------------------------------------------------- créer une instance « Sur mesure »
@@ -499,6 +820,11 @@ function registerIpc(): void {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     return modpacks ? modpacks.create(p) : { ok: false, reason: "invalid" };
   });
+  ipcMain.handle(CHANNELS.mpAddMods, async (event, id: unknown, roots: unknown): Promise<ModpackStartResult> => {
+    if (!trustedSender(event)) throw new Error("Expéditeur refusé");
+    if (launcher?.busy()) return { ok: false, reason: "busy" };
+    return modpacks ? modpacks.addMods(id, roots) : { ok: false, reason: "invalid" };
+  });
   ipcMain.handle(CHANNELS.mpEditInfo, async (event, id: unknown): Promise<ModpackEditInfo | null> => {
     if (!trustedSender(event)) throw new Error("Expéditeur refusé");
     return modpacks ? modpacks.editInfo(id) : null;
@@ -529,24 +855,87 @@ function registerIpc(): void {
     if (!inst || !launcher) return { ok: false, reason: "invalid" };
     if (!inst.version) return { ok: false, reason: "no-version" };
     if (modpacks?.busy()) return { ok: false, reason: "busy" }; // mods en cours de téléchargement
+    if (relink?.policy().blockLaunch) return { ok: false, reason: "maintenance" }; // maintenance décidée dans le panneau ReLink
+    // pack d'event verrouillé : manifeste revérifié, version imposée, fichiers officiels remis en état,
+    // mods et packs ajoutés à la corbeille
+    let fix: Awaited<ReturnType<NonNullable<typeof modpacks>["enforceLocked"]>> = null;
+    try {
+      fix = (await modpacks?.enforceLocked(inst.folder)) ?? null;
+      if (fix && (fix.restored || fix.removed.length)) void appLog?.info("Modpacks", `Pack d'event remis en état : ${fix.restored} fichier(s) officiel(s) restauré(s), ${fix.removed.length} ajout(s) retiré(s)${fix.removed.length ? ` (${fix.removed.slice(0, 10).join(", ")})` : ""}.`);
+    } catch (e) {
+      void appLog?.error("Modpacks", `Pack d'event : vérification impossible (${e instanceof Error ? e.message : String(e)}).`);
+      return { ok: false, reason: e instanceof PackIntegrityError ? "pack-integrity" : "pack" };
+    }
+    // event qui exige le compte Microsoft connecté dans ReLaunch (réglé par event dans le panneau)
+    const evId = fix?.event ?? null;
+    const ev = evId && relink ? ((await relink.cached()).data?.events ?? []).find((e) => e.id === evId) : undefined;
+    const needMs = ev?.requireMicrosoft === true;
+    // Aucune connexion exigée par ReLaunch. Le compte Minecraft officiel est toujours requis, mais vérifié par
+    // Microsoft lui-même : connexion Microsoft dans ReLaunch (lancement direct) ou, sinon, le launcher officiel.
+    // Si le joueur est aussi connecté à ReLink, son compte Microsoft y est lié (quête « 1re liaison »).
+    const loggedIn = !!account && (await account.state()).loggedIn;
+    if (needMs && !loggedIn) return { ok: false, reason: "event-relink" };
+    if (loggedIn) await linkOfficial().catch(() => null);
+    // lancement direct (défaut) avec la session Microsoft de ReLaunch. Repli automatique sur le launcher officiel
+    // si le joueur n'est pas connecté à Microsoft dans ReLaunch, ou si Microsoft / Mojang refusent la connexion
+    // directe (application WeCraft non autorisée ou bloquée) : les instances WeCraft restent jouables.
+    // Event « Microsoft obligatoire » : jamais de repli, et le compte connecté doit être celui lié à ReLink.
+    // Compte hors-ligne actif : réservé aux events qui l'acceptent (réglé dans le panel admin). Sur une instance normale
+    // ou un event qui ne l'accepte pas, le lancement est refusé. L'adresse du serveur vient du Worker : le joueur est connecté
+    // automatiquement au lancement, sans écran de choix.
+    const off = settings ? await settings.offlineAccount() : { name: null, active: false, changedAt: null };
+    let offSes: ReturnType<typeof offlineSession> = null;
+    let offJoin = "";
+    if (off.active && off.name) {
+      if (!evId) return { ok: false, reason: "offline-event-only" };
+      if (!ev || ev.requireMicrosoft || !ev.allowOffline || !ev.offlineHost) return { ok: false, reason: "offline-not-allowed" };
+      if (!loggedIn) return { ok: false, reason: "event-relink" };
+      offSes = offlineSession(off.name);
+      offJoin = ev.offlineHost;
+    }
+    const official = needMs || offSes ? false : settings ? await settings.openOfficial() : false;
+    const ses = offSes ?? (official ? null : await microsoft?.session().catch(() => null));
+    if (needMs) {
+      if (!ses) return { ok: false, reason: "event-microsoft" };
+      const st = account ? await account.state() : null;
+      const dashed = ses.uuid.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+      if (!st?.user?.minecraftVerified || st.user.minecraftUuid !== dashed) return { ok: false, reason: "event-microsoft" };
+    }
+    const fallback = !official && !ses;
+    // skin ReLink en jeu : mod de skins compatible (instances moddées, hors event) ; un échec ne bloque pas
+    if (modpacks && !(await readEventManifest(inst.folder))) {
+      try {
+        const note = await syncSkinMod(inst.path, inst.version, inst.loader, settings ? await settings.skinMod() : true, {
+          api: modpacks.api,
+          download: modpacks.downloader,
+          trash: (f) => shell.trashItem(f),
+          apiRoot: `${WORKER_URL}/launcher/mcskin/csl/`,
+        });
+        if (note) void appLog?.info("Skins", note);
+      } catch (e) {
+        void appLog?.warn("Skins", `Mod de skins non installé : ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
     const ram = typeof o.ram === "number" ? o.ram : NaN;
     const started = launcher.start(
       {
         gameDir: inst.path,
         profileName: profileNameFor(inst.display || defaultInstanceName(inst.path)),
-        mc: inst.version,
-        loader: inst.loader,
-        loaderVersion: inst.loaderVersion,
+        // pack d'event : version et loader du manifeste signé
+        mc: fix ? fix.mc : inst.version,
+        loader: fix ? fix.loader : inst.loader,
+        loaderVersion: fix ? fix.loaderVersion : inst.loaderVersion,
       },
-      { ram, repair: o.repair === true },
+      { ram, repair: o.repair === true, ...(ses ? { direct: { name: ses.name, uuid: ses.uuid, accessToken: ses.accessToken, brand: app.getVersion(), ...(offSes ? { offline: true, join: offJoin } : {}) } } : {}) },
     );
     if (started.ok) {
       // comme la version Python : la RAM choisie devient celle proposée la prochaine fois
       await settings?.setRam(ram);
       await instances?.rememberRam(id, ram);
     }
-    return started;
+    if (!started.ok) return started;
+    return { ...started, ...(fallback ? { viaOfficial: true } : {}) };
   });
 
   ipcMain.handle(CHANNELS.launchStatus, async (event, job: unknown): Promise<LaunchStatus | null> => {

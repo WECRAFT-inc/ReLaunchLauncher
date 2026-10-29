@@ -2,7 +2,7 @@
 // visuelle D8) et le pont vers le processus principal (ancien app.ts). Aucune donnée lue dans un fichier n'est
 // insérée comme HTML : React l'affiche toujours comme du texte.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as RMouseEvent, type RefObject } from "react";
-import type { AppInfo, DeleteResult, InstanceList, SettingResult, ThemeKey, UpdateCheck } from "../../shared/api";
+import type { AccountState, AppInfo, DeleteResult, InstalledSkin, InstanceList, RelinkNotification, RelinkState, SettingResult, ThemeKey, UpdateCheck } from "../../shared/api";
 import { useBarsModel } from "./Bars";
 import { Ctx, useApp, type AppCtx, type Ui } from "./ctx";
 import {
@@ -10,7 +10,6 @@ import {
   bgFmtOf,
   clone,
   gapsOf,
-  orderInstances,
   INACTIVE_ID,
   isPinned,
   loadCar,
@@ -39,7 +38,7 @@ import {
   type Pref,
   type View,
 } from "./model";
-import { DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
+import { DeleteConfirm, DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
 import { handleEscape, useEscapeLayer } from "./keys";
 import { BASE_THEMES, cleanRotation, previewRotation, useThemeRotation } from "./theme";
 import { setLang } from "./i18n";
@@ -49,8 +48,12 @@ import { CreateModal } from "./Create";
 import { ImportModal } from "./Import";
 import { InstanceEditor } from "./InstanceEditor";
 import { EventEditor, RelaunchEvents } from "./EventEditor";
-import { Favorites, Home, homeBg, PinsPage, Soon, SOON, Wecraft } from "./Views";
+import { Favorites, Home, homeBg, homeList, PinsPage, Soon, SOON, Wecraft } from "./Views";
 import { InstancePage } from "./InstancePage";
+import { TitleBar } from "./TitleBar";
+import { QuestsPage } from "./Quests";
+import { LivePage, MaintenanceBanner, NewsPage, VersionBanner } from "./Relink";
+import { SkinLayers, useActiveSkin, useSkinMotion, useSkinVars } from "./Skin";
 import type { MpDraft } from "./ctx";
 
 const SECTION_NAMES: Record<View, string> = {
@@ -66,8 +69,10 @@ const SECTION_NAMES: Record<View, string> = {
   news: "Info & News",
   instance: "Instance",
   pins: "Instances épinglées",
+  addcontent: "Ajouter du contenu",
+  quests: "Avantages & Quêtes",
 };
-const SECTION_ORDER: View[] = ["home", "wecraft", "relaunch", "welive", "relink", "settings", "favorites", "discover", "live", "news", "instance", "pins"];
+const SECTION_ORDER: View[] = ["home", "wecraft", "relaunch", "welive", "relink", "settings", "favorites", "discover", "live", "news", "instance", "pins", "addcontent", "quests"];
 
 type FailureReason = Extract<SettingResult, { ok: false }>["reason"];
 const SAVE_ERRORS: Record<FailureReason, string> = {
@@ -81,6 +86,16 @@ const START_ERRORS = {
   busy: "Un lancement ou un téléchargement de mods est déjà en cours.",
   invalid: "Instance introuvable : la liste a peut-être changé. Réessayez.",
   "no-version": "Version de Minecraft inconnue pour cette instance : réglez-la d'abord.",
+  maintenance: "Lancement suspendu : maintenance en cours annoncée par ReLaunch.",
+  login: "Connecte-toi à ReLink pour jouer (Réglages > Compte ReLink).",
+  pack: "Pack d'event : la remise en état des mods officiels a échoué (connexion ?). Réessaie dans un instant.",
+  minecraft: "Compte Minecraft officiel requis : connecte-toi à Microsoft dans ReLaunch, ou laisse le launcher officiel s'ouvrir.",
+  microsoft: "Connecte ton compte Microsoft dans Réglages > Compte ReLink (ou active « Ouvrir le launcher officiel pour jouer », ou un compte hors-ligne).",
+  "pack-integrity": "Pack d'event modifié ou impossible à vérifier : mets-le à jour depuis la page ReLaunch.",
+  "event-microsoft": "Cet event exige ton compte Microsoft connecté dans ReLaunch (et lié à ton compte ReLink) : Réglages > Compte ReLink.",
+  "event-relink": "Cet event exige ton compte ReLink : connecte-toi dans Réglages > Compte ReLink.",
+  "offline-event-only": "Un compte hors-ligne ne peut jouer que dans les events qui l'acceptent. Pour cette instance, repasse sur ton compte Microsoft (Réglages > Compte ReLink).",
+  "offline-not-allowed": "Cet event n'accepte pas les comptes hors-ligne. Repasse sur ton compte Microsoft (Réglages > Compte ReLink).",
 } as const;
 const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], string> = {
   invalid: "Instance introuvable : la liste a peut-être changé.",
@@ -97,7 +112,7 @@ function startView(pref: Pref): View {
   } catch {
     // stockage indisponible
   }
-  if (vw === "instance") vw = "wecraft"; // la page d'une instance ne se rouvre pas au démarrage
+  if (vw === "instance" || vw === "addcontent") vw = "wecraft"; // la page d'une instance ne se rouvre pas au démarrage
   return (VIEWS as readonly string[]).includes(vw) ? (vw as View) : "home";
 }
 
@@ -111,6 +126,14 @@ export function App() {
   const [home, setHome] = useState<HomePref>(loadHome);
   const [nav, setNav] = useState<NavConfig>(() => {
     const n = load<NavConfig | null>("proto-nav5", null) ?? clone(NAVDEF);
+    // entrées ajoutées depuis (ex. « Avantages & Quêtes ») : insérées à leur place par défaut, activées
+    if (Array.isArray(n.items))
+      NAVDEF.items.forEach((d, i) => {
+        if (n.items.some((x) => x.id === d.id)) return;
+        const prev = NAVDEF.items[i - 1];
+        const at = prev ? n.items.findIndex((x) => x.id === prev.id) : -1;
+        n.items.splice(at + 1, 0, { ...d });
+      });
     normPins(n, () => true);
     return n;
   });
@@ -122,7 +145,7 @@ export function App() {
     } catch {
       // stockage indisponible
     }
-    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content" };
+    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content", qEv: null };
   });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tip, setTip] = useState<{ text: string; el: HTMLElement } | null>(null);
@@ -141,6 +164,46 @@ export function App() {
   const [editEvent, setEditEvent] = useState<string | null>(null);
   const [discordAsk, setDiscordAsk] = useState(false);
   const [groups, setGroupsState] = useState<InstGroup[]>(loadGroups);
+  // ---- service ReLink (lecture seule) et skins
+  const [relink, setRelink] = useState<RelinkState | null>(null);
+  const [notifs, setNotifs] = useState<RelinkNotification[]>([]);
+  const [seen, setSeen] = useState<Set<string>>(() => new Set(load<string[]>("rl-seen", [])));
+  const [skinList, setSkinList] = useState<InstalledSkin[]>([]);
+  const [account, setAccount] = useState<AccountState | null>(null);
+  const markSeen = useCallback((ids: string[]) => {
+    setSeen((s0) => {
+      if (ids.every((i) => s0.has(i))) return s0;
+      const s = new Set([...s0, ...ids]);
+      store("rl-seen", [...s].slice(-500));
+      return s;
+    });
+  }, []);
+  const refreshRelink = useCallback((force = false) => {
+    void window.wecraft.relink?.state(force).then(setRelink, () => undefined);
+  }, []);
+  const reloadSkins = useCallback(() => {
+    void window.wecraft.skins?.list().then(setSkinList, () => undefined);
+  }, []);
+  useEffect(() => {
+    // compte ReLink : état enregistré tout de suite, puis relu auprès du service
+    void window.wecraft.account?.state().then((a) => {
+      setAccount(a);
+      if (a.loggedIn) void window.wecraft.account.refresh().then(setAccount, () => undefined);
+    }, () => undefined);
+  }, []);
+  useEffect(() => {
+    refreshRelink();
+    reloadSkins();
+    const pull = () => void window.wecraft.relink?.notifications().then((r) => setNotifs(r.items), () => undefined);
+    pull();
+    // bootstrap toutes les 10 min, notifications toutes les 3 min (fenêtre visible seulement)
+    const a = window.setInterval(() => document.visibilityState === "visible" && refreshRelink(), 600_000);
+    const b = window.setInterval(() => document.visibilityState === "visible" && pull(), 180_000);
+    return () => {
+      window.clearInterval(a);
+      window.clearInterval(b);
+    };
+  }, [refreshRelink, reloadSkins]);
   const setGroups = useCallback(
     (fn: (g: InstGroup[]) => InstGroup[]) =>
       setGroupsState((g0) => {
@@ -288,7 +351,9 @@ export function App() {
 
   // Thème dégradé automatique (affichage seulement) et animations réduites
   const rot = useMemo(() => cleanRotation(pref["rot"]), [pref]);
-  useThemeRotation(rot, pref.skin, pref.anim);
+  // un skin qui impose ses couleurs met la rotation des thèmes en pause
+  const skinColors = skinList.some((k) => k.key === pref["lskin"] && !k.manifest.followsTheme);
+  useThemeRotation(skinColors ? { ...rot, on: false } : rot, pref.skin, pref.anim);
   useEffect(() => {
     document.documentElement.classList.toggle("reduce-motion", pref.anim === false);
   }, [pref.anim]);
@@ -450,8 +515,11 @@ export function App() {
       .then((res) => {
         if (!res.ok) {
           toast(START_ERRORS[res.reason], 4000);
+          if (res.reason === "login" || res.reason === "minecraft" || res.reason === "microsoft" || res.reason === "event-microsoft" || res.reason === "event-relink" || res.reason === "offline-event-only" || res.reason === "offline-not-allowed") setUi({ view: "settings", setTab: "compte" });
           return;
         }
+        if (res.viaOfficial) toast("Lancement par le launcher officiel (connexion Microsoft directe indisponible ou non faite).", 5000);
+        if (res.offline) toast("Service ReLink injoignable : le jeu se lance, mais les serveurs d'event refuseront la connexion tant que ta session ReLink n'est pas vérifiée.", 7000);
         setDefaultRamState(r);
         setLaunchUi({ box: true, name: req.name || "Lancement", status: null, error: null });
         pollJob(res.job);
@@ -592,6 +660,7 @@ export function App() {
       if (go.dataset["rl"]) o.rlTab = go.dataset["rl"];
       else if (go.dataset["go"] === "relink" && ui.rlTab === "shop") o.rlTab = "profil";
       if (go.dataset["set"]) o.setTab = go.dataset["set"];
+      if (go.dataset["go"] === "quests") o.qEv = go.dataset["qev"] ?? null;
       show(go.dataset["go"]!, o);
       return;
     }
@@ -627,11 +696,21 @@ export function App() {
       case "import":
         setImportOpen(true);
         break;
+      case "addContent":
+        show("addcontent", { page: a.dataset["id"]! });
+        break;
       case "openInst":
         openInstance(a.dataset["id"]!, a.dataset["tab"]);
         break;
       case "inactive":
         toggleInactive(a.dataset["id"]!);
+        break;
+      case "instExport":
+        toast("Export en cours : recherche des mods sur Modrinth…", 3000);
+        void window.wecraft.modpacks.exportShared(a.dataset["id"]!).then(
+          (r) => !r.canceled && toast(r.message, 6000),
+          () => toast("Export impossible."),
+        );
         break;
       case "instFolder":
         void window.wecraft.instances.openFolder(a.dataset["id"]!, a.dataset["sub"] ?? "").then((ok) => !ok && toast("Ce dossier n'a pas pu être ouvert."));
@@ -960,11 +1039,21 @@ export function App() {
     setGroups,
     toggleInactive,
     openInstance,
+    relink,
+    refreshRelink,
+    notifs,
+    seen,
+    markSeen,
+    skins: skinList,
+    reloadSkins,
+    account,
+    setAccount,
   };
 
   const extras: ExtrasProps = { toastMsg, tip, launchUi, setLaunchUi, ram, setRam, startLaunch, upd, setUpd, job };
   return (
     <Ctx.Provider value={ctx}>
+      <TitleBar />
       <Notice lines={notice} onClose={() => setNotice([])} />
       <CreateModal
         open={createOpen}
@@ -977,6 +1066,7 @@ export function App() {
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
       <InstanceEditor x={editInst ? (byId(editInst) ?? null) : null} onClose={() => setEditInst(null)} />
       <EventEditor id={editEvent} onClose={() => setEditEvent(null)} />
+      <DeleteConfirm />
       <DiscordAsk
         open={discordAsk && !upd}
         onAnswer={(on) => {
@@ -1015,16 +1105,40 @@ function Shell({
   setTip: (t: { text: string; el: HTMLElement } | null) => void;
   extras: ExtrasProps;
 }) {
-  const { ui, pref, nav, byId, inst } = useApp();
+  const { ui, pref, nav, inst } = useApp();
   const bars = useBarsModel();
   const gaps = gapsOf(pref);
+  const skin = useActiveSkin();
   // format « Remplissage » : l'image de l'instance choisie couvre toute la fenêtre (accueil seulement)
-  const hb = ui.view === "home" ? homeBg(byId(ui.sel) ?? orderInstances(inst)[0], bgFmtOf(pref)) : null;
+  const hl = homeList(inst);
+  const hb = ui.view === "home" ? homeBg(hl.find((x) => x.id === ui.sel) ?? hl[0], bgFmtOf(pref)) : null;
   const fill = hb?.url && hb.fmt === "fill" ? hb.url : null;
   const rootRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const lastTip = useRef("");
   if (p.tip) lastTip.current = p.tip.text;
+  // le bloc flottant (cloche, téléchargements, profil) recouvre le haut à droite de la page :
+  // on réserve sa largeur aux en-têtes de page pour que leurs boutons restent visibles.
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    const pf = rootRef.current?.querySelector<HTMLElement>(".pfloat");
+    if (!main) return;
+    if (!pf) {
+      main.style.removeProperty("--pf-reserve");
+      return;
+    }
+    const upd = () => {
+      const m = main.getBoundingClientRect();
+      const r = pf.getBoundingClientRect();
+      const over = r.left < m.right && r.right > m.left && r.top < m.top + 80;
+      main.style.setProperty("--pf-reserve", over ? `${Math.ceil(m.right - r.left + 10)}px` : "0px");
+    };
+    upd();
+    const ro = new ResizeObserver(upd);
+    ro.observe(pf);
+    ro.observe(main);
+    return () => ro.disconnect();
+  });
   const cls = [
     "app",
     ui.view === "home" ? "on-home" : "",
@@ -1034,9 +1148,12 @@ function Shell({
     pref.bg === "plain" ? "bg-plain" : "",
     pref.bg === "flat" ? "bg-flat" : "",
     fill ? "bg-fill" : "",
+    skin ? `has-skin${skin.manifest.followsTheme ? " skin-theme" : ""}` : "",
   ]
     .filter(Boolean)
     .join(" ");
+  useSkinVars(skin, pref.style, rootRef);
+  useSkinMotion(skin, ui.view, mainRef);
   const showTip = (b: HTMLElement | null) => {
     if (b && b.dataset["tip"]) setTip({ text: b.dataset["tip"], el: b });
   };
@@ -1081,7 +1198,9 @@ function Shell({
       onClick={onClick}
       {...dnd}
     >
-      <div className="bg" aria-hidden="true" style={fill ? { backgroundImage: `linear-gradient(90deg, rgba(8,9,14,.78), rgba(8,9,14,.25)), url("${fill}")` } : undefined}></div>
+      <div className="bg" aria-hidden="true" style={fill ? { backgroundImage: `linear-gradient(90deg, rgba(8,9,14,.78), rgba(8,9,14,.25)), url("${fill}")` } : undefined}>
+        {fill ? null : <SkinLayers skin={skin} />}
+      </div>
       <div
         id="bars"
         style={{ display: "contents" }}
@@ -1095,6 +1214,8 @@ function Shell({
         {bars.node}
       </div>
       <main className="main" id="main" ref={mainRef}>
+        <MaintenanceBanner />
+        <VersionBanner />
         {SECTION_ORDER.map((v) => (
           <section key={v} className="view" id={`v-${v}`} data-a={`v-${v}`} data-name={SECTION_NAMES[v]} hidden={ui.view !== v}>
             {ui.view === v ? <ViewBody v={v} /> : null}
@@ -1126,15 +1247,24 @@ function Shell({
   );
 }
 
+function AddContent() {
+  const { ui } = useApp();
+  return <Discover key={ui.page ?? ""} forInst={ui.page ?? ""} />;
+}
+
 function ViewBody({ v }: { v: View }) {
   if (v === "home") return <Home />;
   if (v === "instance") return <InstancePage />;
   if (v === "pins") return <PinsPage />;
+  if (v === "addcontent") return <AddContent />;
   if (v === "wecraft") return <Wecraft />;
   if (v === "favorites") return <Favorites />;
   if (v === "settings") return <Settings />;
   if (v === "discover") return <Discover />;
   if (v === "relaunch") return <RelaunchEvents />;
+  if (v === "news") return <NewsPage />;
+  if (v === "live") return <LivePage />;
+  if (v === "quests") return <QuestsPage />;
   const s = SOON[v]!;
   return <Soon title={s.title} sub={s.sub} text={s.text} />;
 }

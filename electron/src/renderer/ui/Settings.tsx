@@ -558,6 +558,7 @@ export function Settings() {
             {t("Rechercher une mise à jour")}
           </button>
         </div>
+        <BetaRow />
         <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le détail des vérifications est dans Réglages > Logs (origine « Mises à jour »).")}</p>
       </div>
     );
@@ -657,6 +658,7 @@ export function Settings() {
             <button className="toggle" role="switch" aria-checked={tf(pref.anim !== false)} data-act="animTgl" aria-label={t("Animations")}></button>
           </div>
         </div>
+        <SkinsGroup />
         <RotationGroup />
       </>
     );
@@ -750,10 +752,11 @@ export function Settings() {
           </div>
         </div>
         <ShadersGroup />
+        <SkinModRow />
         <div className="setrow">
           <span>
             <b>{t("Java")}</b>
-            <small>{t("Rien à installer : le launcher officiel fournit Java pour jouer, et ReLaunch télécharge le Java de Mojang (vérifié) quand Forge ou NeoForge en a besoin pour s'installer.")}</small>
+            <small>{t("Rien à installer : ReLaunch télécharge le Java de Mojang (vérifié fichier par fichier) adapté à chaque version, pour jouer comme pour installer Forge ou NeoForge.")}</small>
           </span>
         </div>
         <div className="setrow">
@@ -821,12 +824,7 @@ export function Settings() {
       </>
     );
   } else {
-    body = (
-      <div className="grp">
-        <h3>{t("Compte ReLink")}</h3>
-        <p>{t("Les comptes ReLink ne sont pas encore disponibles.")}</p>
-      </div>
-    );
+    body = <AccountGroup />;
   }
   return (
     <div className="setwin">
@@ -834,8 +832,8 @@ export function Settings() {
         <button className="setmaj" data-settab="maj" aria-current={tf(ui.setTab === "maj")}>
           <Ic n="downloads" />
           <span>
-            <b>{t("Mises à jour")}</b>
-            <small>{`ReLaunch ${appVer}`}</small>
+            <b>{t("Rechercher une mise à jour")}</b>
+            <small>{`${t("Version installée")} : ${appVer || "?"}`}</small>
           </span>
         </button>
         <h4>{t("Affichage")}</h4>
@@ -849,6 +847,540 @@ export function Settings() {
         <span className="ver">{`ReLaunch ${appVer}`}</span>
       </div>
       <div className="setbody">{body}</div>
+    </div>
+  );
+}
+
+/** Compte ReLink : connexion Discord (navigateur), compte, skin Minecraft. Le jeton reste dans le processus principal. */
+function AccountGroup() {
+  const { account, setAccount, toast } = useApp();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [img, setImg] = useState<string | null>(null);
+  const [model, setModel] = useState<"classic" | "slim">("classic");
+  const sha = account?.minecraftSkin?.sha256 ?? "";
+  useEffect(() => {
+    if (account?.minecraftSkin) setModel(account.minecraftSkin.model);
+  }, [account?.minecraftSkin]);
+  useEffect(() => {
+    setImg(null);
+    if (sha) void window.wecraft.account.minecraftSkinImage().then(setImg, () => setImg(null));
+  }, [sha]);
+  const act = (key: string, p: Promise<import("../../shared/api").AccountState>) => {
+    setBusy(key);
+    void p.then(
+      (a) => {
+        setAccount(a);
+        if (a.error && key !== "refresh") toast(a.error);
+      },
+      () => toast(t("Action impossible pour le moment.")),
+    ).finally(() => setBusy(null));
+  };
+  const skinAct = (key: string, p: Promise<import("../../shared/api").AccountResult>, ok: string) => {
+    setBusy(key);
+    void p.then(
+      (r) => {
+        if (r.ok) {
+          setAccount(r.state);
+          toast(r.message ?? ok);
+        } else if (!r.canceled) toast(r.message);
+      },
+      () => toast(t("Action impossible pour le moment.")),
+    ).finally(() => setBusy(null));
+  };
+  if (!account) return <div className="grp"><h3>{t("Compte ReLink")}</h3><p className="faint">{t("Chargement…")}</p></div>;
+  if (!account.loggedIn) {
+    return (
+      <>
+      <div className="grp">
+        <h3>{t("Compte ReLink")}</h3>
+        <p>{t("Facultatif pour jouer : un compte ReLink sert aux skins, à la boutique, aux quêtes, à l'envoi de ton skin Minecraft et aux events.")}</p>
+        <div className="card updcard">
+          <span className="updcard-ic"><Ic n="relink" /></span>
+          <span className="updcard-txt">
+            <b>{account.loginPending || busy === "login" ? t("Accepte la connexion dans ton navigateur…") : t("Se connecter avec Discord")}</b>
+            <small>{t("Ton navigateur s'ouvre sur Discord. ReLaunch ne voit jamais ton mot de passe : il reçoit seulement ta session ReLink, chiffrée sur ce PC.")}</small>
+          </span>
+          <button className="btn pri updcard-btn" disabled={busy === "login" || account.loginPending} onClick={() => act("login", window.wecraft.account.login())}>
+            {busy === "login" || account.loginPending ? t("En attente…") : t("Se connecter")}
+          </button>
+        </div>
+        {account.error ? <p className="faint" style={{ fontSize: "12.5px" }}>{account.error}</p> : null}
+      </div>
+      <AccountPicker verified={false} linkedName={null} relink={false} />
+      </>
+    );
+  }
+  const u = account.user!;
+  const exp = account.expiresAt ? new Date(account.expiresAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "";
+  return (
+    <>
+      <div className="grp">
+        <h3>{t("Compte ReLink")}</h3>
+        <div className="setrow">
+          <span>
+            <b>{u.pseudo}</b>
+            <small>{[u.minecraftName ? `${t("Minecraft")} : ${u.minecraftName}${u.minecraftVerified ? "" : ` (${t("non vérifié")})`}` : t("Compte Minecraft pas encore lié"), `${u.eclats} ${t("éclats")}`, u.premium ? t("Premium") : "", exp ? `${t("session valable jusqu'au")} ${exp}` : ""].filter(Boolean).join(" · ")}</small>
+          </span>
+          <span className="row" style={{ gap: "8px" }}>
+            <button className="btn sm" disabled={!!busy} onClick={() => act("refresh", window.wecraft.account.refresh())}>{t("Actualiser")}</button>
+            <button className="btn sm" disabled={!!busy} onClick={() => act("logout", window.wecraft.account.logout())}>{t("Se déconnecter")}</button>
+          </span>
+        </div>
+        {account.offline ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Service ReLink injoignable : informations du dernier contrôle.")}</p> : null}
+        {!account.persisted ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Chiffrement système indisponible : ta session ne sera pas gardée après la fermeture de ReLaunch.")}</p> : null}
+      </div>
+      <AccountPicker verified={!!u.minecraftVerified} linkedName={u.minecraftName} />
+      <div className="grp">
+        <h3>{t("Skin Minecraft")}</h3>
+        <p>{t("Le skin de ton personnage, envoyé à ReLink. Image PNG de 64 × 64 pixels.")}</p>
+        <div className="setrow">
+          <span style={{ display: "flex", gap: "14px", alignItems: "center" }}>
+            {img ? <img src={img} alt={t("Ton skin Minecraft")} width={64} height={64} style={{ imageRendering: "pixelated", borderRadius: "6px", background: "rgba(255,255,255,.06)" }} /> : <span className="faint">{account.minecraftSkin ? t("Aperçu indisponible") : t("Aucun skin envoyé")}</span>}
+            <span>
+              <b>{t("Modèle")}</b>
+              <span className="chips" style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                {(
+                  [
+                    ["classic", t("Classique (bras larges)")],
+                    ["slim", t("Fin (bras de 3 pixels)")],
+                  ] as const
+                ).map((m) => (
+                  <button key={m[0]} className="chip" aria-pressed={tf(model === m[0])} onClick={() => setModel(m[0])}>{m[1]}</button>
+                ))}
+              </span>
+            </span>
+          </span>
+          <span className="row" style={{ gap: "8px" }}>
+            <button className="btn sm pri" disabled={!!busy} onClick={() => skinAct("skin", window.wecraft.account.uploadMinecraftSkin(model), t("Skin Minecraft envoyé."))}>{busy === "skin" ? t("Envoi…") : t("Choisir une image…")}</button>
+            {account.minecraftSkin ? <button className="btn sm" disabled={!!busy} onClick={() => skinAct("rmskin", window.wecraft.account.removeMinecraftSkin(), t("Skin Minecraft retiré."))}>{t("Retirer")}</button> : null}
+          </span>
+        </div>
+        <div className="card" style={{ padding: "12px 14px", fontSize: "13px", lineHeight: 1.5 }}>
+          <b>{t("Où ce skin est utilisé")}</b>
+          <p className="faint" style={{ margin: "6px 0 0" }}>{t("Pour l'instant, le skin envoyé sur ReLaunch n'est visible que :")}</p>
+          <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+            <li>{t("dans les events ReLaunch ;")}</li>
+            <li>{t("dans tes instances moddées pour lesquelles le mod de skins compatible existe (installé automatiquement au lancement, sauf si tu le désactives dans Réglages > Jeu) ;")}</li>
+            <li>{t("sur les serveurs et les versions où le plugin de skins compatible existe.")}</li>
+          </ul>
+          <p className="faint" style={{ margin: "6px 0 0" }}>{t("Ailleurs (Minecraft vanilla, serveurs sans le plugin), c'est le skin de ton compte Microsoft qui s'affiche. Si ton compte Microsoft est connecté dans ReLaunch, le skin envoyé y est aussi appliqué : il est alors visible partout.")}</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Compte Minecraft officiel (Microsoft) : connexion dans le navigateur, liaison automatique au compte ReLink. */
+function MicrosoftGroup({ verified, linkedName, relink = true }: { verified: boolean; linkedName: string | null; relink?: boolean }) {
+  const { toast, setAccount } = useApp();
+  const [ms, setMs] = useState<import("../../shared/api").MicrosoftState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [official, setOfficial] = useState<boolean | null>(null);
+  useEffect(() => {
+    void window.wecraft.microsoft.state().then(setMs, () => undefined);
+    void window.wecraft.microsoft.openOfficial().then(setOfficial, () => setOfficial(false));
+  }, []);
+  const done = (p: Promise<import("../../shared/api").MicrosoftState>) => {
+    setBusy(true);
+    void p
+      .then((st) => {
+        setMs(st);
+        if (st.error) toast(st.error);
+        void window.wecraft.account.state().then(setAccount, () => undefined);
+      })
+      .finally(() => setBusy(false));
+  };
+  const flip = () => {
+    if (official === null) return;
+    const next = !official;
+    void window.wecraft.microsoft.setOpenOfficial(next).then((ok) => (ok ? setOfficial(next) : toast(t("Réglage non enregistré."))));
+  };
+  return (
+    <div className="grp">
+      <h3>{t("Compte Minecraft (Microsoft)")}</h3>
+      <p>{t("Facultatif : ReLaunch fonctionne sans. Connecté, ReLaunch démarre le jeu lui-même sans ouvrir le launcher officiel ; sinon, le launcher officiel s'ouvre et vérifie ton compte. La toute première liaison de ton compte Microsoft à ReLink rapporte 1000 Éclats (une seule fois). Tu ne te reconnectes que si Microsoft le redemande (environ 3 mois sans jouer, mot de passe changé).")}</p>
+      <div className="setrow">
+        <span>
+          <b>{ms?.connected ? ms.profile?.name : ms?.loginPending || busy ? t("Accepte la connexion dans ton navigateur…") : t("Non connecté")}</b>
+          <small>
+            {ms?.connected
+              ? verified && linkedName === ms.profile?.name
+                ? t("Connecté et lié à ton compte ReLink.")
+                : relink
+                  ? t("Connecté ; liaison avec ReLink au prochain lancement.")
+                  : t("Connecté. Connecte-toi aussi à ReLink pour lier ton compte (1000 Éclats à la première liaison).")
+              : verified
+                ? `${t("Lié à ReLink")} (${linkedName ?? ""}) ${t("depuis le site : connecte-toi ici pour jouer sans le launcher officiel.")}`
+                : ms && !ms.available
+                  ? t("Connexion Microsoft dans ReLaunch bientôt disponible : en attendant, le jeu passe par le launcher officiel, qui vérifie ton compte.")
+                  : t("Ton navigateur s'ouvre sur Microsoft. ReLaunch ne voit jamais ton mot de passe.")}
+          </small>
+        </span>
+        <span className="row" style={{ gap: "8px" }}>
+          {ms?.connected ? (
+            <button className="btn sm" disabled={busy} onClick={() => done(window.wecraft.microsoft.logout())}>{t("Se déconnecter")}</button>
+          ) : (
+            <button className="btn sm pri" disabled={busy || !!ms?.loginPending || ms?.available === false} onClick={() => done(window.wecraft.microsoft.login())}>{t("Se connecter avec Microsoft")}</button>
+          )}
+        </span>
+      </div>
+      {ms && !ms.persisted ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Chiffrement système indisponible : la connexion Microsoft ne sera pas gardée après la fermeture de ReLaunch.")}</p> : null}
+      <div className="setrow">
+        <span>
+          <b>{t("Ouvrir le launcher officiel pour jouer")}</b>
+          <small>
+            {ms?.connected
+              ? t("Désactivé : ReLaunch lance directement le jeu avec ton compte Microsoft. Activé : comme avant, ReLaunch prépare le profil puis ouvre le launcher officiel.")
+              : t("Toujours activé tant que tu n'es pas connecté à Microsoft dans ReLaunch : le jeu passe par le launcher officiel.")}
+          </small>
+        </span>
+        <button
+          className="toggle"
+          role="switch"
+          aria-checked={tf(!ms?.connected || official === true)}
+          disabled={official === null || !ms?.connected}
+          onClick={flip}
+          aria-label={t("Ouvrir le launcher officiel pour jouer")}
+        ></button>
+      </div>
+    </div>
+  );
+}
+
+/** Sélecteur du type de compte Minecraft : Microsoft (officiel) ou hors-ligne (pseudo vérifié auprès de Mojang). */
+function AccountPicker({ verified, linkedName, relink = true }: { verified: boolean; linkedName: string | null; relink?: boolean }) {
+  const [off, setOff] = useState<import("../../shared/api").OfflineState | null>(null);
+  const [kind, setKind] = useState<"microsoft" | "offline" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { toast } = useApp();
+  useEffect(() => {
+    void window.wecraft.offline.state().then(
+      (v) => {
+        setOff(v);
+        setKind(v.active ? "offline" : "microsoft");
+      },
+      () => setKind("microsoft"),
+    );
+  }, []);
+  const pick = (k: "microsoft" | "offline") => {
+    if (busy || k === kind) return;
+    setKind(k);
+    // Microsoft : on coupe le compte hors-ligne (le pseudo reste). Hors-ligne : activé si un pseudo vérifié existe déjà,
+    // sinon il le sera quand un pseudo aura été vérifié par Mojang.
+    if (k === "microsoft" ? off?.active : off?.name && !off.active) {
+      setBusy(true);
+      void window.wecraft.offline
+        .setActive(k === "offline")
+        .then((r) => {
+          if (r.ok) setOff(r.state);
+          else {
+            toast(t("Réglage non enregistré."));
+            setKind(k === "offline" ? "microsoft" : "offline");
+          }
+        })
+        .catch(() => setKind(k === "offline" ? "microsoft" : "offline"))
+        .finally(() => setBusy(false));
+    }
+  };
+  return (
+    <>
+      <div className="grp">
+        <h3>{t("Type de compte Minecraft")}</h3>
+        <p>{t("Choisis comment tu joues : avec ton compte Microsoft officiel, ou avec un simple pseudo hors-ligne.")}</p>
+        <div className="tabs" role="radiogroup" aria-label={t("Type de compte Minecraft")}>
+          <button className="chip" role="radio" aria-checked={tf(kind === "microsoft")} aria-pressed={kind === "microsoft"} disabled={busy} onClick={() => pick("microsoft")}>{t("Comptes Microsoft")}</button>
+          <button className="chip" role="radio" aria-checked={tf(kind === "offline")} aria-pressed={kind === "offline"} disabled={busy} onClick={() => pick("offline")}>{t("Comptes hors-ligne")}</button>
+        </div>
+      </div>
+      {kind === "offline" ? <OfflineGroup st={off} setSt={setOff} /> : kind === "microsoft" ? <MicrosoftGroup verified={verified} linkedName={linkedName} relink={relink} /> : null}
+    </>
+  );
+}
+
+/** Compte hors-ligne : pseudo vérifié auprès de Mojang (refusé s'il appartient à un compte officiel). Porté de Cubic. */
+function OfflineGroup({ st, setSt }: { st: import("../../shared/api").OfflineState | null; setSt: (s: import("../../shared/api").OfflineState) => void }) {
+  const { toast } = useApp();
+  const [name, setName] = useState(st?.name ?? "");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const valid = /^[a-zA-Z0-9_]{3,16}$/.test(name.trim());
+  const submit = () => {
+    if (!valid || busy) return;
+    setBusy(true);
+    setProblem(null);
+    void window.wecraft.offline
+      .set(name.trim())
+      .then((r) => {
+        if (r.ok) {
+          setSt(r.state);
+          setName(r.state.name ?? "");
+          toast(t("Pseudo vérifié : tu joues maintenant en hors-ligne."));
+        } else if (r.reason === "login") setProblem(t("Connecte-toi à ReLink (Discord) pour choisir ton pseudo hors-ligne : il est vérifié et enregistré sur ton compte."));
+        else if (r.reason === "taken-relink") setProblem(t("Ce pseudo est déjà utilisé par un autre joueur ReLink : choisis-en un autre."));
+        else if (r.reason === "cooldown") setProblem(t("Tu as déjà choisi un pseudo : tu pourras en changer à partir du {d}.", { d: new Date(r.until).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) }));
+        else if (r.reason === "taken") setProblem(t("Ce pseudo appartient à un compte Minecraft officiel ({n}) : choisis-en un autre.", { n: r.officialName }));
+        else if (r.reason === "unverified") setProblem(t(r.message));
+        else if (r.reason === "invalid") setProblem(t("Pseudo invalide : 3 à 16 caractères, lettres, chiffres ou _."));
+        else setProblem(t("Réglage non enregistré."));
+      })
+      .catch(() => setProblem(t("Réglage non enregistré.")))
+      .finally(() => setBusy(false));
+  };
+  const forget = () => {
+    setBusy(true);
+    void window.wecraft.offline
+      .remove()
+      .then((r) => {
+        if (r.ok) {
+          setSt(r.state);
+          setName("");
+          setProblem(null);
+        } else setProblem(r.reason === "cooldown" ? t("Tu pourras oublier ou changer ce pseudo à partir du {d}.", { d: new Date(r.until).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) }) : t("Réglage non enregistré."));
+      })
+      .catch(() => toast(t("Réglage non enregistré.")))
+      .finally(() => setBusy(false));
+  };
+  const locked = st?.lockedUntil != null;
+  const needLogin = st !== null && !st.loggedIn;
+  return (
+    <div className="grp">
+      <h3>{t("Compte hors-ligne")}</h3>
+      <p>{t("Joue avec un simple pseudo, sans compte Microsoft : le jeu démarre directement et rien n'est envoyé à Mojang pour jouer. Le pseudo est vérifié par ReLink : refusé s'il appartient à un compte Minecraft officiel ou à un autre joueur ReLink. Le premier pseudo est libre ; ensuite tu ne peux plus en changer pendant 90 jours. Important : un compte hors-ligne ne peut jouer que dans les events qui l'acceptent (réglé par le staff) ; tu y es connecté automatiquement au serveur de l'event. Pour toutes les autres instances, repasse sur ton compte Microsoft.")}</p>
+      <div className="setrow">
+        <span>
+          <b>{st?.name && st.active ? `${st.name} · ${t("utilisé pour jouer")}` : st?.name ? st.name : t("Aucun pseudo enregistré")}</b>
+          <small>{st?.uuid ? `UUID : ${st.uuid}` : t("3 à 16 caractères : lettres, chiffres ou _ (majuscules et minuscules comptent).")}</small>
+        </span>
+        <span className="row" style={{ gap: "8px" }}>
+          <input
+            type="text"
+            className="mono"
+            value={name}
+            maxLength={16}
+            placeholder={t("Pseudo")}
+            aria-label={t("Pseudo hors-ligne")}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={busy || locked || needLogin}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+            style={{ width: "150px" }}
+          />
+          <button className="btn sm pri" disabled={busy || locked || needLogin || !valid || (st?.active === true && st.name === name.trim())} onClick={submit}>
+            {busy ? t("Vérification…") : t("Vérifier et utiliser")}
+          </button>
+          {st?.name ? <button className="btn sm" disabled={busy || locked || needLogin} onClick={forget}>{t("Oublier")}</button> : null}
+        </span>
+      </div>
+      {needLogin ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Connecte-toi à ReLink pour choisir, changer ou oublier ton pseudo hors-ligne.")}</p> : null}
+      {locked && st?.lockedUntil != null && !problem ? <p className="faint" style={{ fontSize: "12.5px" }}>{t("Pseudo verrouillé : changement possible à partir du {d}.", { d: new Date(st.lockedUntil).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) })}</p> : null}
+      {problem ? <p role="alert" style={{ fontSize: "12.5px", color: "#ff8a8a" }}>{problem}</p> : null}
+    </div>
+  );
+}
+
+/** « Skin ReLink en jeu » : mod de skins installé automatiquement dans les instances moddées (processus principal). */
+function SkinModRow() {
+  const { toast } = useApp();
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    void window.wecraft.account.skinMod().then(setOn, () => setOn(true));
+  }, []);
+  const flip = () => {
+    if (on === null) return;
+    const next = !on;
+    void window.wecraft.account.setSkinMod(next).then(
+      (ok) => {
+        if (!ok) return toast(t("Réglage non enregistré."));
+        setOn(next);
+        toast(next ? t("Le mod de skins sera installé au prochain lancement de tes instances moddées.") : t("Le mod de skins installé par ReLaunch sera retiré au prochain lancement."));
+      },
+      () => toast(t("Réglage non enregistré.")),
+    );
+  };
+  return (
+    <div className="setrow">
+      <span>
+        <b>{t("Skin ReLink en jeu")}</b>
+        <small>{t("Installe automatiquement le mod de skins compatible (CustomSkinLoader, depuis Modrinth) dans tes instances moddées, pour voir ton skin ReLink en jeu. Sans effet en vanilla et dans les packs d'event (ils ont leur propre mod).")}</small>
+      </span>
+      <button className="toggle" role="switch" aria-checked={tf(on !== false)} disabled={on === null} onClick={flip} aria-label={t("Skin ReLink en jeu")}></button>
+    </div>
+  );
+}
+
+/** « Participer à la bêta » : enregistré par le processus principal (launcher_config.json). */
+function BetaRow() {
+  const { toast } = useApp();
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    void window.wecraft.update.beta().then(setOn, () => setOn(false));
+  }, []);
+  const flip = () => {
+    if (on === null) return;
+    const next = !on;
+    void window.wecraft.update.setBeta(next).then(
+      (ok) => {
+        if (!ok) return toast(t("Réglage non enregistré."));
+        setOn(next);
+        toast(next ? t("Bêta activée : les préversions te seront proposées.") : t("Bêta désactivée : seules les versions stables te seront proposées."));
+      },
+      () => toast(t("Réglage non enregistré.")),
+    );
+  };
+  return (
+    <div className="setrow">
+      <span>
+        <b>{t("Participer à la bêta")}</b>
+        <small>{t("Reçois les nouvelles versions avant tout le monde. Elles sont signées comme les autres, mais peuvent contenir des bugs.")}</small>
+      </span>
+      <button className="toggle" role="switch" aria-checked={tf(on === true)} disabled={on === null} onClick={flip} aria-label={t("Participer à la bêta")}></button>
+    </div>
+  );
+}
+
+/**
+ * Skins du launcher : Classique, skins installés (ReLink signés ou aperçus locaux) et catalogue ReLink.
+ * L'obtention d'un skin à débloquer (event, shop, succès, premium) demandera un compte ReLink : en attendant,
+ * seuls les skins gratuits publiés avec un fichier peuvent être installés.
+ */
+function SkinsGroup() {
+  const { pref, editPref, skins, reloadSkins, relink, toast, account, setAccount } = useApp();
+  const owned = new Set(account?.launcherSkins ?? []);
+  const [code, setCode] = useState("");
+  const eclats = account?.user?.eclats ?? 0;
+  const [busy, setBusy] = useState<string | null>(null);
+  const cur = typeof pref["lskin"] === "string" ? (pref["lskin"] as string) : "";
+  const use = (k: string) => editPref((p) => (p["lskin"] = k || null));
+  const catalog = relink?.data?.skins ?? [];
+  const lock = (u: { event: boolean; shop: number; achievement: boolean; premium: boolean }) =>
+    [u.event ? t("event ReLaunch") : "", u.shop ? `${u.shop} ${t("éclats")}` : "", u.achievement ? t("succès") : "", u.premium ? t("premium (boutique)") : ""].filter(Boolean);
+  const run = (key: string, p: Promise<{ ok: boolean; message?: string; canceled?: boolean; skin?: { key: string; manifest: { name: string } } }>) => {
+    setBusy(key);
+    void p
+      .then((r) => {
+        if (r.ok && r.skin) {
+          reloadSkins();
+          use(r.skin.key);
+          toast(`${t("Skin appliqué")} : ${r.skin.manifest.name}`);
+        } else if (!r.canceled) toast(r.message || t("Skin refusé."));
+      })
+      .finally(() => setBusy(null));
+  };
+  /** Achat ou code : le compte est relu, puis le skin débloqué s'installe s'il a un fichier publié. */
+  const unlocked = (key: string, p: Promise<import("../../shared/api").AccountResult & { skinId?: string }>, skinId?: string) => {
+    setBusy(key);
+    void p
+      .then((r) => {
+        if (!r.ok) {
+          if (!r.canceled) toast(r.message);
+          return;
+        }
+        setAccount(r.state);
+        if (r.message) toast(r.message);
+        const id = skinId ?? r.skinId;
+        const item = catalog.find((c) => c.id === id);
+        if (item?.file) run(item.id, window.wecraft.skins.install(item.id));
+      })
+      .finally(() => setBusy((b) => (b === key ? null : b)));
+  };
+  const buy = (c: { id: string; name: string; unlock: { shop: number } }) => {
+    if (!window.confirm(`${t("Acheter")} « ${c.name} » ${t("pour")} ${c.unlock.shop} ${t("éclats")} ? ${t("Tu en as")} ${eclats}.`)) return;
+    unlocked(`buy-${c.id}`, window.wecraft.account.buySkin(c.id), c.id);
+  };
+  return (
+    <div className="grp">
+      <h3>{t("Skins du launcher")}</h3>
+      <p>{t("Un skin change tout le launcher : fond animé, typographie, barres, cadres, bouton Jouer, transitions, écran de lancement. Les skins publiés par l'équipe arrivent sans mettre à jour ReLaunch.")}</p>
+      <div className="skins">
+        <div className="skinc" aria-pressed={cur ? "false" : "true"}>
+          <span className="pv"></span>
+          <b>{t("Classique")}</b>
+          <small>{t("Le launcher de base, avec ton style et ton thème de couleurs.")}</small>
+          <span className="row">
+            <button className="btn sm" disabled={!cur} onClick={() => use("")}>
+              {cur ? t("Utiliser") : t("Utilisé")}
+            </button>
+          </span>
+        </div>
+        {skins.map((k) => (
+          <div key={k.key} className="skinc" aria-pressed={cur === k.key ? "true" : "false"}>
+            <span className="pv" style={{ backgroundImage: k.manifest.background.layers[0] ? `url("${k.base}${k.manifest.background.layers[0].image}")` : undefined, ["--c1" as string]: k.manifest.tokens["acc"] ?? "#333", ["--c2" as string]: k.manifest.tokens["night"] ?? "#111" }}></span>
+            <b>{k.manifest.name}</b>
+            <small>{[k.manifest.author, k.manifest.skinVersion ? `v${k.manifest.skinVersion}` : "", k.source === "local" ? t("aperçu local, non signé") : t("ReLink, signé")].filter(Boolean).join(" · ")}</small>
+            {k.manifest.description ? <small>{k.manifest.description}</small> : null}
+            <span className="row">
+              <button className="btn sm pri" disabled={cur === k.key} onClick={() => use(k.key)}>
+                {cur === k.key ? t("Utilisé") : t("Utiliser")}
+              </button>
+              <button
+                className="btn sm"
+                onClick={() =>
+                  void window.wecraft.skins.remove(k.key).then(() => {
+                    if (cur === k.key) use("");
+                    reloadSkins();
+                  })
+                }
+              >
+                {t("Retirer")}
+              </button>
+            </span>
+          </div>
+        ))}
+        {catalog
+          .filter((c) => !skins.some((k) => k.relinkId === c.id))
+          .map((c) => {
+            const l = owned.has(c.id) ? [] : lock(c.unlock);
+            return (
+              <div key={c.id} className="skinc">
+                <span className="pv"></span>
+                <b>{c.name}</b>
+                <small>{[c.desc, c.versions.liquidGlass || c.versions.mat ? [c.versions.liquidGlass ? "Liquid Glass" : "", c.versions.mat ? "Mat" : ""].filter(Boolean).join(" + ") : ""].filter(Boolean).join(" · ")}</small>
+                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${!account?.loggedIn ? ` — ${t("connecte-toi à ReLink")}` : c.unlock.shop > 0 ? "" : ` — ${t("avec un code ou offert par l'équipe")}`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
+                <span className="row">
+                  {l.length && c.unlock.shop > 0 && account?.loggedIn ? (
+                    <button className="btn sm pri" disabled={!!busy || eclats < c.unlock.shop} title={eclats < c.unlock.shop ? `${t("Il te manque")} ${c.unlock.shop - eclats} ${t("éclats")}` : ""} onClick={() => buy(c)}>
+                      {busy === `buy-${c.id}` ? t("Achat…") : `${t("Acheter")} · ${c.unlock.shop} ${t("éclats")}`}
+                    </button>
+                  ) : (
+                    <button className="btn sm" disabled={!!l.length || !c.file || busy === c.id} onClick={() => run(c.id, window.wecraft.skins.install(c.id))}>
+                      {busy === c.id ? t("Téléchargement…") : t("Obtenir")}
+                    </button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+      </div>
+      {account?.loggedIn ? (
+        <div className="setrow">
+          <span>
+            <b>{t("Code de déblocage")}</b>
+            <small>{`${t("Reçu pendant un event, pour un succès ou d'un partenaire.")} ${t("Tes éclats")} : ${eclats}`}</small>
+          </span>
+          <span className="row" style={{ gap: "8px" }}>
+            <input type="text" className="mono" value={code} maxLength={20} placeholder="ABCD-EFGH-JKLM" aria-label={t("Code de déblocage")} onChange={(e) => setCode(e.target.value)} style={{ width: "160px" }} />
+            <button
+              className="btn sm pri"
+              disabled={!!busy || code.replace(/[^A-Za-z0-9]/g, "").length !== 12}
+              onClick={() => {
+                unlocked("code", window.wecraft.account.redeemCode(code));
+                setCode("");
+              }}
+            >
+              {busy === "code" ? t("Vérification…") : t("Débloquer")}
+            </button>
+          </span>
+        </div>
+      ) : null}
+      <div className="row" style={{ justifyContent: "flex-start", gap: "8px" }}>
+        <button className="btn sm" disabled={busy === "local"} onClick={() => run("local", window.wecraft.skins.importLocal())}>
+          {t("Aperçu d'un fichier skin (.rlskin)…")}
+        </button>
+        <small className="faint">{t("Pour créer et tester un skin avant de l'envoyer dans le panneau d'administration.")}</small>
+      </div>
     </div>
   );
 }

@@ -95,7 +95,7 @@ export async function listContent(gameDir: string, root: string): Promise<Conten
         dir,
         size,
         pack: !!pack?.files.has(rel),
-        locked: !!ev && (kind === "mod" || ev.official.has(rel)),
+        locked: !!ev && (kind === "mod" || !ev.editable.has(KIND_DIRS[kind]) || ev.official.has(rel)),
       });
     }
   }
@@ -132,6 +132,7 @@ async function assertEditable(root: string, kind: ContentKind, file: string): Pr
   const ev = await readEventManifest(root);
   if (!ev) return;
   if (kind === "mod") throw new ContentError("Modpack d'événement : les mods sont imposés par l'événement.");
+  if (!ev.editable.has(KIND_DIRS[kind])) throw new ContentError("Pack d'event : seuls les shaders peuvent être changés.");
   if (ev.official.has(`${KIND_DIRS[kind]}/${baseName(file)}`.toLowerCase())) throw new ContentError("Ce fichier fait partie du modpack officiel de l'événement.");
 }
 

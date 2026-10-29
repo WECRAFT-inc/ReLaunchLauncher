@@ -127,6 +127,8 @@ export interface EventInfo {
   shaders: EventPackView[];
   shader: string | null;
   defaultShader: string | null;
+  /** Le joueur peut changer les packs de ressources (false : pack d'event verrouillé, shaders seulement). */
+  resourcepacksEditable: boolean;
 }
 export type EventResult = { ok: true } | { ok: false; message: string };
 
@@ -211,7 +213,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "no-version" };
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean; viaOfficial?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "pack-integrity" | "minecraft" | "microsoft" | "event-microsoft" | "event-relink" | "offline-event-only" | "offline-not-allowed" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -233,6 +235,11 @@ export interface UpdateStatus {
 }
 
 /** Lot E7 : modpacks Modrinth. */
+export interface ContentExtra {
+  project_id: string;
+  title: string;
+  type: "resourcepack" | "shader";
+}
 export interface ModpackRoot {
   project_id: string;
   title: string;
@@ -412,6 +419,66 @@ export interface WeCraftApi {
     /** Fin de logs/latest.log du jeu, données sensibles masquées. */
     gameLog(id: string): Promise<{ lines: string[]; truncated: boolean; at: number | null }>;
   };
+  relink: {
+    /** Données publiques du service ReLink (cache si hors ligne). `force` : relever tout de suite. */
+    state(force?: boolean): Promise<RelinkState>;
+    /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
+    notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
+  };
+  microsoft: {
+    state(): Promise<MicrosoftState>;
+    /** Ouvre la connexion Microsoft dans le navigateur ; lie ensuite le compte Minecraft au compte ReLink. */
+    login(): Promise<MicrosoftState>;
+    logout(): Promise<MicrosoftState>;
+    /** « Ouvrir le launcher officiel pour jouer » (sinon ReLaunch démarre le jeu lui-même). */
+    openOfficial(): Promise<boolean>;
+    setOpenOfficial(on: boolean): Promise<boolean>;
+  };
+  offline: {
+    state(): Promise<OfflineState>;
+    /** Vérifie le pseudo auprès de Mojang (refusé s'il appartient à un compte officiel), l'enregistre et l'utilise pour jouer. */
+    set(name: string): Promise<OfflineResult>;
+    /** Utiliser (ou non) le compte hors-ligne enregistré, sans l'oublier. */
+    setActive(on: boolean): Promise<OfflineResult>;
+    /** Oublie le compte hors-ligne. */
+    remove(): Promise<OfflineResult>;
+  };
+  account: {
+    state(): Promise<AccountState>;
+    /** Ouvre Discord dans le navigateur ; se termine quand le joueur a répondu (5 min au plus). */
+    login(): Promise<AccountState>;
+    logout(): Promise<AccountState>;
+    refresh(): Promise<AccountState>;
+    /** Fenêtre « Ouvrir » : PNG 64 × 64 envoyé comme skin Minecraft. */
+    uploadMinecraftSkin(model: "classic" | "slim"): Promise<AccountResult>;
+    removeMinecraftSkin(): Promise<AccountResult>;
+    /** « Skin ReLink en jeu » : installation automatique du mod de skins dans les instances moddées. */
+    skinMod(): Promise<boolean>;
+    setSkinMod(on: boolean): Promise<boolean>;
+    /** Image du skin Minecraft actuel (data:), ou null. */
+    minecraftSkinImage(): Promise<string | null>;
+    /** Achète un skin du launcher avec des Éclats. */
+    buySkin(relinkId: string): Promise<AccountResult>;
+    /** Débloque un skin avec un code (event, succès, partenaire…). */
+    redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
+    /** Avantages & Quêtes du joueur (lu sur ReLink). */
+    quests(): Promise<QuestsState>;
+  };
+  skins: {
+    list(): Promise<InstalledSkin[]>;
+    /** Fenêtre « Ouvrir » : fichier .rlskin du PC, installé en aperçu local (non signé). */
+    importLocal(): Promise<SkinResult>;
+    /** Skin publié sur ReLink (fichier vérifié : SHA-256 + signature Ed25519). */
+    install(relinkId: string): Promise<SkinResult>;
+    remove(key: string): Promise<boolean>;
+  };
+  win: {
+    minimize(): Promise<void>;
+    /** Agrandit ou restaure (quitte d'abord le plein écran) ; renvoie l'état agrandi. */
+    maximize(): Promise<boolean>;
+    close(): Promise<void>;
+    state(): Promise<{ maximized: boolean; fullscreen: boolean }>;
+  };
   content: {
     /** Mods, packs de ressources et shaders de l'instance (lecture locale, rapide). */
     list(id: string): Promise<ContentList | null>;
@@ -455,7 +522,10 @@ export interface WeCraftApi {
     /** Versions de Minecraft (releases), la plus récente d'abord ; null si la liste est inaccessible. */
     versions(): Promise<string[] | null>;
     search(q: ModpackQuery): Promise<ModpackSearch>;
-    create(p: { name: string; mc: string; loader: string; roots: ModpackRoot[] }): Promise<ModpackStartResult>;
+    /** `extras` : packs de ressources et shaders ajoutés à l'instance après les mods (dernière version compatible). */
+    create(p: { name: string; mc: string; loader: string; roots: ModpackRoot[]; extras?: ContentExtra[] }): Promise<ModpackStartResult>;
+    /** Ajoute des mods (et leurs dépendances obligatoires) à une instance qui n'est pas un WePack. */
+    addMods(id: string, roots: ModpackRoot[]): Promise<ModpackStartResult>;
     editInfo(id: string): Promise<ModpackEditInfo | null>;
     rows(id: string | null, selected: ModpackRoot[]): Promise<PackRowView[]>;
     edit(id: string, selected: ModpackRoot[]): Promise<ModpackStartResult>;
@@ -466,6 +536,12 @@ export interface WeCraftApi {
     importFile(): Promise<ModpackStartResult | { ok: false; reason: "canceled" }>;
     /** Version d'un modpack Modrinth installée dans une nouvelle instance. */
     installVersion(versionId: string, name?: string): Promise<ModpackStartResult>;
+    /** Modpacks officiels ReLaunch déjà installés sur ce PC. */
+    officialInstalled(): Promise<OfficialInstalled[]>;
+    /** Installe ou met à jour un modpack officiel du catalogue ReLink (fichiers signés). */
+    installOfficial(relinkId: string): Promise<ModpackStartResult>;
+    /** Fenêtre « Enregistrer » : exporte l'instance en pack partageable (.rlpack). */
+    exportShared(instanceId: string): Promise<{ ok: boolean; message: string; canceled?: boolean }>;
   };
   projects: {
     search(q: ProjectQuery): Promise<ProjectSearch>;
@@ -490,8 +566,243 @@ export interface WeCraftApi {
     status(): Promise<UpdateStatus>;
     /** Ouvre la page de la release sur GitHub (installation à la main). */
     openPage(): Promise<boolean>;
+    /** « Participer à la bêta » : reçoit aussi les préversions. */
+    beta(): Promise<boolean>;
+    setBeta(on: boolean): Promise<boolean>;
   };
   links: {
     open(id: ExternalLinkId): Promise<boolean>;
   };
 }
+
+// ---------------------------------------------------------------- service ReLink (Worker, lecture seule)
+export interface RelinkNews {
+  id: string;
+  title: string;
+  body: string;
+  date: string;
+  tags: { label: string; color: string }[];
+  cta: string;
+  /** Page du launcher à ouvrir ("" = aucune). */
+  open: string;
+}
+export interface RelinkCard {
+  id: string;
+  title: string;
+  text: string;
+  cta: string;
+  open: string;
+  tag: string;
+}
+export interface RelinkServer {
+  id: string;
+  name: string;
+  host: string;
+  state: "online" | "offline" | "maintenance" | "unknown";
+  players: number;
+  max: number;
+  pack: string;
+  event: string;
+  desc: string;
+  version: string;
+}
+export interface RelinkEvent {
+  id: string;
+  name: string;
+  desc: string;
+  status: string;
+  start: string;
+  end: string;
+  server: string;
+  pack: string;
+  /** Event réservé au compte Microsoft connecté dans ReLaunch (lié au compte ReLink). */
+  requireMicrosoft: boolean;
+  /** Event ouvert aux comptes hors-ligne (réglé dans le panel admin) ; sinon ils ne peuvent pas y jouer. */
+  allowOffline: boolean;
+  /** Serveur où les comptes hors-ligne sont connectés automatiquement au lancement (« domaine[:port] »), "" sinon. */
+  offlineHost: string;
+}
+export interface RelinkPartner {
+  id: string;
+  name: string;
+  channel: string;
+  category: string;
+  featured: boolean;
+  live: boolean;
+  viewers: number;
+}
+export interface RelinkModpack {
+  id: string;
+  name: string;
+  desc: string;
+  mc: string;
+  loader: string;
+  version: string;
+  /** Pack d'event (lié à un event ReLaunch). */
+  event: string | null;
+  /** Dernière version signée (manifeste relaunch-pack) ; null tant qu'aucune n'est publiée. */
+  latest: { id: string; version: string; sha256: string; size: number; locked: boolean; mandatory: boolean; changelog: string; overrides: { id: string; sha256: string; size: number } | null } | null;
+}
+export interface OfficialInstalled {
+  packId: string;
+  version: string;
+  locked: boolean;
+  folderName: string;
+}
+export interface RelinkSkin {
+  id: string;
+  name: string;
+  desc: string;
+  unlock: { event: boolean; shop: number; achievement: boolean; premium: boolean };
+  versions: { liquidGlass: boolean; mat: boolean };
+  followsTheme: boolean;
+  /** Fichier .rlskin publié (null tant que le Worker n'en annonce pas). */
+  file: { id: string; sha256: string; size: number; version: string } | null;
+}
+export interface RelinkNotification {
+  id: string;
+  title: string;
+  body: string;
+  open: string;
+  at: string;
+}
+export interface RelinkBootstrap {
+  generatedAt: string;
+  maintenance: { enabled: boolean; level: "info" | "warn" | "danger" | "critical"; text: string; blockLaunch: boolean };
+  updates: { kill: boolean; minVersion: string | null; blockOld: boolean; latest: string | null; paused: boolean; release: { version: string; mandatory: boolean; sha256: string } | null };
+  carousel: { count: number; autoplay: boolean; speedSeconds: number };
+  flags: string[];
+  cards: RelinkCard[];
+  news: RelinkNews[];
+  skins: RelinkSkin[];
+  modpacks: RelinkModpack[];
+  servers: RelinkServer[];
+  events: RelinkEvent[];
+  partners: RelinkPartner[];
+}
+/** Compte Minecraft officiel (Microsoft) connecté dans ReLaunch ; les jetons restent dans le processus principal. */
+export interface MicrosoftState {
+  connected: boolean;
+  profile: { id: string; name: string } | null;
+  loginPending: boolean;
+  /** L'application Microsoft de WeCraft est configurée (sinon la connexion n'est pas encore possible). */
+  available: boolean;
+  persisted: boolean;
+  error: string | null;
+}
+
+/** Compte hors-ligne (simple pseudo, sans Microsoft) : rien n'est envoyé à Mojang, pas d'accès aux serveurs qui vérifient le compte. */
+export interface OfflineState {
+  /** Pseudo enregistré (3 à 16 caractères : lettres, chiffres, « _ »), ou null. */
+  name: string | null;
+  /** UUID hors-ligne dérivé du pseudo (identique à celui d'un serveur en online-mode=false). */
+  uuid: string | null;
+  /** Le jeu démarre avec ce pseudo au lieu du compte Microsoft (events qui acceptent les comptes hors-ligne seulement). */
+  active: boolean;
+  /** Date (ms) avant laquelle le pseudo ne peut pas être changé ni oublié (90 jours après le dernier choix, fixé par le Worker), ou null. */
+  lockedUntil: number | null;
+  /** Connecté à ReLink : nécessaire pour choisir, changer ou oublier le pseudo (le Worker le vérifie et le verrouille). */
+  loggedIn: boolean;
+}
+export type OfflineResult =
+  | { ok: true; state: OfflineState }
+  | { ok: false; reason: "invalid" | "write-failed" | "login" | "taken-relink" }
+  /** Le pseudo appartient à un compte Minecraft officiel (`officialName` : écriture exacte chez Mojang). */
+  | { ok: false; reason: "taken"; officialName: string }
+  /** Le Worker n'a pas pu confirmer que le pseudo est libre (Mojang, réseau) : le pseudo est refusé. */
+  | { ok: false; reason: "unverified"; message: string }
+  /** Le pseudo a déjà été choisi il y a moins de 90 jours : changement refusé jusqu'à `until` (ms). */
+  | { ok: false; reason: "cooldown"; until: number };
+
+/** Compte ReLink du joueur (le jeton de session ne quitte jamais le processus principal). */
+export interface AccountState {
+  loggedIn: boolean;
+  user: { id: string; pseudo: string; minecraftName: string | null; minecraftUuid: string | null; minecraftVerified: boolean; eclats: number; premium: boolean } | null;
+  expiresAt: string | null;
+  /** Le service ReLink n'a pas répondu au dernier essai. */
+  offline: boolean;
+  /** Une connexion par Discord attend la réponse du navigateur. */
+  loginPending: boolean;
+  /** Skins du launcher possédés (offerts, gagnés en event…). */
+  launcherSkins: string[];
+  minecraftSkin: { model: "classic" | "slim"; sha256: string } | null;
+  /** false : pas de chiffrement système disponible, la session n'est pas gardée après fermeture. */
+  persisted: boolean;
+  error: string | null;
+}
+/** Quête « Avantages & Quêtes » (récompense en Éclats). */
+export interface Quest {
+  id: string;
+  category: "general" | "streak" | "event";
+  /** Event ReLink concerné (quêtes d'event). */
+  event: string | null;
+  title: string;
+  desc: string;
+  reward: number;
+  done: boolean;
+  claimed: boolean;
+}
+export interface QuestsState {
+  ok: boolean;
+  /** Message si la liste n'a pas pu être lue (hors ligne, pas connecté). */
+  error: string | null;
+  quests: Quest[];
+  /** Série de jours de jeu (streak) ; null si indisponible. */
+  streak: { current: number; longest: number; lastValidDate: string | null; days: number; dailyReward: number; milestones: { day: number; bonus: number }[] } | null;
+}
+export type AccountResult = { ok: true; state: AccountState; message?: string } | { ok: false; message: string; canceled?: boolean };
+
+export interface RelinkState {
+  /** Des données sont disponibles (fraîches ou en cache). */
+  ok: boolean;
+  /** Données venant du cache (le dernier relevé a échoué ou n'a pas encore eu lieu). */
+  stale: boolean;
+  fetchedAt: number | null;
+  error: string | null;
+  data: RelinkBootstrap | null;
+}
+
+// ---------------------------------------------------------------- skins du launcher (.rlskin)
+export interface SkinAnimation {
+  keyframes: Record<string, string | number>[];
+  durationMs: number;
+  iterations: number | "infinite";
+  direction: "normal" | "reverse" | "alternate" | "alternate-reverse";
+  easing: string;
+  delayMs: number;
+}
+export interface SkinVariant {
+  tokens: Record<string, string>;
+  barBackground: string | undefined;
+  cardBackground: string | undefined;
+}
+export interface SkinManifest {
+  id: string;
+  name: string;
+  author: string;
+  skinVersion: string;
+  description: string;
+  /** Garde les couleurs du thème choisi (le skin n'ajoute que le décor). */
+  followsTheme: boolean;
+  tokens: Record<string, string>;
+  fonts: { display: { file: string; family: string } | undefined; body: { file: string; family: string } | undefined };
+  background: { color: string | undefined; gradient: string | undefined; layers: { image: string; size: string; position: string; repeat: boolean; opacity: number; blend: string; animation: string | undefined }[]; overlay: "none" | "vignette" | "grain" };
+  bars: { pattern: string | undefined; patternOpacity: number; background: string | undefined; border: string | undefined; radius: number | undefined };
+  frames: { radius: number | undefined; border: string | undefined; glow: string | undefined; background: string | undefined };
+  playButton: { image: string | undefined; background: string | undefined; text: string | undefined; radius: number | undefined; animation: string | undefined };
+  transition: { type: "none" | "fade" | "slide" | "wave" | "zoom"; durationMs: number };
+  launchScreen: { image: string | undefined; text: string; animation: string | undefined };
+  animations: Record<string, SkinAnimation>;
+  variants: { liquidGlass: SkinVariant | undefined; mat: SkinVariant | undefined };
+}
+export interface InstalledSkin {
+  key: string;
+  signed: boolean;
+  source: "relink" | "local";
+  relinkId: string | null;
+  sha256: string;
+  /** Adresse app:// du dossier du skin (images, polices). */
+  base: string;
+  manifest: SkinManifest;
+}
+export type SkinResult = { ok: true; skin: InstalledSkin } | { ok: false; message: string; canceled?: boolean };

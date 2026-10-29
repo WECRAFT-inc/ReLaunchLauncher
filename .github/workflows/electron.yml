@@ -21,11 +21,11 @@ jobs:
       run:
         working-directory: electron
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
 
@@ -39,8 +39,16 @@ jobs:
       - name: Tests (bloquants)
         run: npm test
 
+      # Jusqu'à 3 essais : electron-builder télécharge ses outils sur GitHub (erreurs 504 passagères).
       - name: Compilation de l'installeur (sans publication)
-        run: npm run dist:win
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 3; $i++) {
+            npm run dist:win
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($i -lt 3) { Write-Host "Essai $i échoué (réseau ?) : nouvel essai dans 30 s."; Start-Sleep -Seconds 30 }
+          }
+          exit 1
 
       - name: Empreinte SHA-256
         shell: pwsh
@@ -143,7 +151,7 @@ jobs:
 
       # Installeur de test (~110 Mo) gardé 2 jours seulement : le quota de stockage du compte est limité.
       # Un quota plein n'est pas une erreur du code : l'envoi peut échouer sans faire échouer la vérification.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         continue-on-error: true
         with:
           name: relaunch-installeur
@@ -161,10 +169,10 @@ jobs:
       run:
         working-directory: electron
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
       - name: Dépendances (versions verrouillées)

@@ -14,6 +14,8 @@ const UPDATE_CHECK = "update:check";
 const UPDATE_INSTALL = "update:install";
 const UPDATE_STATUS = "update:status";
 const UPDATE_PAGE = "update:page";
+const UPDATE_GET_BETA = "update:get-beta";
+const UPDATE_SET_BETA = "update:set-beta";
 const OPEN_LINK = "link:open";
 const SET_THEME = "settings:set-theme";
 const LIST_INSTANCES = "instances:list";
@@ -25,6 +27,37 @@ const EDIT_INSTANCE = "instances:edit";
 const SET_ICON = "instances:set-icon";
 const SCREENSHOTS = "instances:screenshots";
 const WORLDS = "instances:worlds";
+const WIN_MINIMIZE = "win:minimize";
+const WIN_MAXIMIZE = "win:maximize";
+const WIN_CLOSE = "win:close";
+const WIN_STATE = "win:state";
+const RELINK_STATE = "relink:state";
+const RELINK_NOTIFICATIONS = "relink:notifications";
+const MS_STATE = "microsoft:state";
+const MS_LOGIN = "microsoft:login";
+const MS_LOGOUT = "microsoft:logout";
+const MS_GET_OFFICIAL = "microsoft:get-official";
+const MS_SET_OFFICIAL = "microsoft:set-official";
+const OFF_STATE = "offline:state";
+const OFF_SET = "offline:set";
+const OFF_SET_ACTIVE = "offline:set-active";
+const OFF_REMOVE = "offline:remove";
+const ACC_STATE = "account:state";
+const ACC_LOGIN = "account:login";
+const ACC_LOGOUT = "account:logout";
+const ACC_REFRESH = "account:refresh";
+const ACC_SKIN_UP = "account:skin-upload";
+const ACC_SKIN_RM = "account:skin-remove";
+const ACC_SKIN_IMG = "account:skin-image";
+const ACC_BUY = "account:buy-skin";
+const SKINMOD_GET = "skins:get-skin-mod";
+const SKINMOD_SET = "skins:set-skin-mod";
+const ACC_REDEEM = "account:redeem-code";
+const ACC_QUESTS = "account:quests";
+const SKINS_LIST = "skins:list";
+const SKINS_IMPORT = "skins:import-local";
+const SKINS_INSTALL = "skins:install";
+const SKINS_REMOVE = "skins:remove";
 const FILES = "instances:files";
 const OPEN_FOLDER = "instances:open-folder";
 const GAME_LOG = "instances:game-log";
@@ -52,8 +85,12 @@ const MP_ROWS = "modpacks:rows";
 const MP_EDIT = "modpacks:edit";
 const MP_STATUS = "modpacks:status";
 const MP_PAGE = "modpacks:page";
+const MP_ADD_MODS = "modpacks:add-mods";
 const MP_IMPORT_FILE = "modpacks:import-file";
 const MP_INSTALL_VERSION = "modpacks:install-version";
+const MP_OFFICIAL_INSTALLED = "modpacks:official-installed";
+const MP_INSTALL_OFFICIAL = "modpacks:install-official";
+const MP_EXPORT_SHARED = "modpacks:export-shared";
 const PROJ_SEARCH = "projects:search";
 const PROJ_GET = "projects:get";
 const PROJ_VERSIONS = "projects:versions";
@@ -90,6 +127,49 @@ const api: WeCraftApi = Object.freeze({
     files: (id: string) => ipcRenderer.invoke(FILES, id),
     openFolder: (id: string, sub?: string) => ipcRenderer.invoke(OPEN_FOLDER, id, sub ?? ""),
     gameLog: (id: string) => ipcRenderer.invoke(GAME_LOG, id),
+  }),
+  relink: Object.freeze({
+    state: (force?: boolean) => ipcRenderer.invoke(RELINK_STATE, force === true),
+    notifications: () => ipcRenderer.invoke(RELINK_NOTIFICATIONS),
+  }),
+  microsoft: Object.freeze({
+    state: () => ipcRenderer.invoke(MS_STATE),
+    login: () => ipcRenderer.invoke(MS_LOGIN),
+    logout: () => ipcRenderer.invoke(MS_LOGOUT),
+    openOfficial: () => ipcRenderer.invoke(MS_GET_OFFICIAL),
+    setOpenOfficial: (on: boolean) => ipcRenderer.invoke(MS_SET_OFFICIAL, on === true),
+  }),
+  offline: Object.freeze({
+    state: () => ipcRenderer.invoke(OFF_STATE),
+    set: (name: string) => ipcRenderer.invoke(OFF_SET, name),
+    setActive: (on: boolean) => ipcRenderer.invoke(OFF_SET_ACTIVE, on === true),
+    remove: () => ipcRenderer.invoke(OFF_REMOVE),
+  }),
+  account: Object.freeze({
+    state: () => ipcRenderer.invoke(ACC_STATE),
+    login: () => ipcRenderer.invoke(ACC_LOGIN),
+    logout: () => ipcRenderer.invoke(ACC_LOGOUT),
+    refresh: () => ipcRenderer.invoke(ACC_REFRESH),
+    uploadMinecraftSkin: (model: "classic" | "slim") => ipcRenderer.invoke(ACC_SKIN_UP, model === "slim" ? "slim" : "classic"),
+    removeMinecraftSkin: () => ipcRenderer.invoke(ACC_SKIN_RM),
+    minecraftSkinImage: () => ipcRenderer.invoke(ACC_SKIN_IMG),
+    buySkin: (relinkId: string) => ipcRenderer.invoke(ACC_BUY, relinkId),
+    skinMod: () => ipcRenderer.invoke(SKINMOD_GET),
+    setSkinMod: (on: boolean) => ipcRenderer.invoke(SKINMOD_SET, on === true),
+    redeemCode: (code: string) => ipcRenderer.invoke(ACC_REDEEM, code),
+    quests: () => ipcRenderer.invoke(ACC_QUESTS),
+  }),
+  skins: Object.freeze({
+    list: () => ipcRenderer.invoke(SKINS_LIST),
+    importLocal: () => ipcRenderer.invoke(SKINS_IMPORT),
+    install: (relinkId: string) => ipcRenderer.invoke(SKINS_INSTALL, relinkId),
+    remove: (key: string) => ipcRenderer.invoke(SKINS_REMOVE, key),
+  }),
+  win: Object.freeze({
+    minimize: () => ipcRenderer.invoke(WIN_MINIMIZE),
+    maximize: () => ipcRenderer.invoke(WIN_MAXIMIZE),
+    close: () => ipcRenderer.invoke(WIN_CLOSE),
+    state: () => ipcRenderer.invoke(WIN_STATE),
   }),
   content: Object.freeze({
     list: (id: string) => ipcRenderer.invoke(CONTENT_LIST, id),
@@ -131,8 +211,12 @@ const api: WeCraftApi = Object.freeze({
     edit: (id: string, selected: unknown) => ipcRenderer.invoke(MP_EDIT, id, selected),
     status: (job: string) => ipcRenderer.invoke(MP_STATUS, job),
     openPage: (slug: string) => ipcRenderer.invoke(MP_PAGE, slug),
+    addMods: (id: string, roots: unknown) => ipcRenderer.invoke(MP_ADD_MODS, id, roots),
     importFile: () => ipcRenderer.invoke(MP_IMPORT_FILE),
     installVersion: (versionId: string, name?: string) => ipcRenderer.invoke(MP_INSTALL_VERSION, versionId, name ?? null),
+    officialInstalled: () => ipcRenderer.invoke(MP_OFFICIAL_INSTALLED),
+    installOfficial: (relinkId: string) => ipcRenderer.invoke(MP_INSTALL_OFFICIAL, relinkId),
+    exportShared: (instanceId: string) => ipcRenderer.invoke(MP_EXPORT_SHARED, instanceId),
   }),
   projects: Object.freeze({
     search: (q: unknown) => ipcRenderer.invoke(PROJ_SEARCH, q),
@@ -147,6 +231,8 @@ const api: WeCraftApi = Object.freeze({
     install: () => ipcRenderer.invoke(UPDATE_INSTALL),
     status: () => ipcRenderer.invoke(UPDATE_STATUS),
     openPage: () => ipcRenderer.invoke(UPDATE_PAGE),
+    beta: () => ipcRenderer.invoke(UPDATE_GET_BETA),
+    setBeta: (on: boolean) => ipcRenderer.invoke(UPDATE_SET_BETA, on === true),
   }),
   links: Object.freeze({
     open: (id: ExternalLinkId) => ipcRenderer.invoke(OPEN_LINK, id),

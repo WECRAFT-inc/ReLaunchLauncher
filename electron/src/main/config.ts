@@ -5,6 +5,7 @@ import type { SettingResult, ThemeKey } from "../shared/api";
 import path from "node:path";
 import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "./storage/jsonStore";
 import type { ShaderPrefs } from "./launch/shaders";
+import { isOfflineName } from "./auth/offline";
 
 /** Préférences de shaders vérifiées (noms courts, sans chemin). */
 export function cleanShaderPrefs(v: unknown): ShaderPrefs {
@@ -62,6 +63,82 @@ export class Settings {
     } catch {
       return false;
     }
+  }
+
+  /** « Participer à la bêta » (clé « relaunch_beta ») : désactivé par défaut, les installations suivent le canal stable. */
+  async beta(): Promise<boolean> {
+    return (await this.store.read(this.file))?.["relaunch_beta"] === true;
+  }
+
+  async setBeta(on: boolean): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_beta: on === true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** « Ouvrir le launcher officiel pour jouer » (clé « relaunch_open_official ») : désactivé par défaut. */
+  async openOfficial(): Promise<boolean> {
+    return (await this.store.read(this.file))?.["relaunch_open_official"] === true;
+  }
+
+  async setOpenOfficial(on: boolean): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_open_official: on === true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** « Skin ReLink en jeu » (clé « relaunch_skin_mod ») : activé par défaut. */
+  async skinMod(): Promise<boolean> {
+    return (await this.store.read(this.file))?.["relaunch_skin_mod"] !== false;
+  }
+
+  async setSkinMod(on: boolean): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_skin_mod: on === true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Compte hors-ligne (clés « relaunch_offline_name », « relaunch_offline_active » et « relaunch_offline_changed_at »,
+   * propres à ReLaunch ; ignorées par la version Python). `active` : le jeu démarre avec ce pseudo au lieu du compte
+   * Microsoft. `changedAt` : date (ms) du dernier choix de pseudo, point de départ du délai de 90 jours.
+   */
+  async offlineAccount(): Promise<{ name: string | null; active: boolean; changedAt: number | null }> {
+    const d = await this.store.read(this.file);
+    const raw = d?.["relaunch_offline_name"];
+    const name = isOfflineName(raw) ? raw : null;
+    const at = d?.["relaunch_offline_changed_at"];
+    return { name, active: name !== null && d?.["relaunch_offline_active"] === true, changedAt: name !== null && typeof at === "number" && Number.isFinite(at) ? at : null };
+  }
+
+  /** Enregistre le pseudo hors-ligne (le valide) ; `null` supprime le compte hors-ligne et son délai. */
+  async setOfflineAccount(name: string | null, active = true, changedAt: number | null = null): Promise<boolean> {
+    if (name !== null && !isOfflineName(name)) return false;
+    try {
+      await this.store.update(this.file, (data) => {
+        const { relaunch_offline_name: _n, relaunch_offline_active: _a, relaunch_offline_changed_at: _c, ...rest } = data as Record<string, unknown>;
+        return name === null ? rest : { ...rest, relaunch_offline_name: name, relaunch_offline_active: active === true, ...(changedAt !== null ? { relaunch_offline_changed_at: changedAt } : {}) };
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Active ou coupe l'usage du compte hors-ligne sans l'oublier (le délai de 90 jours n'est pas touché). */
+  async setOfflineActive(on: boolean): Promise<boolean> {
+    const cur = await this.offlineAccount();
+    if (!cur.name) return false;
+    return this.setOfflineAccount(cur.name, on === true, cur.changedAt);
   }
 
   /** Shaders préférés (clé « relaunch_shaders », propre à ReLaunch ; ignorée par la version Python). */

@@ -24,6 +24,8 @@ export interface EventManifest {
   official: Set<string>;
   /** Shader choisi par l'événement (affiché comme valeur par défaut). */
   defaultShader: string | null;
+  /** Dossiers que le joueur peut modifier (« resourcepacks », « shaderpacks ») ; un pack ReLaunch verrouillé : shaders seulement. */
+  editable: Set<string>;
 }
 
 export class EventLockError extends Error {
@@ -50,7 +52,9 @@ export async function readEventManifest(folder: string): Promise<EventManifest |
   }
   official.add(EVENT_FILE);
   const ds = o["defaultShader"];
+  const ed = Array.isArray(o["editable"]) ? new Set((o["editable"] as unknown[]).filter((x): x is string => x === "resourcepacks" || x === "shaderpacks")) : new Set(["resourcepacks", "shaderpacks"]);
   return {
+    editable: ed,
     id: o["id"],
     name: typeof o["name"] === "string" && o["name"].trim() ? o["name"].trim().slice(0, 80) : o["id"],
     official,
@@ -82,6 +86,11 @@ export async function editablePath(folder: string, kind: unknown, name: unknown)
     // fichier absent : le nom seul est vérifié (il ne peut pas sortir du dossier)
   }
   return { file, rel: `${EDITABLE[kind]}/${name}` };
+}
+
+/** Refuse une modification d'un genre de pack que l'événement n'ouvre pas au joueur. */
+export function assertKindEditable(m: EventManifest, kind: EditableKind): void {
+  if (!m.editable.has(EDITABLE[kind])) throw new EventLockError(kind === "resourcepack" ? "Pack d'event : les packs de ressources sont imposés, seuls les shaders peuvent être changés." : "Pack d'event : les shaders sont imposés.");
 }
 
 /** Refuse toute opération sur un fichier officiel de l'événement. */
@@ -125,7 +134,7 @@ async function writeKeep(file: string, text: string): Promise<void> {
 /** Active ou désactive un pack de ressources (options.txt) ; seule la ligne resourcePacks change. */
 export async function setResourcePack(folder: string, m: EventManifest, name: unknown, on: boolean): Promise<void> {
   // désactiver un pack officiel ne change que options.txt du joueur (affichage) : le fichier reste en place
-  void m;
+  assertKindEditable(m, "resourcepack");
   await editablePath(folder, "resourcepack", name);
   const f = path.join(folder, "options.txt");
   const text = await readFile(f, "utf8").catch(() => "");
@@ -160,6 +169,7 @@ export async function setShader(folder: string, name: unknown): Promise<void> {
 /** Retire (corbeille) un pack AJOUTÉ par le joueur ; un pack officiel est refusé. */
 export async function removePack(folder: string, m: EventManifest, kind: unknown, name: unknown, trash: (file: string) => Promise<void>): Promise<void> {
   const { file, rel } = await editablePath(folder, kind, name);
+  assertKindEditable(m, kind as EditableKind);
   assertNotOfficial(m, rel);
   await trash(file);
 }

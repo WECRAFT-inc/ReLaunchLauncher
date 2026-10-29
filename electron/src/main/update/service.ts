@@ -23,6 +23,8 @@ export interface UpdateDeps {
   env: UpdateEnv;
   net?: NetOptions;
   fetchLatest?: typeof fetchLatestRelease;
+  /** « Participer à la bêta » : les préversions GitHub sont aussi proposées. */
+  beta?: () => Promise<boolean>;
   download?: typeof downloadUpdate;
   /** Quitte ReLaunch une fois l'installeur lancé. */
   quit: () => void;
@@ -46,7 +48,8 @@ export class UpdateService {
     const cur = this.d.env.version;
     let info: ReleaseInfo;
     try {
-      info = await (this.d.fetchLatest ?? fetchLatestRelease)(this.d.net ?? {});
+      const beta = this.d.beta ? await this.d.beta().catch(() => false) : false;
+      info = await (this.d.fetchLatest ?? fetchLatestRelease)(this.d.net ?? {}, GITHUB_REPO, beta);
     } catch (e) {
       await updateLog(this.d.env, `${GITHUB_REPO}  ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
       return manual ? { state: "error", message: explainUpdateError(e) } : { state: "none", current: cur, latest: null };

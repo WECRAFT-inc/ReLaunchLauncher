@@ -1,0 +1,34 @@
+{
+  "format": "relaunch-skin",
+  "version": 1,
+  "id": "vague-exemple",
+  "name": "Vague (exemple)",
+  "author": "Équipe ReLaunch",
+  "skinVersion": "1.0.0",
+  "description": "Skin d'exemple : ciel de nuit, vagues animées, barres à motifs.",
+  "followsTheme": false,
+  "tokens": { "acc": "#38bdf8", "acc2": "#bae6fd", "accDeep": "#0369a1", "spark": "#e0f2fe", "night": "#06121f" },
+  "background": {
+    "color": "#06121f",
+    "layers": [
+      { "image": "img/ciel.webp", "size": "cover", "position": "center", "opacity": 1 },
+      { "image": "img/vagues.webp", "size": "100% 55%", "position": "center bottom", "opacity": 0.9, "animation": "houle" }
+    ],
+    "overlay": "vignette"
+  },
+  "bars": { "pattern": "img/motif.png", "patternOpacity": 0.3, "background": "linear-gradient(180deg, rgba(8,30,52,.82), rgba(4,14,26,.9))", "border": "rgba(125,211,252,.35)", "radius": 18 },
+  "frames": { "radius": 18, "border": "rgba(125,211,252,.28)", "glow": "#38bdf8" },
+  "playButton": { "background": "linear-gradient(180deg, #e0f2fe, #38bdf8)", "text": "#06121f", "radius": 999, "animation": "pouls" },
+  "transition": { "type": "wave", "durationMs": 420 },
+  "launchScreen": { "image": "img/ciel.webp", "text": "Le large t'attend" },
+  "animations": {
+    "houle": { "durationMs": 9000, "iterations": "infinite", "direction": "alternate", "easing": "ease-in-out",
+      "keyframes": [ { "offset": 0, "transform": "translateY(0px) scaleX(1)" }, { "offset": 1, "transform": "translateY(-14px) scaleX(1.03)" } ] },
+    "pouls": { "durationMs": 2400, "iterations": "infinite", "direction": "alternate", "easing": "ease-in-out",
+      "keyframes": [ { "offset": 0, "filter": "brightness(1)" }, { "offset": 1, "filter": "brightness(1.15)" } ] }
+  },
+  "variants": {
+    "liquidGlass": { "bars": { "background": "linear-gradient(180deg, rgba(186,230,253,.18), rgba(8,30,52,.35))" } },
+    "mat": { "bars": { "background": "linear-gradient(180deg, rgba(8,30,52,.95), rgba(4,14,26,.98))" } }
+  }
+}

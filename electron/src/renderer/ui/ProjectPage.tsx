@@ -66,6 +66,15 @@ export interface ProjectContext {
   /** Packs de ressources et shaders : instance où installer. */
   target: string;
   setTarget: (id: string) => void;
+  /** « Ajouter du contenu » à une instance : l'instance est imposée (pas de choix) et nommée. */
+  lockTarget?: boolean;
+  /** Textes du bouton des mods ([déjà ajouté, ajouter]) ; par défaut « Mon modpack ». */
+  modLabels?: [string, string];
+  /** Nom de ce à quoi les mods doivent être compatibles (par défaut « ton WePack »). */
+  packName?: string;
+  /** Parcourir : pack de ressources ou shader ajouté au nouveau WePack en préparation. */
+  extraIn?: boolean;
+  toggleExtra?: (p: { id: string; title: string }) => void;
 }
 
 export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => void; ctx: ProjectContext }) {
@@ -131,7 +140,7 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
       const mcOk = p.mcVersions.includes(ctx.packMc);
       const key = ctx.packLoader.toLowerCase();
       const lOk = p.loaders.includes(key) || (key === "quilt" && p.loaders.includes("fabric"));
-      if (!mcOk || !lOk) return `Incompatible avec ton WePack (Minecraft ${ctx.packMc} · ${ctx.packLoader}) : ${!mcOk ? `aucune version pour Minecraft ${ctx.packMc}` : `pas de version pour ${ctx.packLoader}`}.`;
+      if (!mcOk || !lOk) return `Incompatible avec ${ctx.packName ?? "ton WePack"} (Minecraft ${ctx.packMc} · ${ctx.packLoader}) : ${!mcOk ? `aucune version pour Minecraft ${ctx.packMc}` : `pas de version pour ${ctx.packLoader}`}.`;
     }
     if ((type === "resourcepack" || type === "shader") && targetInst?.v && p.mcVersions.length && !p.mcVersions.includes(targetInst.v))
       return `Aucune version indiquée pour Minecraft ${targetInst.v} (instance « ${targetInst.n} ») : elle peut quand même fonctionner, à vérifier.`;
@@ -180,7 +189,7 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
     if (type === "mod")
       return (
         <button className={`btn${ctx.inPack ? "" : " pri"}`} disabled={!!compat && !ctx.inPack} onClick={() => ctx.togglePack({ id: p.id, title: p.title })}>
-          {ctx.inPack ? "✓ Dans Mon modpack" : "+ Ajouter à Mon modpack"}
+          {ctx.inPack ? (ctx.modLabels?.[0] ?? "✓ Dans Mon modpack") : (ctx.modLabels?.[1] ?? "+ Ajouter à Mon modpack")}
         </button>
       );
     if (type === "modpack")
@@ -193,18 +202,25 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
     if (type === "resourcepack" || type === "shader")
       return (
         <span className="pj-target">
-          <select value={ctx.target} onChange={(e) => ctx.setTarget(e.target.value)} aria-label={t("Instance où installer")}>
-            <option value="">{t("Choisir l'instance…")}</option>
-            {inst.map((i) => (
-              <option key={i.id} value={i.id}>
-                {`${i.n} (${i.v || "?"})`}
-              </option>
-            ))}
-          </select>
+          {ctx.lockTarget ? null : (
+            <select value={ctx.target} onChange={(e) => ctx.setTarget(e.target.value)} aria-label={t("Instance où installer")}>
+              <option value="">{t("Choisir l'instance…")}</option>
+              {inst.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {`${i.n} (${i.v || "?"})`}
+                </option>
+              ))}
+            </select>
+          )}
           <button className="btn pri" disabled={!best || !ctx.target} onClick={() => best && installVersion(best)}>
             <Ic n="dl" />
-            {t("Installer")}
+            {ctx.lockTarget ? `${t("Installer dans")} « ${targetInst?.n ?? ""} »` : t("Installer")}
           </button>
+          {ctx.toggleExtra ? (
+            <button className={`btn${ctx.extraIn ? "" : " ghost"}`} onClick={() => ctx.toggleExtra!({ id: p.id, title: p.title })}>
+              {ctx.extraIn ? t("✓ Dans Mon modpack") : t("+ Ajouter à Mon modpack")}
+            </button>
+          ) : null}
         </span>
       );
     return null;
