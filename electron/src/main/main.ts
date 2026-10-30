@@ -463,6 +463,7 @@ function registerIpc(): void {
   handle(CHANNELS.msLogin, async () => {
     if (!microsoft) return noMs;
     const st = await microsoft.login();
+    if (st.error) void appLog?.warn("Microsoft", `Connexion : ${st.error}`);
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();

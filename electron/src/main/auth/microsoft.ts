@@ -48,7 +48,8 @@ interface Saved {
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : {});
 const b64url = (b: Buffer) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const TOKEN_RE = /^[A-Za-z0-9._~+/=-]{20,8192}$/;
+// Jetons Microsoft grand public : contiennent aussi « ! * $ » (ex. M.C527_BL2…!…*…$$). Caractères visibles, sans espace.
+const TOKEN_RE = /^[\x21-\x7e]{20,8192}$/;
 
 export class MicrosoftAccount {
   private saved: Saved | null = null;
@@ -158,7 +159,12 @@ export class MicrosoftAccount {
     const access = r.data["access_token"], refresh = r.data["refresh_token"];
     if (r.status !== 200 || typeof access !== "string" || typeof refresh !== "string" || !TOKEN_RE.test(refresh)) {
       const err = String(r.data["error"] ?? "");
-      throw new MicrosoftError(err === "invalid_grant" ? "Ta connexion Microsoft a expiré : reconnecte-toi." : "Connexion Microsoft refusée.");
+      // code AADSTS (sans jeton ni donnée personnelle) pour comprendre un refus dans Réglages > Logs
+      const code = /AADSTS\d{4,8}/.exec(String(r.data["error_description"] ?? ""))?.[0] ?? "";
+      const detail = [err, code, r.status !== 200 ? `HTTP ${r.status}` : "jeton illisible"].filter(Boolean).join(", ").slice(0, 120);
+      if (err === "invalid_grant") throw new MicrosoftError("Ta connexion Microsoft a expiré : reconnecte-toi.");
+      if (code === "AADSTS7000218" || err === "invalid_client") throw new MicrosoftError(`Connexion Microsoft refusée : dans Azure, active « Autoriser les flux clients publics » (Authentification) (${detail}).`);
+      throw new MicrosoftError(`Connexion Microsoft refusée (${detail}).`);
     }
     return { access, refresh };
   }
