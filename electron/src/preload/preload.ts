@@ -33,6 +33,8 @@ const WIN_CLOSE = "win:close";
 const WIN_STATE = "win:state";
 const RELINK_STATE = "relink:state";
 const RELINK_NOTIFICATIONS = "relink:notifications";
+const RELINK_DISMISS_NOTIF = "relink:dismiss-notification";
+const RELINK_CARD_IMAGE = "relink:card-image";
 const MS_STATE = "microsoft:state";
 const MS_LOGIN = "microsoft:login";
 const MS_LOGOUT = "microsoft:logout";
@@ -54,6 +56,11 @@ const SKINMOD_GET = "skins:get-skin-mod";
 const SKINMOD_SET = "skins:set-skin-mod";
 const ACC_REDEEM = "account:redeem-code";
 const ACC_QUESTS = "account:quests";
+const FRIENDS_LIST = "friends:list";
+const FRIENDS_REQUEST = "friends:request";
+const FRIENDS_ACCEPT = "friends:accept";
+const FRIENDS_DECLINE = "friends:decline";
+const FRIENDS_REMOVE = "friends:remove";
 const SKINS_LIST = "skins:list";
 const SKINS_IMPORT = "skins:import-local";
 const SKINS_INSTALL = "skins:install";
@@ -131,6 +138,10 @@ const api: WeCraftApi = Object.freeze({
   relink: Object.freeze({
     state: (force?: boolean) => ipcRenderer.invoke(RELINK_STATE, force === true),
     notifications: () => ipcRenderer.invoke(RELINK_NOTIFICATIONS),
+    /** Supprime une notification de la boîte locale ; renvoie la boîte à jour. */
+    dismissNotification: (id: string) => ipcRenderer.invoke(RELINK_DISMISS_NOTIF, id),
+    /** Image d'un encart (bannière), en data: (l'interface ne charge aucune image distante). */
+    cardImage: (bannerId: string) => ipcRenderer.invoke(RELINK_CARD_IMAGE, bannerId),
   }),
   microsoft: Object.freeze({
     state: () => ipcRenderer.invoke(MS_STATE),
@@ -158,6 +169,13 @@ const api: WeCraftApi = Object.freeze({
     setSkinMod: (on: boolean) => ipcRenderer.invoke(SKINMOD_SET, on === true),
     redeemCode: (code: string) => ipcRenderer.invoke(ACC_REDEEM, code),
     quests: () => ipcRenderer.invoke(ACC_QUESTS),
+  }),
+  friends: Object.freeze({
+    list: () => ipcRenderer.invoke(FRIENDS_LIST),
+    request: (pseudo: string) => ipcRenderer.invoke(FRIENDS_REQUEST, pseudo),
+    accept: (discordId: string) => ipcRenderer.invoke(FRIENDS_ACCEPT, discordId),
+    decline: (discordId: string) => ipcRenderer.invoke(FRIENDS_DECLINE, discordId),
+    remove: (discordId: string) => ipcRenderer.invoke(FRIENDS_REMOVE, discordId),
   }),
   skins: Object.freeze({
     list: () => ipcRenderer.invoke(SKINS_LIST),
