@@ -145,7 +145,7 @@ export function App() {
     } catch {
       // stockage indisponible
     }
-    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content", qEv: null };
+    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content", qEv: null, newsSel: null };
   });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tip, setTip] = useState<{ text: string; el: HTMLElement } | null>(null);
@@ -180,6 +180,10 @@ export function App() {
   }, []);
   const refreshRelink = useCallback((force = false) => {
     void window.wecraft.relink?.state(force).then(setRelink, () => undefined);
+  }, []);
+  const dismissNotif = useCallback((id: string) => {
+    setNotifs((n) => n.filter((x) => x.id !== id)); // retiré tout de suite (pas d'attente de l'IPC)
+    void window.wecraft.relink?.dismissNotification(id).then(setNotifs, () => undefined);
   }, []);
   const reloadSkins = useCallback(() => {
     void window.wecraft.skins?.list().then(setSkinList, () => undefined);
@@ -661,6 +665,9 @@ export function App() {
       else if (go.dataset["go"] === "relink" && ui.rlTab === "shop") o.rlTab = "profil";
       if (go.dataset["set"]) o.setTab = go.dataset["set"];
       if (go.dataset["go"] === "quests") o.qEv = go.dataset["qev"] ?? null;
+      // navigation générique (bouton "Info & News", barre…) : pas d'article précis visé, donc on efface
+      // un éventuel renvoi précédent (sinon il resterait collé indéfiniment, voir HomeCarousel/show("news", …)).
+      if (go.dataset["go"] === "news" && !go.dataset["newsSel"]) o.newsSel = null;
       show(go.dataset["go"]!, o);
       return;
     }
@@ -1042,6 +1049,7 @@ export function App() {
     relink,
     refreshRelink,
     notifs,
+    dismissNotif,
     seen,
     markSeen,
     skins: skinList,
