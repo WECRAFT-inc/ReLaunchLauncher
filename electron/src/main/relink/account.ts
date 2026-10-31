@@ -13,7 +13,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AccountState, Quest, QuestsState } from "../../shared/api";
+import type { AccountState, Friend, FriendsState, Quest, QuestsState } from "../../shared/api";
 import { checkUrl, HttpError, type NetOptions } from "../net/download";
 import { str, WORKER_HOSTS, WORKER_URL } from "./worker";
 import { isOfflineName } from "../auth/offline";
@@ -440,6 +440,50 @@ export class RelinkAccount {
     await this.load();
     return !!this.saved?.me?.launcherSkins.includes(skinId);
   }
+
+  /** Amis (acceptés) et demandes reçues/envoyées, lus sur ReLink. */
+  async friendsList(): Promise<FriendsState> {
+    await this.load();
+    if (!this.saved) return { ok: false, error: "Connecte-toi à ReLink pour voir tes amis.", friends: [], incoming: [], outgoing: [] };
+    try {
+      const r = await this.call("GET", "/launcher/friends", { auth: true });
+      return { ok: true, error: null, friends: decodeFriends(r["friends"]), incoming: decodeFriends(r["incoming"]), outgoing: decodeFriends(r["outgoing"]) };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e), friends: [], incoming: [], outgoing: [] };
+    }
+  }
+
+  /** Envoie une demande d'ami par pseudo (accepte directement si l'autre en avait déjà envoyé une). */
+  async friendRequest(pseudo: string): Promise<FriendsState> {
+    await this.call("POST", "/launcher/friends/requests", { auth: true, json: { pseudo: String(pseudo).slice(0, 60) } });
+    return this.friendsList();
+  }
+  async friendAccept(discordId: string): Promise<FriendsState> {
+    if (!/^\d{5,25}$/.test(discordId)) throw new AccountError("Identifiant invalide.");
+    await this.call("POST", `/launcher/friends/requests/${discordId}/accept`, { auth: true, json: {} });
+    return this.friendsList();
+  }
+  async friendDecline(discordId: string): Promise<FriendsState> {
+    if (!/^\d{5,25}$/.test(discordId)) throw new AccountError("Identifiant invalide.");
+    await this.call("POST", `/launcher/friends/requests/${discordId}/decline`, { auth: true, json: {} });
+    return this.friendsList();
+  }
+  /** Retire un ami, ou annule une demande envoyée. */
+  async friendRemove(discordId: string): Promise<FriendsState> {
+    if (!/^\d{5,25}$/.test(discordId)) throw new AccountError("Identifiant invalide.");
+    await this.call("DELETE", `/launcher/friends/${discordId}`, { auth: true });
+    return this.friendsList();
+  }
+}
+
+function decodeFriends(v: unknown): Friend[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((f0): Friend[] => {
+    const f = obj(f0);
+    const id = typeof f["id"] === "string" && /^\d{5,25}$/.test(f["id"]) ? f["id"] : "";
+    if (!id) return [];
+    return [{ id, pseudo: str(f["pseudo"], 60) || "Joueur", avatar: typeof f["avatar"] === "string" && /^https:\/\//.test(f["avatar"]) ? f["avatar"] : null }];
+  });
 }
 
 /** PNG 64 × 64 (ou ancien format 64 × 32), 64 Ko maximum. null = valide, sinon le message d'erreur. */
