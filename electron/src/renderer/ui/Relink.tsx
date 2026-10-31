@@ -78,9 +78,15 @@ export function VersionBanner() {
 
 // ---------------------------------------------------------------- Info & News
 export function NewsPage() {
-  const { relink, seen, markSeen, show } = useApp();
+  const { relink, seen, markSeen, show, ui, setUi } = useApp();
   const news = relink?.data?.news ?? [];
-  const [sel, setSel] = useState<string | null>(null);
+  // Renvoi depuis un encart de l'accueil lié à un article précis (HomeCarousel) : ouvert une fois, puis oublié
+  // (sinon il resterait collé indéfiniment sur cet article à chaque retour sur Info & News).
+  const [sel, setSel] = useState<string | null>(ui.newsSel);
+  useEffect(() => {
+    if (ui.newsSel) setUi({ newsSel: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [cat, setCat] = useState("Tout");
   const cats = ["Tout", ...[...new Set(news.flatMap((n) => n.tags.map((x) => x.label)))].slice(0, 8)];
   const list = news.filter((n) => cat === "Tout" || n.tags.some((x) => x.label === cat));
@@ -160,10 +166,29 @@ export function HomeCarousel() {
   const { relink, car, show } = useApp();
   const cards = relink?.data?.cards ?? [];
   const news = relink?.data?.news ?? [];
-  // encarts du panneau d'abord ; à défaut, les actualités
+  // encarts du panneau d'abord ; à défaut, les actualités (chacune ouvre alors directement SON article, pas juste la page)
   const items = cards.length
-    ? cards.map((c) => ({ id: c.id, title: c.title, sub: c.text, tag: c.tag, open: c.open }))
-    : news.map((n) => ({ id: n.id, title: n.title, sub: n.date, tag: n.tags[0]?.label ?? "", open: "news" }));
+    ? cards.map((c) => ({ id: c.id, title: c.title, sub: c.text, tag: c.tag, open: c.open, img: c.img, newsId: c.newsId }))
+    : news.map((n) => ({ id: n.id, title: n.title, sub: n.date, tag: n.tags[0]?.label ?? "", open: "news", img: null as string | null, newsId: n.id as string | null }));
+  // images des encarts (bannières) : jamais chargées directement par l'interface (CSP), le processus principal les
+  // télécharge et les renvoie en data: (voir RelinkClient.cardImage) ; tant que ce n'est pas prêt, dégradé de secours.
+  const [imgs, setImgs] = useState<Record<string, string>>({});
+  const bannerIds = items.map((i) => i.img ?? "").join(",");
+  useEffect(() => {
+    let alive = true;
+    for (const it of items) {
+      const bid = it.img;
+      if (bid && !(bid in imgs)) {
+        void window.wecraft.relink.cardImage(bid).then((data) => {
+          if (alive && data) setImgs((m) => ({ ...m, [bid]: data }));
+        }, () => undefined);
+      }
+    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bannerIds]);
   const n = Math.max(1, Math.min(car.n, 5));
   const max = Math.max(0, items.length - n);
   const [pos, setPos] = useState(0);
@@ -180,8 +205,8 @@ export function HomeCarousel() {
       <div className="ctrack">
         <div className="cinner" style={{ transform: `translateX(calc(-${p} * (100% + 12px) / ${n}))` }}>
           {items.map((x) => (
-            <button key={x.id} className="ncard" onClick={() => show(x.open || "news")}>
-              <span className="sc" style={coverOf(x.id)}></span>
+            <button key={x.id} className="ncard" onClick={() => (x.newsId ? show("news", { newsSel: x.newsId }) : show(x.open || "news"))}>
+              <span className="sc" style={x.img && imgs[x.img] ? { backgroundImage: `url("${imgs[x.img]}")`, backgroundSize: "cover", backgroundPosition: "center" } : coverOf(x.id)}></span>
               {x.tag ? (
                 <span className="ntags">
                   <span className="ntag">{x.tag}</span>
@@ -416,14 +441,14 @@ export function LivePage() {
       ) : relink?.ok ? (
         <div className="empty">{t("Aucun partenaire publié.")}</div>
       ) : null}
-      <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le lecteur intégré et l'état « en direct » réel (Twitch, YouTube) ne sont pas encore branchés : l'état affiché est celui saisi dans le panneau ReLink.")}</p>
+      <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le lecteur intégré n'est pas encore branché. Pour Twitch, l'état « en direct » et le nombre de spectateurs se mettent à jour automatiquement si un pseudo de chaîne est renseigné côté ReLink ; sinon (YouTube ou chaîne non renseignée), c'est l'état saisi à la main dans le panneau qui s'affiche.")}</p>
     </>
   );
 }
 
 // ---------------------------------------------------------------- notifications (cloche)
 export function NotifList() {
-  const { notifs, seen, markSeen, show, relink } = useApp();
+  const { notifs, dismissNotif, seen, markSeen, show, relink } = useApp();
   const news = relink?.data?.news ?? [];
   useEffect(() => {
     if (notifs.length) markSeen(notifs.map((n) => n.id)); // vues à l'ouverture du panneau
@@ -432,17 +457,24 @@ export function NotifList() {
     <div className="rl-notifs">
       {notifs.length ? (
         notifs.map((n) => (
-          <button key={n.id} className="nitem rl-nitem" onClick={() => n.open && show(n.open)} disabled={!n.open}>
-            <span className="rl-nic">
-              <Ic n="bell" />
-            </span>
-            <span style={{ minWidth: 0 }}>
-              <b>{n.title}</b>
-              {n.body ? <small>{n.body}</small> : null}
-              <small className="faint">{n.at ? fmtDate(n.at) : ""}</small>
-            </span>
-            {!seen.has(n.id) ? <span className="unread"></span> : null}
-          </button>
+          // deux boutons côte à côte (pas un bouton imbriqué dans un autre) : le contenu ouvre l'article/page visé,
+          // la croix supprime la notification — définitivement, elle a déjà été acquittée au Worker.
+          <div key={n.id} className="nitem rl-nitem" data-a={`notif-${n.id}`}>
+            <button className="rl-nitem-open" onClick={() => n.open && show(n.open)} disabled={!n.open}>
+              <span className="rl-nic">
+                <Ic n="bell" />
+              </span>
+              <span style={{ minWidth: 0 }}>
+                <b>{n.title}</b>
+                {n.body ? <small>{n.body}</small> : null}
+                <small className="faint">{n.at ? fmtDate(n.at) : ""}</small>
+              </span>
+              {!seen.has(n.id) ? <span className="unread"></span> : null}
+            </button>
+            <button className="ib" aria-label={t("Supprimer la notification")} title={t("Supprimer")} onClick={() => dismissNotif(n.id)}>
+              ✕
+            </button>
+          </div>
         ))
       ) : (
         <div className="empty">{t("Aucune notification pour l'instant.")}</div>
