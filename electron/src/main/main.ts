@@ -441,6 +441,8 @@ function registerIpc(): void {
   });
   handle(CHANNELS.relinkState, async (force) => (relink ? relink.refresh("stable", force === true) : { ok: false, stale: true, fetchedAt: null, error: "Indisponible.", data: null }));
   handle(CHANNELS.relinkNotifications, async () => (relink ? relink.notifications("stable") : { items: [], error: "Indisponible." }));
+  handle(CHANNELS.relinkDismissNotification, async (notifId) => (relink && typeof notifId === "string" ? relink.dismissNotification(notifId) : []));
+  handle(CHANNELS.relinkCardImage, async (bannerId) => (relink && typeof bannerId === "string" ? relink.cardImage(bannerId) : null));
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
   /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
   const linkOfficial = async (): Promise<string | null> => {
@@ -594,6 +596,40 @@ function registerIpc(): void {
     }
   });
   handle(CHANNELS.accountQuests, async () => (account ? account.quests() : { ok: false, error: "Compte ReLink indisponible.", quests: [], streak: null }));
+  const noFriends = { ok: false, error: "Compte ReLink indisponible.", friends: [], incoming: [], outgoing: [] };
+  handle(CHANNELS.friendsList, async () => (account ? account.friendsList() : noFriends));
+  handle(CHANNELS.friendsRequest, async (pseudo) => {
+    if (!account || typeof pseudo !== "string" || !pseudo.trim()) return { ok: false, error: "Pseudo invalide.", friends: [], incoming: [], outgoing: [] };
+    try {
+      return await account.friendRequest(pseudo.trim());
+    } catch (e) {
+      return { ok: false, error: e instanceof AccountError ? e.message : "Demande impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
+    }
+  });
+  handle(CHANNELS.friendsAccept, async (discordId) => {
+    if (!account || typeof discordId !== "string") return noFriends;
+    try {
+      return await account.friendAccept(discordId);
+    } catch (e) {
+      return { ok: false, error: e instanceof AccountError ? e.message : "Action impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
+    }
+  });
+  handle(CHANNELS.friendsDecline, async (discordId) => {
+    if (!account || typeof discordId !== "string") return noFriends;
+    try {
+      return await account.friendDecline(discordId);
+    } catch (e) {
+      return { ok: false, error: e instanceof AccountError ? e.message : "Action impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
+    }
+  });
+  handle(CHANNELS.friendsRemove, async (discordId) => {
+    if (!account || typeof discordId !== "string") return noFriends;
+    try {
+      return await account.friendRemove(discordId);
+    } catch (e) {
+      return { ok: false, error: e instanceof AccountError ? e.message : "Action impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
+    }
+  });
   handle(CHANNELS.accountRedeem, async (code) => {
     if (!account || typeof code !== "string" || code.length > 40) return { ok: false, message: "Code invalide." };
     try {
