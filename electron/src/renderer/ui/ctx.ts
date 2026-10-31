@@ -42,6 +42,8 @@ export interface Ui {
   itab: string;
   /** Avantages & Quêtes : event mis en avant (renvoi depuis la fiche d'un event). */
   qEv: string | null;
+  /** Info & News : article à ouvrir directement (renvoi depuis un encart de l'accueil lié à cet article). */
+  newsSel: string | null;
 }
 
 export interface AppCtx {
@@ -92,6 +94,8 @@ export interface AppCtx {
   relink: RelinkState | null;
   refreshRelink: (force?: boolean) => void;
   notifs: RelinkNotification[];
+  /** Supprime une notification (définitif : elle a déjà été acquittée au Worker, elle ne revient pas). */
+  dismissNotif: (id: string) => void;
   /** Identifiants déjà vus (actualités et notifications), gardés sur ce PC. */
   seen: Set<string>;
   markSeen: (ids: string[]) => void;
