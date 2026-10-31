@@ -70,7 +70,17 @@ export function decodeCard(v: unknown): RelinkCard | null {
   const i = id(o["id"]);
   const title = pick(o, ["title", "t", "n"], 120);
   if (!i || !title) return null;
-  return { id: i, title, text: pick(o, ["body", "text", "d", "desc"], 600), cta: pick(o, ["cta"], 40), open: openTarget(o["open"] ?? o["go"] ?? o["target"]), tag: pick(o, ["tag", "kind", "type"], 30) };
+  return {
+    id: i,
+    title,
+    text: pick(o, ["body", "text", "d", "desc"], 600),
+    cta: pick(o, ["cta"], 40),
+    open: openTarget(o["open"] ?? o["go"] ?? o["target"]),
+    tag: pick(o, ["tag", "kind", "type"], 30),
+    img: bannerIdOf(o["img"] ?? o["imageUrl"] ?? o["banner"]) || null,
+    /** Article Info & News que cet encart met en avant (le panneau peut lier un encart à un article publié). */
+    newsId: id(o["newsId"]) || null,
+  };
 }
 export function decodeServer(v: unknown): RelinkServer | null {
   const o = obj(v);
@@ -122,6 +132,14 @@ export function decodeModpack(v: unknown): RelinkModpack | null {
 function assetIdOf(v: unknown): string {
   const s = str(v, 300);
   const m = /^(?:https:\/\/[^/]+)?\/launcher\/assets\/([A-Za-z0-9_.:-]{1,100})$/.exec(s);
+  if (!m) return "";
+  if (s.startsWith("https://") && !WORKER_HOSTS.has(new URL(s).host)) return "";
+  return m[1]!;
+}
+/** Identifiant de bannière d'une adresse /launcher/banners/<id> du Worker (relative ou complète). */
+function bannerIdOf(v: unknown): string {
+  const s = str(v, 300);
+  const m = /^(?:https:\/\/[^/]+)?\/launcher\/banners\/([0-9a-f-]{1,100})$/i.exec(s);
   if (!m) return "";
   if (s.startsWith("https://") && !WORKER_HOSTS.has(new URL(s).host)) return "";
   return m[1]!;
@@ -308,33 +326,47 @@ export class RelinkClient {
     return { blockLaunch: !!d?.maintenance.enabled && d.maintenance.blockLaunch, maintenanceText: d?.maintenance.text ?? "", updatesKilled: !!d?.updates.kill };
   }
 
+  /** Une notification gardée plus longtemps que ça (sans être lue ni supprimée) disparaît toute seule. */
+  private static readonly NOTIF_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+  /** Enlève les notifications trop vieilles (sans date connue : jamais expirées, pour ne rien perdre par erreur). */
+  private pruneExpired(items: RelinkNotification[]): RelinkNotification[] {
+    const now = this.now();
+    return items.filter((n) => !n.at || now - Date.parse(n.at) < RelinkClient.NOTIF_MAX_AGE_MS);
+  }
+
   /**
    * Notifications : relève les nouvelles, les ENREGISTRE dans la boîte locale, puis seulement envoie l'accusé
-   * de lecture (ACK) au Worker. Renvoie la boîte (les plus récentes d'abord).
+   * de lecture (ACK) au Worker. Renvoie la boîte (les plus récentes d'abord), amputée de celles trop anciennes.
    */
   async notifications(channel: ReleaseChannel = "stable"): Promise<{ items: RelinkNotification[]; error: string | null }> {
-    const box = await this.inbox();
+    let box = await this.inbox();
     let error: string | null = null;
     try {
       const inst = await this.install();
       const raw = obj(await fetchJson(`${WORKER_URL}/launcher/notifications?deviceId=${inst}&channel=${channel}`, MAX_JSON, {}, this.opts()));
       const fresh = list(raw["notifications"], decodeNotification, 50).filter((n) => !box.some((b) => b.id === n.id));
-      if (fresh.length) {
-        const next = [...fresh.map((n) => ({ ...n, at: n.at || new Date(this.now()).toISOString() })), ...box].slice(0, 100);
-        await mkdir(path.dirname(this.inboxFile), { recursive: true });
-        await writeAtomic(this.inboxFile, JSON.stringify(next));
-        box.splice(0, box.length, ...next);
-        for (const n of fresh) await this.ack(n.id, inst).catch(() => undefined); // redemandé au prochain relevé si l'ACK échoue
-      }
+      if (fresh.length) for (const n of fresh) await this.ack(n.id, inst).catch(() => undefined); // redemandé au prochain relevé si l'ACK échoue
+      box = this.pruneExpired([...fresh.map((n) => ({ ...n, at: n.at || new Date(this.now()).toISOString() })), ...box]).slice(0, 100);
+      await mkdir(path.dirname(this.inboxFile), { recursive: true });
+      await writeAtomic(this.inboxFile, JSON.stringify(box));
     } catch (e) {
       error = explainWorkerError(e);
     }
     return { items: box, error };
   }
 
+  /** Supprime une notification de la boîte locale (définitif : elle n'a pas de raison de revenir, elle a déjà été acquittée au Worker). */
+  async dismissNotification(notifId: string): Promise<RelinkNotification[]> {
+    const box = (await this.inbox()).filter((n) => n.id !== notifId);
+    await mkdir(path.dirname(this.inboxFile), { recursive: true });
+    await writeAtomic(this.inboxFile, JSON.stringify(box)).catch(() => undefined);
+    return box;
+  }
+
   private async inbox(): Promise<RelinkNotification[]> {
     try {
-      return list(JSON.parse(await readFile(this.inboxFile, "utf8")), decodeNotification, 100);
+      return this.pruneExpired(list(JSON.parse(await readFile(this.inboxFile, "utf8")), decodeNotification, 100));
     } catch {
       return [];
     }
@@ -358,6 +390,27 @@ export class RelinkClient {
   assetUrl(assetId: string, signature = false): string {
     if (!ID.test(assetId)) throw new Error("Identifiant de fichier invalide.");
     return `${WORKER_URL}/launcher/assets/${encodeURIComponent(assetId)}${signature ? "?signature=1" : ""}`;
+  }
+
+  /**
+   * Image d'un encart (bannière), en data: — jamais une adresse distante donnée directement à l'interface
+   * (CSP : connect-src 'none' côté renderer, voir index.html), donc le processus principal la télécharge ici.
+   */
+  async cardImage(bannerId: string): Promise<string | null> {
+    if (!/^[0-9a-f-]{1,100}$/i.test(bannerId)) return null;
+    try {
+      const url = checkUrl(`${WORKER_URL}/launcher/banners/${encodeURIComponent(bannerId)}`, WORKER_HOSTS).href;
+      const f = this.d.net?.fetch as unknown as typeof fetch | undefined;
+      const res = await (f ?? fetch)(url, { redirect: "error", signal: AbortSignal.timeout(10000), headers: { "User-Agent": this.d.userAgent, Accept: "image/*" } });
+      if (!res.ok) return null;
+      const type = (res.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
+      if (!/^image\/(png|jpe?g|webp|gif)$/.test(type)) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 4 * 1024 * 1024) return null; // bannière anormalement lourde : refusée plutôt que transmise telle quelle
+      return `data:${type};base64,${buf.toString("base64")}`;
+    } catch {
+      return null;
+    }
   }
 }
 
