@@ -1,6 +1,6 @@
 // Fenêtres et encarts : épingles (pop), panneau latéral, lancement, RAM, mise à jour, bandeau d'avertissement.
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { LaunchStatus, UpdateCheck } from "../../shared/api";
+import type { Friend, FriendsState, LaunchStatus, UpdateCheck } from "../../shared/api";
 import { Minis } from "./Bars";
 import { useApp } from "./ctx";
 import { NotifList } from "./Relink";
@@ -171,10 +171,98 @@ export function Pop() {
 
 const DRAWERS: Record<string, [string, string, string]> = {
   downloads: ["downloads", "Téléchargements", "Aucun téléchargement en cours."],
-  friends: ["friends", "Amis", "Les amis arriveront avec les comptes ReLink."],
+  friends: ["friends", "Amis", "Connecte-toi avec ton compte ReLink pour ajouter des amis."],
   news: ["bell", "Nouveautés", "Aucune notification pour l'instant."],
   staff: ["staff", "Menu staff", "Pas encore disponible."],
 };
+
+/** Panneau « Amis » : demandes reçues/envoyées et liste d'amis (compte ReLink, voir window.wecraft.friends). */
+function FriendsPanel() {
+  const { account, toast } = useApp();
+  const [st, setSt] = useState<FriendsState | null>(null);
+  const [pseudo, setPseudo] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const loggedIn = !!account?.loggedIn;
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    let alive = true;
+    void window.wecraft.friends.list().then((s) => alive && setSt(s));
+    return () => {
+      alive = false;
+    };
+  }, [loggedIn]);
+
+  const act = (key: string, p: Promise<FriendsState>) => {
+    setBusy(key);
+    void p
+      .then((s) => {
+        setSt(s);
+        if (!s.ok && s.error) toast(s.error);
+      })
+      .finally(() => setBusy(null));
+  };
+
+  if (!loggedIn) return <div className="empty">{t("Connecte-toi avec ton compte ReLink pour ajouter des amis.")}</div>;
+  if (!st) return <p className="faint">{t("Chargement…")}</p>;
+
+  const row = (f: Friend, actions: { label: string; onClick: () => void; danger?: boolean }[]) => (
+    <div key={f.id} className="setrow" data-a={`friend-${f.id}`}>
+      <span>
+        <b>{f.pseudo}</b>
+      </span>
+      <span className="row" style={{ gap: "8px" }}>
+        {actions.map((a) => (
+          <button key={a.label} className={`btn sm${a.danger ? "" : " pri"}`} disabled={!!busy} onClick={a.onClick}>
+            {t(a.label)}
+          </button>
+        ))}
+      </span>
+    </div>
+  );
+
+  return (
+    <>
+      <form
+        className="row"
+        style={{ gap: "8px", padding: "0 0 12px" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          const p = pseudo.trim();
+          if (!p || busy) return;
+          act("request", window.wecraft.friends.request(p));
+          setPseudo("");
+        }}
+      >
+        <input type="text" value={pseudo} onChange={(e) => setPseudo(e.target.value)} placeholder={t("Pseudo ReLink…")} aria-label={t("Ajouter un ami par pseudo")} maxLength={60} style={{ flex: 1 }} />
+        <button className="btn sm pri" type="submit" disabled={!pseudo.trim() || !!busy}>
+          {t("Ajouter")}
+        </button>
+      </form>
+      {st.incoming.length ? (
+        <div className="sect">
+          <h3>{t("Demandes reçues")}</h3>
+          {st.incoming.map((f) =>
+            row(f, [
+              { label: "Accepter", onClick: () => act(`acc-${f.id}`, window.wecraft.friends.accept(f.id)) },
+              { label: "Refuser", onClick: () => act(`dec-${f.id}`, window.wecraft.friends.decline(f.id)), danger: true },
+            ]),
+          )}
+        </div>
+      ) : null}
+      {st.outgoing.length ? (
+        <div className="sect">
+          <h3>{t("Demandes envoyées")}</h3>
+          {st.outgoing.map((f) => row(f, [{ label: "Annuler", onClick: () => act(`rm-${f.id}`, window.wecraft.friends.remove(f.id)), danger: true }]))}
+        </div>
+      ) : null}
+      <div className="sect">
+        <h3>{`${t("Amis")}${st.friends.length ? ` (${st.friends.length})` : ""}`}</h3>
+        {st.friends.length ? st.friends.map((f) => row(f, [{ label: "Retirer", onClick: () => act(`rm-${f.id}`, window.wecraft.friends.remove(f.id)), danger: true }])) : <div className="empty">{t("Aucun ami pour l'instant. Ajoute quelqu'un par son pseudo ReLink ci-dessus.")}</div>}
+      </div>
+    </>
+  );
+}
 
 export function Drawer() {
   const { ui } = useApp();
@@ -192,7 +280,7 @@ export function Drawer() {
               ✕
             </button>
           </header>
-          <div className="dbody">{ui.drawer === "news" ? <NotifList /> : <div className="empty">{T[2]}</div>}</div>
+          <div className="dbody">{ui.drawer === "news" ? <NotifList /> : ui.drawer === "friends" ? <FriendsPanel /> : <div className="empty">{T[2]}</div>}</div>
         </>
       ) : null}
     </aside>
