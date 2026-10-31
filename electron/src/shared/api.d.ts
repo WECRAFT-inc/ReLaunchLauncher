@@ -422,8 +422,12 @@ export interface WeCraftApi {
   relink: {
     /** Données publiques du service ReLink (cache si hors ligne). `force` : relever tout de suite. */
     state(force?: boolean): Promise<RelinkState>;
-    /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
+    /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). Expirent seules après 30 jours. */
     notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
+    /** Supprime une notification de la boîte locale ; renvoie la boîte à jour. */
+    dismissNotification(id: string): Promise<RelinkNotification[]>;
+    /** Image d'un encart (bannière du panneau ReLink), en data:, ou null si indisponible. */
+    cardImage(bannerId: string): Promise<string | null>;
   };
   microsoft: {
     state(): Promise<MicrosoftState>;
@@ -463,6 +467,16 @@ export interface WeCraftApi {
     redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
     /** Avantages & Quêtes du joueur (lu sur ReLink). */
     quests(): Promise<QuestsState>;
+  };
+  friends: {
+    /** Amis (acceptés) et demandes reçues/envoyées. */
+    list(): Promise<FriendsState>;
+    /** Envoie une demande d'ami par pseudo (accepte directement si l'autre en avait déjà envoyé une). */
+    request(pseudo: string): Promise<FriendsState>;
+    accept(discordId: string): Promise<FriendsState>;
+    decline(discordId: string): Promise<FriendsState>;
+    /** Retire un ami, ou annule une demande envoyée. */
+    remove(discordId: string): Promise<FriendsState>;
   };
   skins: {
     list(): Promise<InstalledSkin[]>;
@@ -593,6 +607,10 @@ export interface RelinkCard {
   cta: string;
   open: string;
   tag: string;
+  /** Identifiant de bannière (window.wecraft.relink.cardImage), ou null = pas d'image (dégradé de secours). */
+  img: string | null;
+  /** Article Info & News que cet encart met en avant (ouvert directement si renseigné), ou null. */
+  newsId: string | null;
 }
 export interface RelinkServer {
   id: string;
@@ -713,6 +731,23 @@ export type OfflineResult =
   | { ok: false; reason: "unverified"; message: string }
   /** Le pseudo a déjà été choisi il y a moins de 90 jours : changement refusé jusqu'à `until` (ms). */
   | { ok: false; reason: "cooldown"; until: number };
+
+/** Un ami ReLink (ou une personne impliquée dans une demande), tel que renvoyé par le Worker. */
+export interface Friend {
+  id: string;
+  pseudo: string;
+  avatar: string | null;
+}
+/** Amis (acceptés) et demandes en cours, lus sur ReLink. */
+export interface FriendsState {
+  ok: boolean;
+  error: string | null;
+  friends: Friend[];
+  /** Demandes reçues, en attente de ta réponse. */
+  incoming: Friend[];
+  /** Demandes que tu as envoyées, en attente de réponse de l'autre. */
+  outgoing: Friend[];
+}
 
 /** Compte ReLink du joueur (le jeton de session ne quitte jamais le processus principal). */
 export interface AccountState {
