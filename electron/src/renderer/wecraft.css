@@ -464,7 +464,12 @@ body.tb-off .app { height: 100vh !important; }
 .rl-car { min-width: 0; align-self: end; }
 .rl-live { position: absolute; left: 10px; top: 10px; z-index: 1; }
 .rl-notifs { display: flex; flex-direction: column; gap: 6px; }
-.rl-nitem { grid-template-columns: 40px minmax(0, 1fr) !important; }
+/* .nitem est normalement un <button> unique (all:unset + grid) ; ici la croix de suppression a besoin de son
+   propre bouton à côté, donc .rl-nitem est le conteneur (grid à 3 colonnes) et .rl-nitem-open (display:contents)
+   pose juste ses enfants dans les 2 premières colonnes, sans ajouter de boîte ni casser la mise en page. */
+.rl-nitem { grid-template-columns: 40px minmax(0, 1fr) auto !important; align-items: center; gap: 10px; }
+.rl-nitem-open { all: unset; cursor: pointer; display: contents; }
+.rl-nitem-open:disabled { cursor: default; }
 .rl-nitem small { display: block; }
 .rl-nic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--acc) 18%, transparent); color: var(--acc-2); }
 .rl-nic svg { width: 18px; height: 18px; }
