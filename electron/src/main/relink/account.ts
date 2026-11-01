@@ -13,7 +13,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AccountState, Friend, FriendsState, Quest, QuestsState } from "../../shared/api";
+import type { AccountState, Quest, QuestsState } from "../../shared/api";
 import { checkUrl, HttpError, type NetOptions } from "../net/download";
 import { str, WORKER_HOSTS, WORKER_URL } from "./worker";
 import { isOfflineName } from "../auth/offline";
@@ -56,6 +56,18 @@ interface Me {
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : {});
+
+/** Ami tel que décodé depuis le Worker (statut calculé côté serveur). */
+export interface FriendBrief {
+  id: string;
+  pseudo: string;
+}
+export interface RawFriend extends FriendBrief {
+  minecraftName: string | null;
+  status: "online" | "away" | "offline";
+  game: { kind: "event" | "pack" | "instance"; id: string | null; name: string; mc: string; startedAt: number } | null;
+  lastSeen: number | null;
+}
 
 export class AccountError extends Error {
   /** Réponse d'erreur du Worker (code, dates…), pour que l'appelant distingue les cas ; jamais montrée telle quelle. */
@@ -101,7 +113,7 @@ function decodeMe(v: unknown): { user: AccountState["user"]; me: Me; expiresAt: 
 export class RelinkAccount {
   private saved: Saved | null = null;
   private loaded = false;
-  private unreachable = false;
+  private offline = false;
   private lastError: string | null = null;
   private pending: { server: Server; done: Promise<AccountState> } | null = null;
 
@@ -168,7 +180,7 @@ export class RelinkAccount {
       loggedIn: !!s,
       user: s?.user ?? null,
       expiresAt: s?.expiresAt ?? null,
-      offline: this.unreachable,
+      offline: this.offline,
       loginPending: !!this.pending,
       launcherSkins: s?.me?.launcherSkins ?? [],
       minecraftSkin: s?.me?.minecraftSkin ? { model: s.me.minecraftSkin.model, sha256: s.me.minecraftSkin.sha256 } : null,
@@ -198,9 +210,9 @@ export class RelinkAccount {
       const body = init.json !== undefined ? JSON.stringify(init.json) : init.body;
       if (body !== undefined) reqInit.body = body;
       res = await this.fetcher()(url, reqInit);
-      this.unreachable = false;
+      this.offline = false;
     } catch (e) {
-      this.unreachable = true;
+      this.offline = true;
       throw new AccountError(`Service ReLink injoignable (${e instanceof Error ? e.message : String(e)}).`);
     }
     const text = await res.text();
@@ -236,6 +248,48 @@ export class RelinkAccount {
       return Number.isFinite(t) ? t : null;
     };
     return { name: isOfflineName(o["name"]) ? (o["name"] as string) : null, changedAt: ms(o["changedAt"]), lockedUntil: ms(o["lockedUntil"]) };
+  }
+
+  /** Amis, demandes reçues et envoyées (le Worker calcule le statut de chacun). */
+  async friends(): Promise<{ friends: RawFriend[]; incoming: FriendBrief[]; outgoing: FriendBrief[] }> {
+    const r = await this.call("GET", "/launcher/friends", { auth: true });
+    const list = (v: unknown): Obj[] => (Array.isArray(v) ? v.slice(0, 300).map(obj) : []);
+    const brief = (o: Obj): FriendBrief | null => (typeof o["id"] === "string" && /^\d{5,25}$/.test(o["id"]) && typeof o["pseudo"] === "string" ? { id: o["id"], pseudo: str(o["pseudo"], 64) } : null);
+    const friends: RawFriend[] = [];
+    for (const o of list(r["friends"])) {
+      const b = brief(o);
+      if (!b) continue;
+      const status = o["status"] === "online" || o["status"] === "away" ? o["status"] : "offline";
+      const g = obj(o["game"]);
+      const kind = g["kind"] === "event" || g["kind"] === "pack" || g["kind"] === "instance" ? g["kind"] : null;
+      const gid = typeof g["id"] === "string" && /^[\w.-]{1,64}$/.test(g["id"]) ? g["id"] : null;
+      const game = status !== "offline" && kind && (kind === "instance" || gid) ? { kind, id: kind === "instance" ? null : gid, name: str(g["name"], 60), mc: str(g["mc"], 24), startedAt: typeof g["startedAt"] === "number" ? g["startedAt"] : 0 } : null;
+      const seen = typeof o["lastSeen"] === "string" ? Date.parse(o["lastSeen"]) : NaN;
+      friends.push({ ...b, minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, lastSeen: Number.isFinite(seen) ? seen : null });
+    }
+    return { friends, incoming: list(r["incoming"]).map(brief).filter((x): x is FriendBrief => !!x), outgoing: list(r["outgoing"]).map(brief).filter((x): x is FriendBrief => !!x) };
+  }
+
+  async friendRequest(pseudo: string): Promise<{ accepted: boolean; pseudo: string }> {
+    const r = await this.call("POST", "/launcher/friends/requests", { auth: true, json: { pseudo } });
+    return { accepted: r["accepted"] === true, pseudo };
+  }
+
+  async friendAccept(id: string): Promise<void> {
+    await this.call("POST", `/launcher/friends/requests/${id}/accept`, { auth: true });
+  }
+
+  async friendRemove(id: string): Promise<void> {
+    await this.call("DELETE", `/launcher/friends/${id}`, { auth: true }); // retire un ami, refuse une demande reçue ou annule une demande envoyée
+  }
+
+  /** Signal de présence (voir friendsPresence.ts). */
+  async presencePut(body: { idleMs: number; game: { kind: string; id: string | null; name: string; mc: string } | null }): Promise<void> {
+    await this.call("PUT", "/launcher/me/presence", { auth: true, json: body, timeout: 8000 });
+  }
+
+  async presenceClear(): Promise<void> {
+    await this.call("DELETE", "/launcher/me/presence", { auth: true, timeout: 3000 });
   }
 
   /** Relit le compte (skins possédés, skin Minecraft). Hors ligne : garde ce qui était connu. */
@@ -440,50 +494,6 @@ export class RelinkAccount {
     await this.load();
     return !!this.saved?.me?.launcherSkins.includes(skinId);
   }
-
-  /** Amis (acceptés) et demandes reçues/envoyées, lus sur ReLink. */
-  async friendsList(): Promise<FriendsState> {
-    await this.load();
-    if (!this.saved) return { ok: false, error: "Connecte-toi à ReLink pour voir tes amis.", friends: [], incoming: [], outgoing: [] };
-    try {
-      const r = await this.call("GET", "/launcher/friends", { auth: true });
-      return { ok: true, error: null, friends: decodeFriends(r["friends"]), incoming: decodeFriends(r["incoming"]), outgoing: decodeFriends(r["outgoing"]) };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : String(e), friends: [], incoming: [], outgoing: [] };
-    }
-  }
-
-  /** Envoie une demande d'ami par pseudo (accepte directement si l'autre en avait déjà envoyé une). */
-  async friendRequest(pseudo: string): Promise<FriendsState> {
-    await this.call("POST", "/launcher/friends/requests", { auth: true, json: { pseudo: String(pseudo).slice(0, 60) } });
-    return this.friendsList();
-  }
-  async friendAccept(discordId: string): Promise<FriendsState> {
-    if (!/^\d{5,25}$/.test(discordId)) throw new AccountError("Identifiant invalide.");
-    await this.call("POST", `/launcher/friends/requests/${discordId}/accept`, { auth: true, json: {} });
-    return this.friendsList();
-  }
-  async friendDecline(discordId: string): Promise<FriendsState> {
-    if (!/^\d{5,25}$/.test(discordId)) throw new AccountError("Identifiant invalide.");
-    await this.call("POST", `/launcher/friends/requests/${discordId}/decline`, { auth: true, json: {} });
-    return this.friendsList();
-  }
-  /** Retire un ami, ou annule une demande envoyée. */
-  async friendRemove(discordId: string): Promise<FriendsState> {
-    if (!/^\d{5,25}$/.test(discordId)) throw new AccountError("Identifiant invalide.");
-    await this.call("DELETE", `/launcher/friends/${discordId}`, { auth: true });
-    return this.friendsList();
-  }
-}
-
-function decodeFriends(v: unknown): Friend[] {
-  if (!Array.isArray(v)) return [];
-  return v.flatMap((f0): Friend[] => {
-    const f = obj(f0);
-    const id = typeof f["id"] === "string" && /^\d{5,25}$/.test(f["id"]) ? f["id"] : "";
-    if (!id) return [];
-    return [{ id, pseudo: str(f["pseudo"], 60) || "Joueur", avatar: typeof f["avatar"] === "string" && /^https:\/\//.test(f["avatar"]) ? f["avatar"] : null }];
-  });
 }
 
 /** PNG 64 × 64 (ou ancien format 64 × 32), 64 Ko maximum. null = valide, sinon le message d'erreur. */
