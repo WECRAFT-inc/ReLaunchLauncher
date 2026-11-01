@@ -1052,16 +1052,17 @@ function AccountPicker({ verified, linkedName, relink = true }: { verified: bool
   const [off, setOff] = useState<import("../../shared/api").OfflineState | null>(null);
   const [kind, setKind] = useState<"microsoft" | "offline" | null>(null);
   const [busy, setBusy] = useState(false);
-  const { toast } = useApp();
+  const { toast, account } = useApp();
+  // relu aussi quand la connexion ReLink change (le pseudo vient du Worker) ; le choix affiché n'est décidé qu'une fois
   useEffect(() => {
     void window.wecraft.offline.state().then(
       (v) => {
         setOff(v);
-        setKind(v.active ? "offline" : "microsoft");
+        setKind((k) => k ?? (v.active ? "offline" : "microsoft"));
       },
-      () => setKind("microsoft"),
+      () => setKind((k) => k ?? "microsoft"),
     );
-  }, []);
+  }, [account?.loggedIn]);
   const pick = (k: "microsoft" | "offline") => {
     if (busy || k === kind) return;
     setKind(k);
@@ -1099,7 +1100,7 @@ function AccountPicker({ verified, linkedName, relink = true }: { verified: bool
 
 /** Compte hors-ligne : pseudo vérifié auprès de Mojang (refusé s'il appartient à un compte officiel). Porté de Cubic. */
 function OfflineGroup({ st, setSt }: { st: import("../../shared/api").OfflineState | null; setSt: (s: import("../../shared/api").OfflineState) => void }) {
-  const { toast } = useApp();
+  const { toast, account, syncAccount } = useApp();
   const [name, setName] = useState(st?.name ?? "");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -1111,6 +1112,7 @@ function OfflineGroup({ st, setSt }: { st: import("../../shared/api").OfflineSta
     void window.wecraft.offline
       .set(name.trim())
       .then((r) => {
+        if (!r.ok) syncAccount();
         if (r.ok) {
           setSt(r.state);
           setName(r.state.name ?? "");
@@ -1131,6 +1133,7 @@ function OfflineGroup({ st, setSt }: { st: import("../../shared/api").OfflineSta
     void window.wecraft.offline
       .remove()
       .then((r) => {
+        if (!r.ok) syncAccount();
         if (r.ok) {
           setSt(r.state);
           setName("");
@@ -1141,7 +1144,8 @@ function OfflineGroup({ st, setSt }: { st: import("../../shared/api").OfflineSta
       .finally(() => setBusy(false));
   };
   const locked = st?.lockedUntil != null;
-  const needLogin = st !== null && !st.loggedIn;
+  // la connexion ReLink vient du compte partagé de l'app (toujours à jour), pas d'une copie prise à l'ouverture
+  const needLogin = account !== null && !account.loggedIn;
   return (
     <div className="grp">
       <h3>{t("Compte hors-ligne")}</h3>
@@ -1338,7 +1342,7 @@ function SkinsGroup() {
                 <span className="pv"></span>
                 <b>{c.name}</b>
                 <small>{[c.desc, c.versions.liquidGlass || c.versions.mat ? [c.versions.liquidGlass ? "Liquid Glass" : "", c.versions.mat ? "Mat" : ""].filter(Boolean).join(" + ") : ""].filter(Boolean).join(" · ")}</small>
-                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${!account?.loggedIn ? ` — ${t("connecte-toi à ReLink")}` : c.unlock.shop > 0 ? "" : ` — ${t("avec un code ou offert par l'équipe")}`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
+                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${account && !account.loggedIn ? ` — ${t("connecte-toi à ReLink")}` : c.unlock.shop > 0 ? "" : ` — ${t("avec un code ou offert par l'équipe")}`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
                 <span className="row">
                   {l.length && c.unlock.shop > 0 && account?.loggedIn ? (
                     <button className="btn sm pri" disabled={!!busy || eclats < c.unlock.shop} title={eclats < c.unlock.shop ? `${t("Il te manque")} ${c.unlock.shop - eclats} ${t("éclats")}` : ""} onClick={() => buy(c)}>
