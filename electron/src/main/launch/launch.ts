@@ -63,6 +63,10 @@ export interface LaunchDeps {
   log?: (line: string) => void;
   /** Launcher officiel ouvert avec le profil prêt (statut Discord « Prépare… », lot E9). */
   onOpened?: (t: LaunchTarget) => void;
+  /** Jeu démarré par ReLaunch (lancement direct) : statut des amis. */
+  onGameStart?: (t: LaunchTarget) => void;
+  /** Jeu fermé. */
+  onGameExit?: (t: LaunchTarget) => void;
   /** Shaders préférés (Réglages > Jeu) appliqués à l'instance avant l'ouverture. */
   shaders?: () => Promise<ShaderPrefs>;
 }
@@ -258,13 +262,18 @@ export class LaunchService {
       accessToken: ses.accessToken,
       launcherName: "ReLaunch",
       launcherBrand: ses.brand,
-      ...(ses.offline ? { userType: "legacy" as const, extraJVMArgs: [...OFFLINE_JVM_ARGS], ...(ses.join ? { extraMCArgs: joinArgs(t.mc, ses.join) } : {}) } : {}),
+      ...(ses.offline ? { userType: "legacy" as const, extraJVMArgs: [...OFFLINE_JVM_ARGS] } : {}),
+      ...(ses.join ? { extraMCArgs: joinArgs(t.mc, ses.join) } : {}),
     });
     child.once("error", () => this.deps.log?.("Le processus du jeu a signalé une erreur au démarrage."));
-    child.once("exit", (code) => this.deps.log?.(`Jeu fermé (code ${code ?? "?"}).`));
+    child.once("exit", (code) => {
+      this.deps.log?.(`Jeu fermé (code ${code ?? "?"}).`);
+      d.onGameExit?.(t);
+    });
     child.unref();
     s.opened = true;
     d.onOpened?.(t);
+    d.onGameStart?.(t);
     this.deps.log?.(`Terminé : jeu démarré par ReLaunch (${launchId}, Java ${java.version}, compte ${ses.name}${ses.offline ? ", hors-ligne" : ""}${ses.join ? `, connexion auto à ${ses.join}` : ""}).`);
     s.phase = "termine";
     s.message = `Minecraft démarre (${ses.name}). La fenêtre du jeu va s'ouvrir.`;
