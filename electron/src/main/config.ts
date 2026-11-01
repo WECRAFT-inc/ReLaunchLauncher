@@ -141,6 +141,21 @@ export class Settings {
     return this.setOfflineAccount(cur.name, on === true, cur.changedAt);
   }
 
+  /** Partager mon statut et ma partie avec mes amis ReLink (clé « relaunch_share_presence », activé par défaut). */
+  async sharePresence(): Promise<boolean> {
+    const d = await this.store.read(this.file);
+    return d?.["relaunch_share_presence"] !== false;
+  }
+
+  async setSharePresence(on: boolean): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => ({ ...(data as Record<string, unknown>), relaunch_share_presence: on === true }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Shaders préférés (clé « relaunch_shaders », propre à ReLaunch ; ignorée par la version Python). */
   async shaders(): Promise<ShaderPrefs> {
     const v = (await this.store.read(this.file))?.["relaunch_shaders"];
