@@ -213,7 +213,7 @@ export interface LaunchStatus {
   opened: boolean | null;
 }
 
-export type LaunchStartResult = { ok: true; job: string; offline?: boolean; viaOfficial?: boolean } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "pack-integrity" | "minecraft" | "microsoft" | "event-microsoft" | "event-relink" | "offline-event-only" | "offline-not-allowed" };
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean; viaOfficial?: boolean; /** Serveur à rejoindre à la main : le launcher officiel ne peut pas s'y connecter seul. */ join?: string } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "pack-integrity" | "minecraft" | "microsoft" | "event-microsoft" | "event-relink" | "offline-event-only" | "offline-not-allowed" };
 
 /** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
 export type DeleteResult =
@@ -422,12 +422,8 @@ export interface WeCraftApi {
   relink: {
     /** Données publiques du service ReLink (cache si hors ligne). `force` : relever tout de suite. */
     state(force?: boolean): Promise<RelinkState>;
-    /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). Expirent seules après 30 jours. */
+    /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
     notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
-    /** Supprime une notification de la boîte locale ; renvoie la boîte à jour. */
-    dismissNotification(id: string): Promise<RelinkNotification[]>;
-    /** Image d'un encart (bannière du panneau ReLink), en data:, ou null si indisponible. */
-    cardImage(bannerId: string): Promise<string | null>;
   };
   microsoft: {
     state(): Promise<MicrosoftState>;
@@ -437,6 +433,17 @@ export interface WeCraftApi {
     /** « Ouvrir le launcher officiel pour jouer » (sinon ReLaunch démarre le jeu lui-même). */
     openOfficial(): Promise<boolean>;
     setOpenOfficial(on: boolean): Promise<boolean>;
+  };
+  friends: {
+    state(): Promise<FriendsState>;
+    request(pseudo: string): Promise<FriendsActionResult>;
+    accept(id: string): Promise<FriendsActionResult>;
+    remove(id: string): Promise<FriendsActionResult>;
+    /** Prépare le lancement de l'instance (event ou modpack) où l'ami joue ; le jeu s'y connecte tout seul quand c'est possible. */
+    join(id: string): Promise<FriendJoinResult>;
+    setShare(on: boolean): Promise<boolean>;
+    /** Le joueur utilise le launcher (pour le statut « absent »). */
+    ping(): Promise<void>;
   };
   offline: {
     state(): Promise<OfflineState>;
@@ -467,16 +474,6 @@ export interface WeCraftApi {
     redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
     /** Avantages & Quêtes du joueur (lu sur ReLink). */
     quests(): Promise<QuestsState>;
-  };
-  friends: {
-    /** Amis (acceptés) et demandes reçues/envoyées. */
-    list(): Promise<FriendsState>;
-    /** Envoie une demande d'ami par pseudo (accepte directement si l'autre en avait déjà envoyé une). */
-    request(pseudo: string): Promise<FriendsState>;
-    accept(discordId: string): Promise<FriendsState>;
-    decline(discordId: string): Promise<FriendsState>;
-    /** Retire un ami, ou annule une demande envoyée. */
-    remove(discordId: string): Promise<FriendsState>;
   };
   skins: {
     list(): Promise<InstalledSkin[]>;
@@ -607,10 +604,6 @@ export interface RelinkCard {
   cta: string;
   open: string;
   tag: string;
-  /** Identifiant de bannière (window.wecraft.relink.cardImage), ou null = pas d'image (dégradé de secours). */
-  img: string | null;
-  /** Article Info & News que cet encart met en avant (ouvert directement si renseigné), ou null. */
-  newsId: string | null;
 }
 export interface RelinkServer {
   id: string;
@@ -710,6 +703,44 @@ export interface MicrosoftState {
 }
 
 /** Compte hors-ligne (simple pseudo, sans Microsoft) : rien n'est envoyé à Mojang, pas d'accès aux serveurs qui vérifient le compte. */
+/** Statut d'un ami : en ligne, absent (aucune activité depuis plus de 30 min) ou hors ligne (launcher et jeu fermés). */
+export type FriendStatus = "online" | "away" | "offline";
+export interface FriendGame {
+  kind: "event" | "pack" | "instance";
+  /** Event ou modpack ReLink (null : instance locale, qui ne peut pas être rejointe). */
+  id: string | null;
+  name: string;
+  mc: string;
+  startedAt: number;
+}
+export interface FriendBrief {
+  id: string;
+  pseudo: string;
+}
+export interface Friend extends FriendBrief {
+  minecraftName: string | null;
+  status: FriendStatus;
+  /** Partie en cours (visible seulement si l'ami n'est pas hors ligne). */
+  game: FriendGame | null;
+  lastSeen: number | null;
+  /** Tu as l'instance (event ou modpack) où il joue : tu peux le rejoindre. */
+  joinable: boolean;
+}
+export interface FriendsState {
+  /** Connecté à ReLink : sinon, pas d'amis. */
+  loggedIn: boolean;
+  error: string | null;
+  friends: Friend[];
+  incoming: FriendBrief[];
+  outgoing: FriendBrief[];
+  /** Mon statut et ma partie sont visibles de mes amis. */
+  share: boolean;
+}
+export type FriendsActionResult = { ok: true; state: FriendsState; message?: string } | { ok: false; message: string };
+export type FriendJoinResult =
+  | { ok: true; /** Instance locale à lancer. */ instanceId: string; /** Serveur de l'event ou du modpack (« domaine[:port] »), ou null. */ address: string | null; friend: string }
+  | { ok: false; message: string };
+
 export interface OfflineState {
   /** Pseudo enregistré (3 à 16 caractères : lettres, chiffres, « _ »), ou null. */
   name: string | null;
@@ -731,23 +762,6 @@ export type OfflineResult =
   | { ok: false; reason: "unverified"; message: string }
   /** Le pseudo a déjà été choisi il y a moins de 90 jours : changement refusé jusqu'à `until` (ms). */
   | { ok: false; reason: "cooldown"; until: number };
-
-/** Un ami ReLink (ou une personne impliquée dans une demande), tel que renvoyé par le Worker. */
-export interface Friend {
-  id: string;
-  pseudo: string;
-  avatar: string | null;
-}
-/** Amis (acceptés) et demandes en cours, lus sur ReLink. */
-export interface FriendsState {
-  ok: boolean;
-  error: string | null;
-  friends: Friend[];
-  /** Demandes reçues, en attente de ta réponse. */
-  incoming: Friend[];
-  /** Demandes que tu as envoyées, en attente de réponse de l'autre. */
-  outgoing: Friend[];
-}
 
 /** Compte ReLink du joueur (le jeton de session ne quitte jamais le processus principal). */
 export interface AccountState {
