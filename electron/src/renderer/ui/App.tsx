@@ -145,7 +145,7 @@ export function App() {
     } catch {
       // stockage indisponible
     }
-    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content", qEv: null, newsSel: null };
+    return { view: startView(loadPref()), sel: "i1", wcSrc: "all", wcQ: "", delId: null, setTab: "nav", fold: { orga: true, pins: true }, pop: null, popAnchor: null, drawer: null, skin, rlTab: "profil", dq: "", dtab: "", page: null, itab: "content", qEv: null };
   });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [tip, setTip] = useState<{ text: string; el: HTMLElement } | null>(null);
@@ -181,12 +181,13 @@ export function App() {
   const refreshRelink = useCallback((force = false) => {
     void window.wecraft.relink?.state(force).then(setRelink, () => undefined);
   }, []);
-  const dismissNotif = useCallback((id: string) => {
-    setNotifs((n) => n.filter((x) => x.id !== id)); // retiré tout de suite (pas d'attente de l'IPC)
-    void window.wecraft.relink?.dismissNotification(id).then(setNotifs, () => undefined);
-  }, []);
   const reloadSkins = useCallback(() => {
     void window.wecraft.skins?.list().then(setSkinList, () => undefined);
+  }, []);
+  // Le processus principal est la seule source de vérité du compte ReLink (session expirée, déconnectée depuis le site,
+  // connexion terminée…) : l'interface n'en garde qu'une copie, relue ici sans réseau.
+  const syncAccount = useCallback(() => {
+    void window.wecraft.account?.state().then(setAccount, () => undefined);
   }, []);
   useEffect(() => {
     // compte ReLink : état enregistré tout de suite, puis relu auprès du service
@@ -194,7 +195,28 @@ export function App() {
       setAccount(a);
       if (a.loggedIn) void window.wecraft.account.refresh().then(setAccount, () => undefined);
     }, () => undefined);
-  }, []);
+    // au retour sur la fenêtre et toutes les minutes : la copie suit l'état réel
+    const onVisible = () => document.visibilityState === "visible" && syncAccount();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", syncAccount);
+    const t = window.setInterval(onVisible, 60_000);
+    // activité sur le launcher (statut « absent » des amis après 30 min sans rien faire) : un signal toutes les 20 s au plus
+    let lastPing = 0;
+    const ping = () => {
+      const n = Date.now();
+      if (n - lastPing < 20_000) return;
+      lastPing = n;
+      void window.wecraft.friends?.ping().catch(() => undefined);
+    };
+    const evs = ["pointerdown", "keydown", "wheel", "mousemove"] as const;
+    evs.forEach((e) => window.addEventListener(e, ping, { passive: true }));
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", syncAccount);
+      window.clearInterval(t);
+      evs.forEach((e) => window.removeEventListener(e, ping));
+    };
+  }, [syncAccount]);
   useEffect(() => {
     refreshRelink();
     reloadSkins();
@@ -510,6 +532,23 @@ export function App() {
     },
     [byId, toast, defaultRam],
   );
+  const joinFriend = useCallback(
+    (friendId: string) => {
+      void window.wecraft.friends.join(friendId).then(
+        (r) => {
+          if (!r.ok) {
+            toast(r.message, 4500);
+            return;
+          }
+          setUi({ sel: r.instanceId, drawer: null });
+          toast(r.address ? `Tu rejoins ${r.friend} : le jeu se connecte à ${r.address} au démarrage.` : `Tu rejoins ${r.friend} : lance le jeu puis rejoins le même serveur (aucune adresse connue).`, 5000);
+          launch(r.instanceId);
+        },
+        () => toast("Impossible de rejoindre pour le moment.", 4000),
+      );
+    },
+    [launch, setUi, toast],
+  );
   const startLaunch = (r: number, repair: boolean) => {
     const req = ram;
     setRam(null);
@@ -522,6 +561,7 @@ export function App() {
           if (res.reason === "login" || res.reason === "minecraft" || res.reason === "microsoft" || res.reason === "event-microsoft" || res.reason === "event-relink" || res.reason === "offline-event-only" || res.reason === "offline-not-allowed") setUi({ view: "settings", setTab: "compte" });
           return;
         }
+        if (res.join) toast(`Le launcher officiel ne peut pas te connecter seul : dans Minecraft, rejoins le serveur ${res.join}.`, 8000);
         if (res.viaOfficial) toast("Lancement par le launcher officiel (connexion Microsoft directe indisponible ou non faite).", 5000);
         if (res.offline) toast("Service ReLink injoignable : le jeu se lance, mais les serveurs d'event refuseront la connexion tant que ta session ReLink n'est pas vérifiée.", 7000);
         setDefaultRamState(r);
@@ -665,9 +705,6 @@ export function App() {
       else if (go.dataset["go"] === "relink" && ui.rlTab === "shop") o.rlTab = "profil";
       if (go.dataset["set"]) o.setTab = go.dataset["set"];
       if (go.dataset["go"] === "quests") o.qEv = go.dataset["qev"] ?? null;
-      // navigation générique (bouton "Info & News", barre…) : pas d'article précis visé, donc on efface
-      // un éventuel renvoi précédent (sinon il resterait collé indéfiniment, voir HomeCarousel/show("news", …)).
-      if (go.dataset["go"] === "news" && !go.dataset["newsSel"]) o.newsSel = null;
       show(go.dataset["go"]!, o);
       return;
     }
@@ -1049,13 +1086,14 @@ export function App() {
     relink,
     refreshRelink,
     notifs,
-    dismissNotif,
     seen,
     markSeen,
     skins: skinList,
     reloadSkins,
     account,
     setAccount,
+    syncAccount,
+    joinFriend,
   };
 
   const extras: ExtrasProps = { toastMsg, tip, launchUi, setLaunchUi, ram, setRam, startLaunch, upd, setUpd, job };
