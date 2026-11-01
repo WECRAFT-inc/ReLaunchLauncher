@@ -26,7 +26,9 @@ import { trashFolder } from "./instances/trash";
 import { readEventManifest } from "./events/eventLock";
 import { AccountError, RelinkAccount } from "./relink/account";
 import { MicrosoftAccount } from "./auth/microsoft";
-import { isOfflineName, offlineLockedUntil, offlineSession, offlineUuid } from "./auth/offline";
+import { isOfflineName, offlineLockedUntil, offlineSession, offlineUuid, parseServerAddress } from "./auth/offline";
+import { FriendsPresence, type PresenceGame } from "./relink/friendsPresence";
+import { readInstalledPack } from "./modpacks/relaunchPack";
 import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
@@ -76,6 +78,13 @@ let media: MediaStore | null = null;
 let relink: RelinkClient | null = null;
 let skins: SkinStore | null = null;
 let account: RelinkAccount | null = null;
+/** Statut envoyé aux amis ReLink (en ligne / absent / hors ligne) et partie en cours. */
+let friendsPresence: FriendsPresence | null = null;
+/** Partie préparée par instance (dossier de jeu) : ce que les amis verront une fois le jeu démarré. */
+const gameCtx = new Map<string, PresenceGame>();
+const gameKey = (dir: string): string => (process.platform === "win32" ? path.resolve(dir).toLowerCase() : path.resolve(dir));
+/** « Rejoindre un ami » : instance à lancer et serveur où le jeu se connecte (valable 2 minutes, une seule fois). */
+let pendingJoin: { instanceId: string; address: string | null; until: number } | null = null;
 let microsoft: MicrosoftAccount | null = null;
 let appLog: AppLogger | null = null;
 let healthyDone = false;
@@ -322,6 +331,12 @@ async function start(): Promise<void> {
     log: launchLog,
     shaders: () => (settings ? settings.shaders() : Promise.resolve({ on: false, primary: null, secondary: null })),
     onOpened: (t) => void presence?.launching(t.profileName.replace(/^WECRAFT - /, ""), t.mc, t.loader),
+    onGameStart: (t) => {
+      const info = gameCtx.get(gameKey(t.gameDir)) ?? { kind: "instance" as const, id: null, name: `Minecraft ${t.mc}`, mc: t.mc };
+      gameCtx.delete(gameKey(t.gameDir));
+      friendsPresence?.gameStarted(info, t.gameDir);
+    },
+    onGameExit: (t) => friendsPresence?.gameStopped(t.gameDir),
     close: (o) => closeOfficialLauncher(o, { platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
     open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
   });
@@ -329,6 +344,21 @@ async function start(): Promise<void> {
   const dc = await settings.discord(app.getVersion());
   presence = new DiscordPresence({ clientId: discordClientId(dc.config), enabled: dc.enabled, version: app.getVersion() });
   if (dc.enabled) void presence.idle();
+  // Statut des amis : signal toutes les minutes tant que le launcher est ouvert, partage activé et compte ReLink connecté
+  friendsPresence = new FriendsPresence({
+    send: (b) => (account ? account.presencePut(b) : Promise.resolve()),
+    clear: () => (account ? account.presenceClear() : Promise.resolve()),
+    active: async () => !!account && !!settings && (await settings.sharePresence()) && (await account.state()).loggedIn,
+    gameActivity: async (dir) => (await stat(path.join(dir, "logs", "latest.log"))).mtimeMs,
+  });
+  friendsPresence.start();
+  let quitting = false;
+  app.on("before-quit", (e) => {
+    if (quitting || !friendsPresence) return;
+    quitting = true;
+    e.preventDefault(); // le temps de dire « hors ligne » aux amis (3 s au plus)
+    void Promise.race([friendsPresence.stop(), new Promise<void>((r) => setTimeout(r, 3000))]).finally(() => app.quit());
+  });
   lockDownSession();
   protocol.handle(APP_SCHEME, serveAsset);
   registerIpc();
@@ -441,8 +471,6 @@ function registerIpc(): void {
   });
   handle(CHANNELS.relinkState, async (force) => (relink ? relink.refresh("stable", force === true) : { ok: false, stale: true, fetchedAt: null, error: "Indisponible.", data: null }));
   handle(CHANNELS.relinkNotifications, async () => (relink ? relink.notifications("stable") : { items: [], error: "Indisponible." }));
-  handle(CHANNELS.relinkDismissNotification, async (notifId) => (relink && typeof notifId === "string" ? relink.dismissNotification(notifId) : []));
-  handle(CHANNELS.relinkCardImage, async (bannerId) => (relink && typeof bannerId === "string" ? relink.cardImage(bannerId) : null));
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
   /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
   const linkOfficial = async (): Promise<string | null> => {
@@ -465,7 +493,6 @@ function registerIpc(): void {
   handle(CHANNELS.msLogin, async () => {
     if (!microsoft) return noMs;
     const st = await microsoft.login();
-    if (st.error) void appLog?.warn("Microsoft", `Connexion : ${st.error}`);
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -541,6 +568,101 @@ function registerIpc(): void {
     }
     return { ok: true, state: await offlineState() };
   });
+  // ── Amis ReLink : liste, demandes, statut et « rejoindre » ──────────────────────────────────────────────
+  /** Instances locales par event / modpack ReLink : « event:<id>» ou « pack:<id> » → identifiant d'instance. */
+  const localGameKeys = async (): Promise<Map<string, string>> => {
+    const out = new Map<string, string>();
+    if (!instances) return out;
+    const host = new URL(WORKER_URL).host;
+    for (const v of (await instances.list()).instances) {
+      if (v.event?.id) out.set(`event:${v.event.id}`, v.id);
+      const target = instances.target(v.id);
+      const rp = target ? await readInstalledPack(target.folder, host).catch(() => null) : null;
+      if (rp?.plan.id && !out.has(`pack:${rp.plan.id}`)) out.set(`pack:${rp.plan.id}`, v.id);
+    }
+    return out;
+  };
+  const friendsOut = async (): Promise<import("../shared/api").FriendsState> => {
+    const share = settings ? await settings.sharePresence() : true;
+    const base = { loggedIn: false, error: null as string | null, friends: [], incoming: [], outgoing: [], share };
+    if (!account || !(await account.state()).loggedIn) return base;
+    try {
+      const r = await account.friends();
+      const keys = r.friends.some((f) => f.game && f.game.id) ? await localGameKeys() : new Map<string, string>();
+      return {
+        ...base,
+        loggedIn: true,
+        incoming: r.incoming,
+        outgoing: r.outgoing,
+        friends: r.friends.map((f) => ({ ...f, joinable: !!f.game?.id && keys.has(`${f.game.kind}:${f.game.id}`) })),
+      };
+    } catch (e) {
+      return { ...base, loggedIn: (await account.state()).loggedIn, error: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  const friendAction = async (fn: () => Promise<string | undefined>): Promise<import("../shared/api").FriendsActionResult> => {
+    try {
+      const message = await fn();
+      return { ok: true, state: await friendsOut(), ...(message ? { message } : {}) };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  handle(CHANNELS.friendsState, friendsOut);
+  handle(CHANNELS.friendsRequest, async (pseudo) => {
+    const p = typeof pseudo === "string" ? pseudo.trim() : "";
+    if (!account || !p) return { ok: false, message: "Indique le pseudo ReLink de ton ami." };
+    const a = account;
+    return friendAction(async () => {
+      const r = await a.friendRequest(p);
+      return r.accepted ? `${r.pseudo} est maintenant ton ami.` : `Demande envoyée à ${r.pseudo}.`;
+    });
+  });
+  handle(CHANNELS.friendsAccept, async (id) => {
+    if (!account || typeof id !== "string" || !/^\d{5,25}$/.test(id)) return { ok: false, message: "Demande invalide." };
+    const a = account;
+    return friendAction(async () => (await a.friendAccept(id), "Ami ajouté."));
+  });
+  handle(CHANNELS.friendsRemove, async (id) => {
+    if (!account || typeof id !== "string" || !/^\d{5,25}$/.test(id)) return { ok: false, message: "Demande invalide." };
+    const a = account;
+    return friendAction(async () => (await a.friendRemove(id), undefined));
+  });
+  handle(CHANNELS.friendsShare, async (on) => {
+    if (!settings || typeof on !== "boolean") return false;
+    const ok = await settings.setSharePresence(on);
+    void friendsPresence?.beat(); // coupé : « hors ligne » tout de suite chez les amis
+    return ok;
+  });
+  handle(CHANNELS.friendsPing, async () => {
+    friendsPresence?.touch();
+    return undefined;
+  });
+  handle(CHANNELS.friendsJoin, async (id) => {
+    const bad = (message: string) => ({ ok: false, message });
+    if (!account || !(await account.state()).loggedIn) return bad("Connecte-toi à ReLink pour rejoindre un ami.");
+    if (typeof id !== "string" || !/^\d{5,25}$/.test(id)) return bad("Ami invalide.");
+    let friend;
+    try {
+      friend = (await account.friends()).friends.find((f) => f.id === id);
+    } catch (e) {
+      return bad(e instanceof Error ? e.message : String(e));
+    }
+    if (!friend || !friend.game) return bad("Cet ami ne joue pas en ce moment.");
+    const g = friend.game;
+    if (!g.id || g.kind === "instance") return bad("Il joue sur une instance personnelle : tu ne peux pas la rejoindre.");
+    const instanceId = (await localGameKeys()).get(`${g.kind}:${g.id}`);
+    if (!instanceId) return bad(g.kind === "event" ? "Tu n'as pas cet event : installe-le depuis l'onglet ReLink." : "Tu n'as pas ce modpack : installe-le d'abord.");
+    // serveur de l'event ou du modpack, d'après le catalogue ReLink (jamais une adresse donnée par l'ami)
+    const data = relink ? (await relink.cached()).data : null;
+    const servers = data?.servers ?? [];
+    const evSrv = g.kind === "event" ? data?.events.find((e) => e.id === g.id)?.server : undefined;
+    const host = (g.kind === "event" ? (servers.find((s) => s.id === evSrv) ?? servers.find((s) => s.event === g.id)) : servers.find((s) => s.pack === g.id))?.host ?? "";
+    const a = parseServerAddress(host);
+    const address = a ? (a.port === 25565 ? a.host : `${a.host}:${a.port}`) : null;
+    pendingJoin = { instanceId, address, until: Date.now() + 120_000 };
+    return { ok: true, instanceId, address, friend: friend.pseudo };
+  });
   handle(CHANNELS.accountState, async () => (account ? account.state() : noAccount));
   handle(CHANNELS.accountLogin, async () => {
     if (!account) return noAccount;
@@ -596,40 +718,6 @@ function registerIpc(): void {
     }
   });
   handle(CHANNELS.accountQuests, async () => (account ? account.quests() : { ok: false, error: "Compte ReLink indisponible.", quests: [], streak: null }));
-  const noFriends = { ok: false, error: "Compte ReLink indisponible.", friends: [], incoming: [], outgoing: [] };
-  handle(CHANNELS.friendsList, async () => (account ? account.friendsList() : noFriends));
-  handle(CHANNELS.friendsRequest, async (pseudo) => {
-    if (!account || typeof pseudo !== "string" || !pseudo.trim()) return { ok: false, error: "Pseudo invalide.", friends: [], incoming: [], outgoing: [] };
-    try {
-      return await account.friendRequest(pseudo.trim());
-    } catch (e) {
-      return { ok: false, error: e instanceof AccountError ? e.message : "Demande impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
-    }
-  });
-  handle(CHANNELS.friendsAccept, async (discordId) => {
-    if (!account || typeof discordId !== "string") return noFriends;
-    try {
-      return await account.friendAccept(discordId);
-    } catch (e) {
-      return { ok: false, error: e instanceof AccountError ? e.message : "Action impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
-    }
-  });
-  handle(CHANNELS.friendsDecline, async (discordId) => {
-    if (!account || typeof discordId !== "string") return noFriends;
-    try {
-      return await account.friendDecline(discordId);
-    } catch (e) {
-      return { ok: false, error: e instanceof AccountError ? e.message : "Action impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
-    }
-  });
-  handle(CHANNELS.friendsRemove, async (discordId) => {
-    if (!account || typeof discordId !== "string") return noFriends;
-    try {
-      return await account.friendRemove(discordId);
-    } catch (e) {
-      return { ok: false, error: e instanceof AccountError ? e.message : "Action impossible pour le moment.", friends: [], incoming: [], outgoing: [] };
-    }
-  });
   handle(CHANNELS.accountRedeem, async (code) => {
     if (!account || typeof code !== "string" || code.length > 40) return { ok: false, message: "Code invalide." };
     try {
@@ -938,6 +1026,10 @@ function registerIpc(): void {
       const dashed = ses.uuid.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
       if (!st?.user?.minecraftVerified || st.user.minecraftUuid !== dashed) return { ok: false, reason: "event-microsoft" };
     }
+    // « Rejoindre un ami » : le jeu se connecte tout seul au serveur de l'event / du modpack (lancement direct seulement)
+    const pj = pendingJoin && pendingJoin.instanceId === id && pendingJoin.until > Date.now() ? pendingJoin : null;
+    if (pj) pendingJoin = null;
+    const joinTo = offSes ? offJoin : ses && pj?.address ? pj.address : "";
     const fallback = !official && !ses;
     // skin ReLink en jeu : mod de skins compatible (instances moddées, hors event) ; un échec ne bloque pas
     if (modpacks && !(await readEventManifest(inst.folder))) {
@@ -955,6 +1047,14 @@ function registerIpc(): void {
     }
     const o = (typeof opts === "object" && opts !== null ? opts : {}) as { ram?: unknown; repair?: unknown };
     const ram = typeof o.ram === "number" ? o.ram : NaN;
+    {
+      // ce que les amis verront : event ou modpack ReLink (rejoignable), sinon « Minecraft <version> » sans nom d'instance
+      const mcv = fix ? fix.mc : (inst.version ?? "");
+      const rp = await readInstalledPack(inst.folder, new URL(WORKER_URL).host).catch(() => null);
+      const safeId = (v: string | null | undefined): string | null => (typeof v === "string" && /^[\w.-]{1,64}$/.test(v) ? v : null);
+      const info: PresenceGame = evId && safeId(evId) ? { kind: "event", id: evId, name: ev?.name ?? rp?.plan.name ?? "Event", mc: mcv } : safeId(rp?.plan.id) ? { kind: "pack", id: rp!.plan.id, name: rp!.plan.name, mc: mcv } : { kind: "instance", id: null, name: `Minecraft ${mcv}`.trim(), mc: mcv };
+      gameCtx.set(gameKey(inst.path), info);
+    }
     const started = launcher.start(
       {
         gameDir: inst.path,
@@ -964,7 +1064,7 @@ function registerIpc(): void {
         loader: fix ? fix.loader : inst.loader,
         loaderVersion: fix ? fix.loaderVersion : inst.loaderVersion,
       },
-      { ram, repair: o.repair === true, ...(ses ? { direct: { name: ses.name, uuid: ses.uuid, accessToken: ses.accessToken, brand: app.getVersion(), ...(offSes ? { offline: true, join: offJoin } : {}) } } : {}) },
+      { ram, repair: o.repair === true, ...(ses ? { direct: { name: ses.name, uuid: ses.uuid, accessToken: ses.accessToken, brand: app.getVersion(), ...(offSes ? { offline: true } : {}), ...(joinTo ? { join: joinTo } : {}) } } : {}) },
     );
     if (started.ok) {
       // comme la version Python : la RAM choisie devient celle proposée la prochaine fois
@@ -972,7 +1072,7 @@ function registerIpc(): void {
       await instances?.rememberRam(id, ram);
     }
     if (!started.ok) return started;
-    return { ...started, ...(fallback ? { viaOfficial: true } : {}) };
+    return { ...started, ...(fallback ? { viaOfficial: true } : {}), ...(!ses && pj?.address ? { join: pj.address } : {}) };
   });
 
   ipcMain.handle(CHANNELS.launchStatus, async (event, job: unknown): Promise<LaunchStatus | null> => {
