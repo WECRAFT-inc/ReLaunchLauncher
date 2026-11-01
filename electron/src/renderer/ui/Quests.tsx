@@ -66,14 +66,17 @@ export function useQuests(on = true): { q: QuestsState | null; reload: () => voi
 export function HomeAccount() {
   const { account } = useApp();
   const [ms, setMs] = useState<MicrosoftState | null>(null);
+  const [off, setOff] = useState<{ name: string | null; active: boolean } | null>(null);
   useEffect(() => {
     void window.wecraft.microsoft.state().then(setMs, () => undefined);
-  }, [account?.user?.minecraftVerified]);
+    void window.wecraft.offline.state().then((o) => setOff({ name: o.name, active: o.active }), () => undefined);
+  }, [account?.user?.minecraftVerified, account?.loggedIn]);
   const u = account?.loggedIn ? account.user : null;
   const { q } = useQuests(!!u);
   const quest = q?.quests.find((x) => x.id === "official_account");
   if (!ms) return null;
-  const name = ms.connected ? (ms.profile?.name ?? null) : u?.minecraftVerified ? u.minecraftName : null;
+  const offName = off?.active ? off.name : null; // compte hors-ligne choisi : c'est lui qui joue
+  const name = offName ?? (ms.connected ? (ms.profile?.name ?? null) : u?.minecraftVerified ? u.minecraftName : null);
   if (name) {
     return (
       <button className="hacct" data-go="settings" data-set="compte" data-a="home-account" title={t("Compte Minecraft : réglages")}>
@@ -85,7 +88,7 @@ export function HomeAccount() {
           <small>{t("Joue en tant que")}</small>
           <b>{name}</b>
         </span>
-        <span className="hnote">{ms.connected ? t("Compte Microsoft") : t("Via le launcher officiel")}</span>
+        <span className="hnote">{offName ? t("Compte hors-ligne") : ms.connected ? t("Compte Microsoft") : t("Via le launcher officiel")}</span>
       </button>
     );
   }
@@ -136,7 +139,9 @@ export function QuestsPage() {
           </span>
         ) : null}
       </div>
-      {!account?.user ? (
+      {!account ? (
+        <div className="empty">{t("Chargement…")}</div>
+      ) : !account.user ? (
         <div className="empty">
           {t("Connecte-toi à ReLink pour voir tes quêtes.")}{" "}
           <button className="btn sm" data-go="settings" data-set="compte">
