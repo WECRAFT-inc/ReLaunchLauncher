@@ -486,6 +486,10 @@ handle(CHANNELS.relinkNotifications, async () =>
     ? relink.notifications("stable")
     : { items: [], error: "Indisponible." }
 );
+
+  handle(CHANNELS.relinkCardImage, async (bannerId) =>
+  relink ? relink.cardImage(bannerId) : null
+);
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
   /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
   const linkOfficial = async (): Promise<string | null> => {
