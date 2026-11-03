@@ -107,6 +107,7 @@ const PROJ_INSTALL_FILE = "projects:install-file";
 const LAUNCH_START = "launch:start";
 const LAUNCH_STATUS = "launch:status";
 const LAUNCH_ANSWER = "launch:answer";
+const RELINK_CARD_IMAGE = "relink:card-image";
 
 const api: WeCraftApi = Object.freeze({
   app: Object.freeze({
@@ -135,10 +136,16 @@ const api: WeCraftApi = Object.freeze({
     openFolder: (id: string, sub?: string) => ipcRenderer.invoke(OPEN_FOLDER, id, sub ?? ""),
     gameLog: (id: string) => ipcRenderer.invoke(GAME_LOG, id),
   }),
-  relink: Object.freeze({
-    state: (force?: boolean) => ipcRenderer.invoke(RELINK_STATE, force === true),
-    notifications: () => ipcRenderer.invoke(RELINK_NOTIFICATIONS),
-  }),
+relink: Object.freeze({
+  state: (force?: boolean) =>
+    ipcRenderer.invoke(RELINK_STATE, force === true),
+
+  notifications: () =>
+    ipcRenderer.invoke(RELINK_NOTIFICATIONS),
+
+  cardImage: (bid: string) =>
+    ipcRenderer.invoke(RELINK_CARD_IMAGE, bid),
+}),
   microsoft: Object.freeze({
     state: () => ipcRenderer.invoke(MS_STATE),
     login: () => ipcRenderer.invoke(MS_LOGIN),
