@@ -18,8 +18,7 @@ name: Release ReLaunch
 # 4. « brouillon » : reçoit seulement RELEASES_TOKEN, n'installe rien, ne modifie jamais une release publiée.
 # Le nom du tag n'est jamais inséré directement dans un script ; actions épinglées sur leur SHA de commit.
 on:
-  push:
-    tags: ["relaunch-v*"]
+  create:
 
 permissions:
   contents: read
