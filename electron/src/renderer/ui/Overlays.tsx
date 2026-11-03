@@ -205,7 +205,7 @@ function FriendsPanel() {
           setSt(r.state);
           if (r.message) toast(r.message, 3500);
           after?.();
-        } else toast(r.message, 4500);
+        } else toast(r.message);
       })
       .catch(() => toast(t("Action impossible pour le moment.")))
       .finally(() => setBusy(false));
