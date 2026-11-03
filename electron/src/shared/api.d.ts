@@ -597,14 +597,16 @@ export interface RelinkNews {
   /** Page du launcher à ouvrir ("" = aucune). */
   open: string;
 }
-export interface RelinkCard {
-  id: string;
-  title: string;
-  text: string;
-  cta: string;
-  open: string;
-  tag: string;
-}
+ export interface RelinkCard {
+   id: string;
+   title: string;
+   text: string;
+   cta: string;
+   open: string;
+   tag: string;
+   img: string | null;
+   newsId: string | null;
+ }
 export interface RelinkServer {
   id: string;
   name: string;
