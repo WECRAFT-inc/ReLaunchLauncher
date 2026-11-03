@@ -113,7 +113,7 @@ function decodeMe(v: unknown): { user: AccountState["user"]; me: Me; expiresAt: 
 export class RelinkAccount {
   private saved: Saved | null = null;
   private loaded = false;
-  private offline = false;
+  private offlineFlag = false;
   private lastError: string | null = null;
   private pending: { server: Server; done: Promise<AccountState> } | null = null;
 
@@ -180,7 +180,7 @@ export class RelinkAccount {
       loggedIn: !!s,
       user: s?.user ?? null,
       expiresAt: s?.expiresAt ?? null,
-      offline: this.offline,
+      offline: this.offlineFlag,
       loginPending: !!this.pending,
       launcherSkins: s?.me?.launcherSkins ?? [],
       minecraftSkin: s?.me?.minecraftSkin ? { model: s.me.minecraftSkin.model, sha256: s.me.minecraftSkin.sha256 } : null,
@@ -210,9 +210,9 @@ export class RelinkAccount {
       const body = init.json !== undefined ? JSON.stringify(init.json) : init.body;
       if (body !== undefined) reqInit.body = body;
       res = await this.fetcher()(url, reqInit);
-      this.offline = false;
+      this.offlineFlag = false;
     } catch (e) {
-      this.offline = true;
+      this.offlineFlag = true;
       throw new AccountError(`Service ReLink injoignable (${e instanceof Error ? e.message : String(e)}).`);
     }
     const text = await res.text();
@@ -261,7 +261,8 @@ export class RelinkAccount {
       if (!b) continue;
       const status = o["status"] === "online" || o["status"] === "away" ? o["status"] : "offline";
       const g = obj(o["game"]);
-      const kind = g["kind"] === "event" || g["kind"] === "pack" || g["kind"] === "instance" ? g["kind"] : null;
+      const kindRaw = g["kind"];
+      const kind = kindRaw === "event" || kindRaw === "pack" || kindRaw === "instance" ? kindRaw : null;
       const gid = typeof g["id"] === "string" && /^[\w.-]{1,64}$/.test(g["id"]) ? g["id"] : null;
       const game = status !== "offline" && kind && (kind === "instance" || gid) ? { kind, id: kind === "instance" ? null : gid, name: str(g["name"], 60), mc: str(g["mc"], 24), startedAt: typeof g["startedAt"] === "number" ? g["startedAt"] : 0 } : null;
       const seen = typeof o["lastSeen"] === "string" ? Date.parse(o["lastSeen"]) : NaN;
