@@ -42,6 +42,8 @@ export interface Ui {
   itab: string;
   /** Avantages & Quêtes : event mis en avant (renvoi depuis la fiche d'un event). */
   qEv: string | null;
+    /** ReLink : actualité sélectionnée à l'ouverture de la page. */
+  newSel: string | null;
 }
 
 export interface AppCtx {
