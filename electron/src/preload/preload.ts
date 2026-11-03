@@ -4,6 +4,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
 
+const RELINK_CARD_IMAGE = "relink:card-image";
 const GET_INFO = "app:get-info";
 const RENDERED = "app:rendered";
 const OPEN_DATA_DIR = "app:open-data-dir";
@@ -107,7 +108,6 @@ const PROJ_INSTALL_FILE = "projects:install-file";
 const LAUNCH_START = "launch:start";
 const LAUNCH_STATUS = "launch:status";
 const LAUNCH_ANSWER = "launch:answer";
-import { CHANNELS } from "../shared/channels";
 
 const api: WeCraftApi = Object.freeze({
   app: Object.freeze({
@@ -143,8 +143,9 @@ relink: Object.freeze({
   notifications: () =>
     ipcRenderer.invoke(RELINK_NOTIFICATIONS),
 
-  cardImage: (bid: string) =>
-    ipcRenderer.invoke(CHANNELS.relinkCardImage, bid)
+  
+cardImage: (bid: string) =>
+  ipcRenderer.invoke(RELINK_CARD_IMAGE, bid),
 }),
   microsoft: Object.freeze({
     state: () => ipcRenderer.invoke(MS_STATE),
