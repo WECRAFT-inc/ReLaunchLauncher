@@ -469,8 +469,23 @@ function registerIpc(): void {
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
     },
   });
-  handle(CHANNELS.relinkState, async (force) => (relink ? relink.refresh("stable", force === true) : { ok: false, stale: true, fetchedAt: null, error: "Indisponible.", data: null }));
-  handle(CHANNELS.relinkNotifications, async () => (relink ? relink.notifications("stable") : { items: [], error: "Indisponible." }));
+handle(CHANNELS.relinkState, async (force) =>
+  relink
+    ? relink.refresh("stable", force === true)
+    : {
+        ok: false,
+        stale: true,
+        fetchedAt: null,
+        error: "Indisponible.",
+        data: null,
+      }
+);
+
+handle(CHANNELS.relinkNotifications, async () =>
+  relink
+    ? relink.notifications("stable")
+    : { items: [], error: "Indisponible." }
+);
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
   /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
   const linkOfficial = async (): Promise<string | null> => {
