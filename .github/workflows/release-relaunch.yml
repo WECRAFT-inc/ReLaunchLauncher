@@ -1,38 +1,55 @@
 name: Release ReLaunch
 
-# Construit l'installeur ReLaunch (version Electron) à chaque tag « relaunch-vX.Y.Z » (ou « relaunch-vX.Y.Z-rc.1 »).
-# Les tags « v* » restent ceux de la version Python (release.yml) : les deux workflows ne se déclenchent jamais
-# ensemble.
+# Construit l'installeur ReLaunch (version Electron) sur un tag « relaunch-vX.Y.Z »
+# ou « relaunch-vX.Y.Z-rc.1 ».
+# Le bot crée le tag sur le commit de la branche choisie, puis déclenche ce workflow
+# manuellement depuis la branche par défaut avec l'entrée source_tag.
+# Chaque job checkout explicitement le tag : le code compilé vient donc de la branche choisie,
+# même si son contenu n'est pas encore intégré à main.
+# Les tags « v* » restent ceux de la version Python (release.yml).
 #
-# RIEN n'est distribué automatiquement : la release du dépôt public est créée en BROUILLON. Ni la version Python
-# ni ReLaunch ne voient un brouillon (elles lisent /releases/latest). La publier à la main sur GitHub la propose
-# à TOUS les utilisateurs de WeCraft (version Python comprise : passage Python -> ReLaunch).
+# RIEN n'est distribué automatiquement : la release du dépôt public est créée en BROUILLON.
+# Sa publication manuelle la propose à tous les utilisateurs de WeCraft.
 #
 # Sécurité de la chaîne (4 jobs, chacun sur une machine neuve) :
 # 1. « compilation » : npm ci, typecheck, tests, installeur. AUCUN secret.
-# 2. « signature » : reçoit la clé privée UPDATE_SIGNING_KEY. N'installe RIEN (ni npm, ni pip) : la signature est
-#    faite par le module crypto intégré à Node (tools/sign_release_node.mjs). Environnement GitHub
-#    « signature-release » : y mettre le secret et une validation manuelle obligatoire (voir docs).
-# 3. « verification » : refait le contrôle avec l'outil Python (pip) et vérifie que les clés publiques de la
-#    version Python et de ReLaunch sont identiques. AUCUN secret.
-# 4. « brouillon » : reçoit seulement RELEASES_TOKEN, n'installe rien, ne modifie jamais une release publiée.
-# Le nom du tag n'est jamais inséré directement dans un script ; actions épinglées sur leur SHA de commit.
+# 2. « signature » : reçoit la clé privée UPDATE_SIGNING_KEY. N'installe RIEN : la signature est
+#    faite par le module crypto intégré à Node (tools/sign_release_node.mjs). Environnement
+#    GitHub « signature-release » : y mettre le secret et une validation manuelle obligatoire.
+# 3. « verification » : contrôle avec l'outil Python et vérifie que les clés publiques Python et
+#    ReLaunch sont identiques. AUCUN secret.
+# 4. « brouillon » : reçoit seulement RELEASES_TOKEN et crée/met à jour uniquement un brouillon.
+# Les actions sont épinglées sur leur SHA de commit.
+
 on:
-  create:
+  # Conserve le déclenchement historique pour un tag poussé manuellement.
+  push:
+    tags: ["relaunch-v*"]
+
+  # Le bot crée le tag par API puis démarre le workflow depuis la branche par défaut.
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "Tag relaunch-v… créé par le Build Center"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   compilation:
+    # Accepte les tags poussés manuellement ou le tag transmis par le bot.
+    if: ${{ (github.event_name == 'workflow_dispatch' && startsWith(inputs.source_tag, 'relaunch-v')) || (github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'relaunch-v')) }}
     runs-on: windows-latest
     outputs:
       version: ${{ steps.tag.outputs.version }}
     env:
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.source_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.source_tag) || github.ref }}
           persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -97,16 +114,15 @@ jobs:
     env:
       VERSION: ${{ needs.compilation.outputs.version }}
     steps:
-      # Artefact téléchargé HORS du dossier de travail et AVANT le checkout : le checkout (clean) remet ensuite
-      # les fichiers du dépôt dans leur état exact, même si l'archive avait tenté d'en écraser un.
+      # Artefact téléchargé hors du dossier de travail et AVANT le checkout.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: installeur
           path: ${{ runner.temp }}/out
 
-      # Seulement les fichiers du dépôt (outil de signature, clé publique) : rien n'est installé ni exécuté d'autre.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.source_tag) || github.ref }}
           persist-credentials: false
 
       - name: Empreinte de l'installeur reçu
@@ -152,6 +168,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.source_tag) || github.ref }}
           persist-credentials: false
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -171,7 +188,7 @@ jobs:
       - name: Outil de vérification (aucun secret dans ce job)
         run: python -m pip install cryptography
 
-      # Les deux versions doivent accepter la signature : la version Python (passage vers ReLaunch) et ReLaunch.
+      # Les deux versions doivent accepter la signature : Python (passage vers ReLaunch) et ReLaunch.
       - name: Vérification par la version Python, clés identiques
         shell: pwsh
         run: |
@@ -200,9 +217,10 @@ jobs:
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.source_tag) || github.ref }}
           persist-credentials: false
 
-      # Dernier contrôle juste avant l'envoi (aucun secret dans cette étape)
+      # Dernier contrôle juste avant l'envoi (aucun secret dans cette étape).
       - name: Empreinte et signature revérifiées
         shell: bash
         run: |
@@ -213,9 +231,8 @@ jobs:
           node tools/sign_release_node.mjs verify "$RUNNER_TEMP/out/$NAME" "$VERSION" "$RUNNER_TEMP/out/$NAME.sig" "$PUB"
           rm -rf out && cp -r "$OUT" out
 
-      # Dépôt public : BROUILLON, sans « prerelease » (une prerelease n'est jamais proposée par /releases/latest).
-      # Le publier à la main = le proposer à tous les utilisateurs.
-      # RELEASES_TOKEN : jeton « fine-grained » limité au dépôt WeCraft-Releases, permission Contents: write.
+      # Dépôt public : BROUILLON, sans « prerelease ».
+      # RELEASES_TOKEN : jeton fine-grained limité au dépôt WeCraft-Releases, permission Contents: write.
       - name: Brouillon dans le dépôt public
         shell: bash
         env:
