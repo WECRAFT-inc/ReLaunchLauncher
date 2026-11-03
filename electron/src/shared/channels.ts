@@ -104,6 +104,7 @@ export const CHANNELS = {
   launchStart: "launch:start",
   launchStatus: "launch:status",
   launchAnswer: "launch:answer",
+  relinkCardImage: "relink:card-image",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];
