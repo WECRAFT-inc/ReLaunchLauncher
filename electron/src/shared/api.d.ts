@@ -424,6 +424,8 @@ export interface WeCraftApi {
     state(force?: boolean): Promise<RelinkState>;
     /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
     notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
+    /** Charge une bannière publique ReLink via le processus principal. */
+cardImage(bid: string): Promise<string | null>;
   };
   microsoft: {
     state(): Promise<MicrosoftState>;
