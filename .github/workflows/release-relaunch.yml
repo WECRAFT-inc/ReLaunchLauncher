@@ -22,11 +22,9 @@ name: Release ReLaunch
 # Les actions sont épinglées sur leur SHA de commit.
 
 on:
-  # Conserve le déclenchement historique pour un tag poussé manuellement.
   push:
     tags: ["relaunch-v*"]
 
-  # Le bot crée le tag par API puis démarre le workflow depuis la branche par défaut.
   workflow_dispatch:
     inputs:
       source_tag:
