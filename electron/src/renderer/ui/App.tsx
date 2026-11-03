@@ -1043,6 +1043,10 @@ export function App() {
     return () => document.removeEventListener("keydown", k);
   }, [show]);
 
+  const dismissNotif = useCallback((id: string) => {
+  setNotifs((items) => items.filter((n) => n.id !== id));
+}, []);
+
   const ctx: AppCtx = {
     inst,
     hidden,
@@ -1086,6 +1090,7 @@ export function App() {
     relink,
     refreshRelink,
     notifs,
+    dismissNotif,
     seen,
     markSeen,
     skins: skinList,
