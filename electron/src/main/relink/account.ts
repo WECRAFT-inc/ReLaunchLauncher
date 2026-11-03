@@ -264,7 +264,9 @@ export class RelinkAccount {
       const kindRaw = g["kind"];
       const kind = kindRaw === "event" || kindRaw === "pack" || kindRaw === "instance" ? kindRaw : null;
       const gid = typeof g["id"] === "string" && /^[\w.-]{1,64}$/.test(g["id"]) ? g["id"] : null;
-      const game = status !== "offline" && kind && (kind === "instance" || gid) ? { kind, id: kind === "instance" ? null : gid, name: str(g["name"], 60), mc: str(g["mc"], 24), startedAt: typeof g["startedAt"] === "number" ? g["startedAt"] : 0 } : null;
+      const game: RawFriend["game"] = status !== "offline" && kind && (kind === "instance" || gid)
+  ? { kind, id: kind === "instance" ? null : gid, name: str(g["name"], 60), mc: str(g["mc"], 24), startedAt: typeof g["startedAt"] === "number" ? g["startedAt"] : 0 }
+  : null;
       const seen = typeof o["lastSeen"] === "string" ? Date.parse(o["lastSeen"]) : NaN;
       friends.push({ ...b, minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, lastSeen: Number.isFinite(seen) ? seen : null });
     }
