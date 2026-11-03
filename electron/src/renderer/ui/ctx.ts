@@ -71,7 +71,7 @@ export interface AppCtx {
   editCar: (fn: (c: Car) => void) => void;
   editHome: (fn: (h: HomePref) => void) => void;
   setSkin: (s: string) => void;
-  toast: (m: string) => void;
+  toast: (m: string, ms?: number) => void;
   toggleDrawer: (k: string) => void;
   askDelete: (id: string) => void;
   confirmDelete: () => void;
