@@ -94,6 +94,8 @@ export interface AppCtx {
   relink: RelinkState | null;
   refreshRelink: (force?: boolean) => void;
   notifs: RelinkNotification[];
+    /** Ferme une notification ReLink. */
+  dismissNotif: (id: string) => void;
   /** Identifiants déjà vus (actualités et notifications), gardés sur ce PC. */
   seen: Set<string>;
   markSeen: (ids: string[]) => void;
