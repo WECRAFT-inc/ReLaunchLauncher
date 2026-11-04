@@ -156,7 +156,7 @@ const CARD_TYPE_COLORS: Record<string, string> = {
   video: "#dc2626",
   contenu: "#7c3aed",
   maj: "#16a34a",
-  adecouvrir: "#0284c7",
+  "a decouvrir": "#0284c7",
   reseaux: "#db2777",
 };
 const normalizeCardType = (value: string) => value.trim().toLocaleLowerCase("fr-FR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
@@ -166,7 +166,7 @@ function CardTypeTag({ type, label = "" }: { type: string; label?: string }) {
   const color = CARD_TYPE_COLORS[normalized] ?? CARD_TYPE_COLORS.contenu;
   return (
     <span className="ntags card-labels" style={{ "--card-type-color": color } as Css}>
-      <span className="ntag card-type">{knownType ?? "Contenu"}</span>
+      <span className="ntag card-type">{knownType ?? type}</span>
       {label.trim() ? <><span className="card-label-separator" aria-hidden="true">·</span><span className="card-extra-label">{label.trim()}</span></> : null}
     </span>
   );
