@@ -534,8 +534,8 @@ body.tb-off .app { height: 100vh !important; }
 .htop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .htop .hacct { align-self: auto; }
 
-/* Encarts : couleur propre à chacun des 7 types + étiquette secondaire séparée par un point. */
-.card-labels { display: inline-flex; align-items: center; align-self: flex-start; flex-wrap: wrap; gap: 5px; max-width: 100%; }
-.card-labels .card-type { background: color-mix(in srgb, var(--card-type-color) 22%, transparent); color: var(--card-type-color); border: 1px solid color-mix(in srgb, var(--card-type-color) 55%, transparent); }
-.card-labels .card-label-separator { color: rgba(255,255,255,.78); font-weight: 800; }
-.card-labels .card-extra-label { color: rgba(255,255,255,.92); font-size: 11px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+/* Badges des encarts : pastille pleine, ovale, et libellé toujours séparé par un point. */
+.card-labels { display:inline-flex; align-items:center; align-self:flex-start; flex-wrap:wrap; gap:0; max-width:100%; }
+.ncard .card-labels .card-type { display:inline-flex; align-items:center; padding:4px 12px; min-height:23px; border-radius:999px; background:var(--card-type-color) !important; color:#fff !important; border:1px solid var(--card-type-color) !important; font-size:10px; font-weight:800; line-height:1; letter-spacing:.045em; text-transform:uppercase; white-space:nowrap; }
+.card-labels .card-label-separator { display:inline-block; margin:0 7px; color:#fff; font-size:13px; font-weight:900; line-height:1; }
+.card-labels .card-extra-label { display:inline; color:#fff; font-size:11px; font-weight:700; line-height:1.3; overflow-wrap:anywhere; }
