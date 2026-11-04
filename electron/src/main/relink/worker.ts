@@ -77,7 +77,10 @@ export function decodeCard(v: unknown): RelinkCard | null {
     cta: pick(o, ["cta"], 40),
     open: openTarget(o["open"] ?? o["go"] ?? o["target"]),
     type: pick(o, ["type", "kind"], 30),
-    tag: pick(o, ["tag", "label"], 60),
+    // Le panneau peut nommer l’étiquette complémentaire "label", "badge" ou "tag".
+    // Quand le type est explicite, "tag" est prioritaire ; sur les anciennes cartes,
+    // "tag" pouvait contenir le type et "label" le texte secondaire.
+    tag: pick(o, pick(o, ["type", "kind"], 30) ? ["tag", "label", "badge", "etiquette", "caption"] : ["label", "badge", "etiquette", "caption", "tag"], 60),
     img: bannerIdOf(o["img"] ?? o["imageUrl"] ?? o["banner"]) || null,
     /** Article Info & News que cet encart met en avant (le panneau peut lier un encart à un article publié). */
     newsId: id(o["newsId"]) || null,
