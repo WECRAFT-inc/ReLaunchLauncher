@@ -76,7 +76,8 @@ export function decodeCard(v: unknown): RelinkCard | null {
     text: pick(o, ["body", "text", "d", "desc"], 600),
     cta: pick(o, ["cta"], 40),
     open: openTarget(o["open"] ?? o["go"] ?? o["target"]),
-    tag: pick(o, ["tag", "kind", "type"], 30),
+    type: pick(o, ["type", "kind"], 30),
+    tag: pick(o, ["tag", "label"], 60),
     img: bannerIdOf(o["img"] ?? o["imageUrl"] ?? o["banner"]) || null,
     /** Article Info & News que cet encart met en avant (le panneau peut lier un encart à un article publié). */
     newsId: id(o["newsId"]) || null,
