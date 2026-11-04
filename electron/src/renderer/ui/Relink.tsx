@@ -192,12 +192,12 @@ export function HomeCarousel() {
   const items = cards.length
     ? cards.map((c) => {
         const legacyType = CARD_TYPES.find((item) => normalizeCardType(item) === normalizeCardType(c.tag));
-        return { id: c.id, title: c.title, sub: c.text, type: c.type || legacyType || "Contenu", tag: legacyType && !c.type ? "" : c.tag, open: c.open, img: c.img, newsId: c.newsId };
+        return { id: c.id, title: c.title, sub: c.text, type: c.type || legacyType || "Contenu", tags: legacyType && !c.type ? "" : c.tag, open: c.open, img: c.img, newsId: c.newsId };
       })
     : news.map((n) => {
         const firstTag = n.tags[0]?.label ?? "";
         const legacyType = CARD_TYPES.find((item) => normalizeCardType(item) === normalizeCardType(firstTag));
-        return { id: n.id, title: n.title, sub: n.date, type: legacyType || "Contenu", tag: legacyType ? n.tags.slice(1).map((x) => x.label).join(" · ") : firstTag, open: "news", img: null as string | null, newsId: n.id as string | null };
+        return { id: n.id, title: n.title, sub: n.date, type: legacyType || "Contenu", tags: legacyType ? n.tags.slice(1).map((x) => x.label).join(" · ") : firstTag, open: "news", img: null as string | null, newsId: n.id as string | null };
       });
   // images des encarts (bannières) : jamais chargées directement par l'interface (CSP), le processus principal les
   // télécharge et les renvoie en data: (voir RelinkClient.cardImage) ; tant que ce n'est pas prêt, dégradé de secours.
