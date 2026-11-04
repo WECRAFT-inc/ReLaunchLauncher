@@ -231,26 +231,51 @@ jobs:
 
       # Dépôt public : BROUILLON, sans « prerelease ».
       # RELEASES_TOKEN : jeton fine-grained limité au dépôt WeCraft-Releases, permission Contents: write.
+     
       - name: Brouillon dans le dépôt public
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
+          set -euo pipefail
+
           NAME="ReLaunch.exe"
           RTAG="v$VERSION"
-          PUB=Rexidelamort/WeCraft-Releases
-          FILES="out/$NAME out/$NAME.sha256 out/$NAME.sig"
+          PUB="Rexidelamort/WeCraft-Releases"
+          FILES=("out/$NAME" "out/$NAME.sha256" "out/$NAME.sig")
           HASH=$(cut -d' ' -f1 "out/$NAME.sha256")
-          if gh release view "$RTAG" --repo "$PUB" --json isDraft --jq .isDraft >/tmp/draft 2>/dev/null; then
-            # Ne jamais modifier une release DÉJÀ PUBLIÉE (ni un brouillon de la version Python).
-            if [ "$(cat /tmp/draft)" != "true" ]; then
-              echo "La release $RTAG est déjà publiée dans $PUB : rien n'est modifié. Utilisez un nouveau tag."; exit 1
+
+          echo "Vérification du dépôt $PUB..."
+
+          gh repo view "$PUB" >/dev/null
+
+          if gh release view "$RTAG" --repo "$PUB" >/dev/null 2>&1; then
+            IS_DRAFT=$(gh release view "$RTAG" --repo "$PUB" --json isDraft --jq '.isDraft')
+
+            if [ "$IS_DRAFT" != "true" ]; then
+              echo "ERREUR : La release $RTAG est déjà publiée."
+              exit 1
             fi
+
+            RELEASE_ID=$(gh release view "$RTAG" --repo "$PUB" --json databaseId --jq '.databaseId')
+
+            echo "Release trouvée : $RELEASE_ID"
+
             if gh release view "$RTAG" --repo "$PUB" --json assets --jq '.assets[].name' | grep -qi '^WeCraft\.exe$'; then
-              echo "Le brouillon $RTAG contient la version Python : rien n'est modifié."; exit 1
+              echo "ERREUR : Cette release contient déjà l'installeur Python."
+              exit 1
             fi
-            gh release upload "$RTAG" $FILES --repo "$PUB" --clobber
-            exit 0
+
+            gh release upload "$RTAG" "${FILES[@]}" --repo "$PUB" --clobber
+
+          else
+            echo "Création du brouillon $RTAG..."
+
+            gh release create "$RTAG" "${FILES[@]}" \
+              --repo "$PUB" \
+              --draft \
+              --title "ReLaunch $RTAG" \
+              --notes "ReLaunch $RTAG (nouvelle version de WeCraft) - SHA-256 : $HASH"
           fi
-          gh release create "$RTAG" $FILES --repo "$PUB" --draft \
-            --title "ReLaunch $RTAG" --notes "ReLaunch $RTAG (nouvelle version de WeCraft) - SHA-256 : $HASH"
+
+          echo "Publication du brouillon terminée."
