@@ -143,7 +143,7 @@ jobs:
 
       # Installeur de test (~110 Mo) gardé 2 jours seulement : le quota de stockage du compte est limité.
       # Un quota plein n'est pas une erreur du code : l'envoi peut échouer sans faire échouer la vérification.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         continue-on-error: true
         with:
           name: relaunch-installeur
