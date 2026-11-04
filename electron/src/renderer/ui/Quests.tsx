@@ -67,6 +67,19 @@ export function HomeAccount() {
   const { account } = useApp();
   const [ms, setMs] = useState<MicrosoftState | null>(null);
   const [off, setOff] = useState<{ name: string | null; active: boolean } | null>(null);
+  const [skinImage, setSkinImage] = useState<string | null>(null);
+  const skinSha = account?.minecraftSkin?.sha256 ?? "";
+  useEffect(() => {
+    let alive = true;
+    setSkinImage(null);
+    if (skinSha) {
+      void window.wecraft.account.minecraftSkinImage().then(
+        (img) => { if (alive) setSkinImage(img); },
+        () => { if (alive) setSkinImage(null); },
+      );
+    }
+    return () => { alive = false; };
+  }, [skinSha]);
   useEffect(() => {
     void window.wecraft.microsoft.state().then(setMs, () => undefined);
     void window.wecraft.offline.state().then((o) => setOff({ name: o.name, active: o.active }), () => undefined);
@@ -80,8 +93,12 @@ export function HomeAccount() {
   if (name) {
     return (
       <button className="hacct" data-go="settings" data-set="compte" data-a="home-account" title={t("Compte Minecraft : réglages")}>
-        <span className="hav" aria-hidden="true">
-          {name.slice(0, 1).toUpperCase()}
+        <span
+          className={`hav${skinImage ? " has-skin-face" : ""}`}
+          aria-hidden="true"
+          style={skinImage ? { backgroundImage: `url("${skinImage}")` } : undefined}
+        >
+          {!skinImage ? name.slice(0, 1).toUpperCase() : null}
           <i className="dot"></i>
         </span>
         <span className="htxt">
