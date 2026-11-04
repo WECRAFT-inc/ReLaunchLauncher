@@ -236,7 +236,7 @@ export function HomeCarousel() {
           {items.map((x) => (
             <button key={x.id} className="ncard" onClick={() => (x.newsId ? show("news", { newsSel: x.newsId }) : show(x.open || "news"))}>
               <span className="sc" style={x.img && imgs[x.img] ? { backgroundImage: `url("${imgs[x.img]}")`, backgroundSize: "cover", backgroundPosition: "center" } : coverOf(x.id)}></span>
-              <CardTypeTag type={x.type} label={x.tag} />
+              <CardTypeTag type={x.type} label={x.tags} />
               <b>{x.title}</b>
               <small>{x.sub}</small>
             </button>
