@@ -461,7 +461,7 @@ body.tb-off .app { height: 100vh !important; }
 .nhero .nhbody { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 8px; padding: 22px; max-width: 70ch; }
 .nhero .nhbody h3 { margin: 0; font-size: 26px; }
 .nbody { white-space: pre-line; margin: 0; font-size: 14px; color: var(--ink-soft); }
-.rl-car { width: 100%; min-width: 0; max-width: 520px; justify-self: end; align-self: end; }
+.rl-car { min-width: 0; align-self: end; }
 .rl-live { position: absolute; left: 10px; top: 10px; z-index: 1; }
 .rl-notifs { display: flex; flex-direction: column; gap: 6px; }
 /* .nitem est normalement un <button> unique (all:unset + grid) ; ici la croix de suppression a besoin de son
@@ -479,7 +479,7 @@ body.tb-off .app { height: 100vh !important; }
 .app.pf .rl-maint { margin-right: 250px; }
 .srv small.faint { display: block; }
 .nhero .nhbody .btn { align-self: flex-start; }
-.rl-car { width: 100%; min-width: 0; max-width: 520px; }
+.rl-car { min-width: min(420px, 40vw); }
 
 /* En-têtes de page : place réservée au bloc flottant (cloche, téléchargements, profil) en haut à droite */
 .main > .view > .vhead:first-child, .main > .rl-maint:first-child { padding-right: max(0px, calc(var(--pf-reserve, 0px) - 26px)); }
@@ -490,7 +490,6 @@ body.tb-off .app { height: 100vh !important; }
 .hacct:hover { border-color: color-mix(in srgb, var(--acc) 45%, var(--line)); background: rgba(10,12,18,.6); }
 .hacct .hav { position: relative; flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; font-family: var(--f-display); font-weight: 700; font-size: 15px; background: color-mix(in srgb, var(--acc) 26%, rgba(255,255,255,.06)); color: var(--acc-2); }
 .hacct .hav.off { background: rgba(255,255,255,.06); color: var(--ink-soft); }
-.hacct .hav.has-skin-face { background-color: rgba(10,12,18,.85); background-size: 800% 800%; background-position: 14.2857% 14.2857%; background-repeat: no-repeat; image-rendering: pixelated; border: 1px solid rgba(255,255,255,.18); overflow: hidden; }
 .hacct .hav svg { width: 17px; height: 17px; }
 .hacct .hav .dot { position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border-radius: 50%; background: #22c55e; border: 2px solid rgba(10,12,18,.9); }
 .hacct .htxt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
@@ -534,3 +533,9 @@ body.tb-off .app { height: 100vh !important; }
 .main:has(> #v-home:not([hidden])) > #v-home { flex: 1 1 auto; min-height: 0; }
 .htop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .htop .hacct { align-self: auto; }
+
+/* Encarts : couleur propre à chacun des 7 types + étiquette secondaire séparée par un point. */
+.card-labels { display: inline-flex; align-items: center; align-self: flex-start; flex-wrap: wrap; gap: 5px; max-width: 100%; }
+.card-labels .card-type { background: color-mix(in srgb, var(--card-type-color) 22%, transparent); color: var(--card-type-color); border: 1px solid color-mix(in srgb, var(--card-type-color) 55%, transparent); }
+.card-labels .card-label-separator { color: rgba(255,255,255,.78); font-weight: 800; }
+.card-labels .card-extra-label { color: rgba(255,255,255,.92); font-size: 11px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
