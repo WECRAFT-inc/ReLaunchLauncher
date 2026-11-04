@@ -149,6 +149,29 @@ export function NewsPage() {
     </>
   );
 }
+const CARD_TYPES = ["Event", "Shop", "Video", "Contenu", "Maj", "à découvrir", "réseaux"] as const;
+const CARD_TYPE_COLORS: Record<string, string> = {
+  event: "#ea580c",
+  shop: "#ca8a04",
+  video: "#dc2626",
+  contenu: "#7c3aed",
+  maj: "#16a34a",
+  "à découvrir": "#0284c7",
+  reseaux: "#db2777",
+  réseaux: "#db2777",
+};
+const normalizeCardType = (value: string) => value.trim().toLocaleLowerCase("fr-FR");
+function CardTypeTag({ type, label = "" }: { type: string; label?: string }) {
+  const normalized = normalizeCardType(type);
+  const knownType = CARD_TYPES.find((item) => normalizeCardType(item) === normalized);
+  const color = CARD_TYPE_COLORS[normalized] ?? CARD_TYPE_COLORS.contenu;
+  return (
+    <span className="ntags card-labels" style={{ "--card-type-color": color } as Css}>
+      <span className="ntag card-type">{knownType ?? "Contenu"}</span>
+      {label.trim() ? <><span className="card-label-separator" aria-hidden="true">·</span><span className="card-extra-label">{label.trim()}</span></> : null}
+    </span>
+  );
+}
 function NTags({ n }: { n: RelinkNews }) {
   return n.tags.length ? (
     <span className="ntags">
@@ -168,8 +191,15 @@ export function HomeCarousel() {
   const news = relink?.data?.news ?? [];
   // encarts du panneau d'abord ; à défaut, les actualités (chacune ouvre alors directement SON article, pas juste la page)
   const items = cards.length
-    ? cards.map((c) => ({ id: c.id, title: c.title, sub: c.text, tag: c.tag, open: c.open, img: c.img, newsId: c.newsId }))
-    : news.map((n) => ({ id: n.id, title: n.title, sub: n.date, tag: n.tags[0]?.label ?? "", open: "news", img: null as string | null, newsId: n.id as string | null }));
+    ? cards.map((c) => {
+        const legacyType = CARD_TYPES.find((item) => normalizeCardType(item) === normalizeCardType(c.tag));
+        return { id: c.id, title: c.title, sub: c.text, type: c.type || legacyType || "Contenu", tag: legacyType && !c.type ? "" : c.tag, open: c.open, img: c.img, newsId: c.newsId };
+      })
+    : news.map((n) => {
+        const firstTag = n.tags[0]?.label ?? "";
+        const legacyType = CARD_TYPES.find((item) => normalizeCardType(item) === normalizeCardType(firstTag));
+        return { id: n.id, title: n.title, sub: n.date, type: legacyType || "Contenu", tag: legacyType ? n.tags.slice(1).map((x) => x.label).join(" · ") : firstTag, open: "news", img: null as string | null, newsId: n.id as string | null };
+      });
   // images des encarts (bannières) : jamais chargées directement par l'interface (CSP), le processus principal les
   // télécharge et les renvoie en data: (voir RelinkClient.cardImage) ; tant que ce n'est pas prêt, dégradé de secours.
   const [imgs, setImgs] = useState<Record<string, string>>({});
@@ -207,11 +237,7 @@ export function HomeCarousel() {
           {items.map((x) => (
             <button key={x.id} className="ncard" onClick={() => (x.newsId ? show("news", { newsSel: x.newsId }) : show(x.open || "news"))}>
               <span className="sc" style={x.img && imgs[x.img] ? { backgroundImage: `url("${imgs[x.img]}")`, backgroundSize: "cover", backgroundPosition: "center" } : coverOf(x.id)}></span>
-              {x.tag ? (
-                <span className="ntags">
-                  <span className="ntag">{x.tag}</span>
-                </span>
-              ) : null}
+              <CardTypeTag type={x.type} label={x.tag} />
               <b>{x.title}</b>
               <small>{x.sub}</small>
             </button>
