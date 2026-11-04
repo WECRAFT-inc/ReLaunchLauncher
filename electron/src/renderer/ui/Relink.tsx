@@ -156,11 +156,10 @@ const CARD_TYPE_COLORS: Record<string, string> = {
   video: "#dc2626",
   contenu: "#7c3aed",
   maj: "#16a34a",
-  "à découvrir": "#0284c7",
+  adecouvrir: "#0284c7",
   reseaux: "#db2777",
-  réseaux: "#db2777",
 };
-const normalizeCardType = (value: string) => value.trim().toLocaleLowerCase("fr-FR");
+const normalizeCardType = (value: string) => value.trim().toLocaleLowerCase("fr-FR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
 function CardTypeTag({ type, label = "" }: { type: string; label?: string }) {
   const normalized = normalizeCardType(type);
   const knownType = CARD_TYPES.find((item) => normalizeCardType(item) === normalized);
