@@ -340,7 +340,24 @@ input[type="range"]{accent-color:var(--acc);width:100%}
 /* Accueil : bloc principal en bas à gauche, encarts collés au bord droit, le centre reste libre pour l'image de fond */
 /* L'accueil tient toujours dans la fenêtre, sans défilement : les encarts se compriment si la hauteur manque */
 #v-home{height:100%;min-height:0;container-type:inline-size}
-.home{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:minmax(0,1fr);column-gap:36px;align-items:end;height:100%;min-height:0;overflow:hidden}
+.home{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,42%);
+  grid-template-rows:minmax(0,1fr);
+  column-gap:clamp(12px,2vw,36px);
+  align-items:end;
+  height:100%;
+  min-height:0;
+  overflow:hidden;
+}
+
+.home>.hmain{
+  min-width:0;
+}
+
+.home.nocar{
+  grid-template-columns:minmax(0,1fr);
+}
 .home.nocar{grid-template-columns:auto}
 /* Encarts façon carrousel, en bas à droite, avec flèches, indicateur et défilement automatique */
 .hmeta{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
