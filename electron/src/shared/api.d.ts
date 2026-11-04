@@ -605,6 +605,9 @@ export interface RelinkNews {
    text: string;
    cta: string;
    open: string;
+   /** Type d’encart défini dans le PA (Event, Shop, Video, Contenu, Maj, à découvrir, réseaux). */
+   type: string;
+   /** Étiquette complémentaire affichée après le type. */
    tag: string;
    img: string | null;
    newsId: string | null;
