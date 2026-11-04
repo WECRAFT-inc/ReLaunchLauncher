@@ -1,422 +1,864 @@
-// Client du Worker ReLink (API publique /launcher/*), côté processus principal uniquement.
-// - Lecture seule : bootstrap, notifications (+ accusé de lecture). Aucune route /admin/*, aucun secret.
-// - Identifiant d'installation : UUID tiré au hasard une fois, gardé dans .wecraft\relaunch_install.json
-//   (sert aux cohortes de déploiement ; ce n'est PAS une identité de joueur).
-// - Chaque réponse est décodée champ par champ (types, longueurs, valeurs permises) ; ce qui ne correspond
-//   pas est ignoré. L'interface ne reçoit que ces objets nettoyés, jamais la réponse brute.
-// - En cas d'échec réseau, la dernière réponse valide (cache disque horodaté) reste affichée, signalée
-//   comme ancienne ; elle n'est jamais remplacée par des valeurs inventées.
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
-import type { RelinkBootstrap, RelinkCard, RelinkEvent, RelinkModpack, RelinkNews, RelinkNotification, RelinkPartner, RelinkServer, RelinkSkin, RelinkState } from "../../shared/api";
-import { parseServerAddress } from "../auth/offline";
-import { checkUrl, fetchJson, HttpError, type NetOptions } from "../net/download";
+// Contrat entre l'interface (processus de rendu) et le processus principal.
+// L'interface ne voit QUE cette API (window.wecraft), exposée par le preload : aucun accès direct
+// au disque, au réseau ni aux processus. Chaque action est métier (pas de « lire un fichier X »).
 
-export const WORKER_URL = "https://relink-auth.refugeemeraudien-direction.workers.dev";
-export const WORKER_HOSTS: ReadonlySet<string> = new Set([new URL(WORKER_URL).host]);
-export const CHANNELS_OK = ["stable", "beta", "interne"] as const;
-export type ReleaseChannel = (typeof CHANNELS_OK)[number];
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ID = /^[A-Za-z0-9_.:-]{1,100}$/;
-const MAX_JSON = 2 * 1024 * 1024;
+/** Thèmes de couleurs repris de la maquette ReLaunch × WeCraft et de launcher_config.json. */
+export type ThemeKey = "phenix" | "relink" | "aurore" | "glace";
 
-type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : {});
-const arr = (v: unknown, max = 200): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
-/** Texte nettoyé (caractères de contrôle retirés, longueur bornée) ; "" si absent. */
-export function str(v: unknown, max = 200): string {
-  return typeof v === "string" ? v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, max) : "";
-}
-const pick = (o: Obj, keys: string[], max = 200) => {
-  for (const k of keys) {
-    const s = str(o[k], max);
-    if (s) return s;
-  }
-  return "";
-};
-const bool = (v: unknown) => v === true;
-const num = (v: unknown, min = 0, max = 1e9) => (typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : 0);
-const id = (v: unknown) => (typeof v === "string" && ID.test(v) ? v : "");
-const date = (v: unknown) => {
-  const s = str(v, 40);
-  return s && !Number.isNaN(Date.parse(s)) ? new Date(s).toISOString() : "";
-};
-/** Couleur CSS simple (#hex) ; autre chose est refusé. */
-const color = (v: unknown) => (typeof v === "string" && /^#[0-9a-f]{3,8}$/i.test(v.trim()) ? v.trim() : "");
-const version = (v: unknown) => (typeof v === "string" && /^[0-9][0-9A-Za-z.+-]{0,39}$/.test(v.trim()) ? v.trim() : null);
+/** Liens externes autorisés : l'interface envoie un identifiant, jamais une adresse. */
+export type ExternalLinkId = "modrinth" | "releases" | "github";
 
-/** Action d'ouverture d'une carte ou d'une notification : une page connue du launcher, ou rien. */
-const VIEWS = new Set(["home", "wecraft", "relaunch", "welive", "live", "news", "discover", "favorites", "settings", "relink"]);
-export function openTarget(v: unknown): string {
-  const s = str(v, 40).toLowerCase();
-  return VIEWS.has(s) ? s : "";
-}
-
-const tags = (v: unknown): { label: string; color: string }[] =>
-  arr(v, 8)
-    .map((t) => (Array.isArray(t) ? { label: str(t[0], 30), color: color(t[1]) } : typeof t === "string" ? { label: str(t, 30), color: "" } : { label: str(obj(t)["label"] ?? obj(t)["n"], 30), color: color(obj(t)["color"] ?? obj(t)["c"]) }))
-    .filter((t) => t.label);
-
-export function decodeNews(v: unknown): RelinkNews | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const title = pick(o, ["title", "t"], 160);
-  if (!i || !title) return null;
-  return { id: i, title, body: pick(o, ["body", "text"], 4000), date: pick(o, ["date", "d"], 60), tags: tags(o["tags"]), cta: pick(o, ["cta"], 40), open: openTarget(o["open"] ?? o["go"]) };
-}
-export function decodeCard(v: unknown): RelinkCard | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const title = pick(o, ["title", "t", "n"], 120);
-  if (!i || !title) return null;
-  return {
-    id: i,
-    title,
-    text: pick(o, ["body", "text", "d", "desc"], 600),
-    cta: pick(o, ["cta"], 40),
-    open: openTarget(o["open"] ?? o["go"] ?? o["target"]),
-    type: pick(o, ["type", "kind"], 30),
-    tag: pick(o, ["tag", "label"], 60),
-    img: bannerIdOf(o["img"] ?? o["imageUrl"] ?? o["banner"]) || null,
-    /** Article Info & News que cet encart met en avant (le panneau peut lier un encart à un article publié). */
-    newsId: id(o["newsId"]) || null,
-  };
-}
-export function decodeServer(v: unknown): RelinkServer | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const n = pick(o, ["n", "name"], 80);
-  if (!i || !n) return null;
-  const st = str(o["state"], 20).toLowerCase();
-  return {
-    id: i,
-    name: n,
-    host: /^[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?$/.test(str(o["host"], 260)) ? str(o["host"], 260) : "",
-    state: st === "online" || st === "offline" || st === "maintenance" ? st : "unknown",
-    players: Math.round(num(o["players"], 0, 1e6)),
-    max: Math.round(num(o["max"], 0, 1e6)),
-    pack: id(o["pack"]),
-    event: id(o["event"]),
-    desc: pick(o, ["d", "desc", "description"], 200),
-    version: pick(o, ["v", "version", "mc"], 20),
-  };
-}
-/** Comptes hors-ligne d'un event : acceptés seulement si le Worker donne aussi une adresse de serveur valide. */
-function offlineOf(o: Obj): { allowOffline: boolean; offlineHost: string } {
-  const a = o["allowOffline"] === true ? parseServerAddress(o["offlineHost"]) : null;
-  return a ? { allowOffline: true, offlineHost: a.port === 25565 ? a.host : `${a.host}:${a.port}` } : { allowOffline: false, offlineHost: "" };
-}
-export function decodeEvent(v: unknown): RelinkEvent | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const n = pick(o, ["n", "name", "title"], 100);
-  if (!i || !n) return null;
-  return { id: i, name: n, desc: pick(o, ["d", "desc", "description", "body"], 1000), status: pick(o, ["status", "state"], 20), start: date(o["start"] ?? o["startsAt"] ?? o["date"]), end: date(o["end"] ?? o["endsAt"]), server: id(o["server"]), pack: id(o["pack"] ?? o["modpack"]), requireMicrosoft: o["requireMicrosoft"] === true, ...offlineOf(o) };
-}
-export function decodePartner(v: unknown): RelinkPartner | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const n = pick(o, ["n", "name"], 60);
-  if (!i || !n) return null;
-  const ch = str(o["ch"], 40);
-  return { id: i, name: n, channel: /^[A-Za-z0-9_]{1,40}$/.test(ch) ? ch : "", category: pick(o, ["cat", "category"], 40), featured: bool(o["featured"]), live: bool(o["live"]), viewers: Math.round(num(o["viewers"], 0, 1e8)) };
-}
-export function decodeModpack(v: unknown): RelinkModpack | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const n = pick(o, ["n", "name", "title"], 100);
-  if (!i || !n) return null;
-  return { id: i, name: n, desc: pick(o, ["d", "desc", "description"], 600), mc: pick(o, ["mc", "v", "minecraft"], 20), loader: pick(o, ["loader", "l"], 40), version: pick(o, ["version", "latest"], 40), event: id(o["event"]) || null, latest: decodeLatest(o["latestVersion"]) };
-}
-/** Identifiant de fichier d'une adresse /launcher/assets/<id> du Worker (relative ou complète). */
-function assetIdOf(v: unknown): string {
-  const s = str(v, 300);
-  const m = /^(?:https:\/\/[^/]+)?\/launcher\/assets\/([A-Za-z0-9_.:-]{1,100})$/.exec(s);
-  if (!m) return "";
-  if (s.startsWith("https://") && !WORKER_HOSTS.has(new URL(s).host)) return "";
-  return m[1]!;
-}
-/** Identifiant de bannière d'une adresse /launcher/banners/<id> du Worker (relative ou complète). */
-function bannerIdOf(v: unknown): string {
-  const s = str(v, 300);
-  const m = /^(?:https:\/\/[^/]+)?\/launcher\/banners\/([0-9a-f-]{1,100})$/i.exec(s);
-  if (!m) return "";
-  if (s.startsWith("https://") && !WORKER_HOSTS.has(new URL(s).host)) return "";
-  return m[1]!;
-}
-const hex64 = (v: unknown) => (typeof v === "string" && /^[0-9a-f]{64}$/i.test(v) ? v.toLowerCase() : "");
-function decodeLatest(v: unknown): RelinkModpack["latest"] {
-  const o = obj(v);
-  const fileId = assetIdOf(o["downloadUrl"]);
-  const ver = version(o["version"]);
-  const sha256 = hex64(o["sha256"]);
-  if (o["format"] !== "relaunch-pack" || !fileId || !ver || !sha256) return null;
-  const ov = obj(o["overrides"]);
-  const ovId = assetIdOf(ov["downloadUrl"]);
-  const ovSha = hex64(ov["sha256"]);
-  return {
-    id: fileId, version: ver, sha256, size: Math.round(num(o["size"], 0, 8 * 1024 * 1024)), locked: bool(o["locked"]), mandatory: bool(o["mandatory"]), changelog: str(o["changelog"], 4000),
-    overrides: ovId && ovSha ? { id: ovId, sha256: ovSha, size: Math.round(num(ov["size"], 0, 96 * 1024 * 1024)) } : null,
-  };
-}
-/** Fichier téléchargeable annoncé par le Worker (route /launcher/assets/{id}), avec son empreinte. */
-function decodeAsset(v: unknown): RelinkSkin["file"] {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const sha256 = typeof o["sha256"] === "string" && /^[0-9a-f]{64}$/i.test(o["sha256"]) ? o["sha256"].toLowerCase() : "";
-  if (!i || !sha256) return null;
-  return { id: i, sha256, size: Math.round(num(o["size"], 0, 64 * 1024 * 1024)), version: str(o["version"], 40) };
-}
-export function decodeSkin(v: unknown): RelinkSkin | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const n = pick(o, ["n", "name"], 60);
-  if (!i || !n) return null;
-  const u = obj(o["unlock"]);
-  const vs = obj(o["versions"]);
-  return {
-    id: i,
-    name: n,
-    desc: pick(o, ["d", "desc", "description"], 400),
-    unlock: { event: bool(u["event"]), shop: Math.round(num(u["shop"], 0, 1e7)), achievement: bool(u["achievement"]), premium: bool(u["premium"]) },
-    versions: { liquidGlass: bool(vs["liquidGlass"]), mat: bool(vs["mat"]) },
-    followsTheme: bool(o["followsTheme"]),
-    file: decodeAsset(o["file"] ?? o["asset"]),
-  };
-}
-export function decodeNotification(v: unknown): RelinkNotification | null {
-  const o = obj(v);
-  const i = id(o["id"]);
-  const title = pick(o, ["title", "t"], 160);
-  if (!i || !title) return null;
-  return { id: i, title, body: pick(o, ["body", "text"], 1000), open: openTarget(o["open"]), at: date(o["sendAt"] ?? o["createdAt"] ?? o["date"]) };
-}
-
-const list = <T>(v: unknown, f: (x: unknown) => T | null, max = 100): T[] => arr(v, max).map(f).filter((x): x is T => x !== null);
-
-export function decodeBootstrap(v: unknown): RelinkBootstrap {
-  const o = obj(v);
-  if (o["schemaVersion"] !== 1) throw new Error("Format de réponse du Worker inconnu.");
-  const m = obj(o["maintenance"]);
-  const up = obj(o["updates"]);
-  const ch = obj(up["channel"]);
-  const rel = ch["release"] === null || ch["release"] === undefined ? null : obj(ch["release"]);
-  const car = obj(o["carousel"]);
-  const level = str(m["level"], 10);
-  return {
-    generatedAt: date(o["generatedAt"]),
-    maintenance: { enabled: bool(m["enabled"]), level: level === "warn" || level === "danger" || level === "critical" ? level : "info", text: str(m["text"], 500), blockLaunch: bool(m["blockLaunch"]) },
-    updates: {
-      kill: bool(up["kill"]),
-      minVersion: version(up["minVersion"] ?? up["minimumVersion"]),
-      blockOld: up["blockOld"] !== false,
-      latest: version(ch["version"]),
-      paused: bool(ch["paused"]),
-      // une release absente = aucune mise à jour proposée à cette installation
-      release: rel ? { version: version(rel["version"]) ?? "", mandatory: bool(rel["mandatory"]), sha256: str(rel["sha256"], 64) } : null,
-    },
-    carousel: { count: Math.round(num(car["count"], 0, 5)) || 3, autoplay: car["autoplay"] !== false, speedSeconds: Math.round(num(car["speedSeconds"], 3, 60)) || 7 },
-    flags: list(o["flags"], (f) => {
-      const x = obj(f);
-      const k = str(x["key"], 60);
-      return k && /^[A-Za-z0-9_.-]+$/.test(k) && x["enabled"] === true ? k : null; // un flag « enabled: false » est ignoré
-    }),
-    cards: list(o["cards"], decodeCard, 20),
-    news: list(o["news"], decodeNews, 50),
-    skins: list(o["skins"], decodeSkin, 50),
-    modpacks: list(o["modpacks"], decodeModpack, 100),
-    servers: list(o["servers"], decodeServer, 100),
-    events: list(o["events"], decodeEvent, 50),
-    partners: list(o["partners"], decodePartner, 100),
-  };
-}
-
-export interface WorkerDeps {
+export interface AppInfo {
+  /** Version de l'application Electron (package.json). */
+  version: string;
+  /** Versions des composants, pour le diagnostic. */
+  electron: string;
+  chrome: string;
+  node: string;
+  platform: string;
+  arch: string;
+  /** Dossier des réglages WeCraft partagé avec la version Python (%APPDATA%\.wecraft). */
   dataDir: string;
-  net?: NetOptions;
-  userAgent: string;
-  now?: () => number;
+  /** Le dossier existe-t-il ? */
+  dataDirExists: boolean;
+  /** Thème lu dans launcher_config.json, s'il est lisible et connu ; sinon null. */
+  savedTheme: ThemeKey | null;
+  /** Temps écoulé entre le démarrage du processus Electron et la première demande de l'interface (ms). */
+  startupMs: number;
+  /** Lancé depuis l'exe portable (décompressé à chaque démarrage) ? */
+  portable: boolean;
+  /** Fichiers de réglages illisibles mis de côté depuis la dernière demande (à signaler une fois). */
+  invalidFiles: InvalidFileNotice[];
+  /** RAM proposée par défaut au lancement (Go), lue dans launcher_config.json. */
+  ram: number;
+  /** Réglages repris d'un ancien dossier au démarrage (copie). */
+  migrated: string[];
 }
 
-/** Erreur lisible pour l'interface (jamais la réponse brute). */
-export function explainWorkerError(e: unknown): string {
-  if (e instanceof HttpError) return e.status >= 500 ? `Le service ReLink répond mal (erreur ${e.status}).` : `Le service ReLink a refusé la demande (erreur ${e.status}).`;
-  const m = e instanceof Error ? e.message : String(e);
-  if (/abort|timeout/i.test(m)) return "Le service ReLink ne répond pas (délai dépassé).";
-  if (/Format de réponse/.test(m)) return m;
-  return "Service ReLink injoignable : vérifiez la connexion.";
+/** Fichier de réglages invalide : conservé à part (copie), jamais effacé. Noms seuls, dans dataDir. */
+export interface InvalidFileNotice {
+  name: string;
+  /** Nom de la copie mise de côté ; null si la copie a échoué. */
+  copyName: string | null;
 }
 
-export class RelinkClient {
-  private installId: string | null = null;
-  private state: RelinkState = { ok: false, stale: true, fetchedAt: null, error: null, data: null };
-  private inflight: Promise<RelinkState> | null = null;
-  private readonly now: () => number;
-  constructor(private readonly d: WorkerDeps) {
-    this.now = d.now ?? Date.now;
-  }
+/**
+ * Résultat d'un enregistrement de réglage. `reset` : le fichier était invalide ; il a été copié de côté
+ * (copyName) puis remplacé, les autres réglages sont donc revenus aux valeurs par défaut.
+ * « not-backed-up » : fichier invalide dont la copie a échoué, laissé tel quel.
+ */
+export type SettingResult =
+  | { ok: true; reset?: { name: string; copyName: string } }
+  | { ok: false; reason: "invalid" | "unreadable" | "not-backed-up" | "write-failed" | "locked" };
 
-  private get cacheFile() {
-    return path.join(this.d.dataDir, "cache", "relink_bootstrap.json");
-  }
-  private get inboxFile() {
-    return path.join(this.d.dataDir, "cache", "relink_notifications.json");
-  }
-
-  /** UUID de cette installation : créé une fois, jamais renouvelé (sauf fichier illisible). */
-  async install(): Promise<string> {
-    if (this.installId) return this.installId;
-    const f = path.join(this.d.dataDir, "relaunch_install.json");
-    try {
-      const v = obj(JSON.parse(await readFile(f, "utf8")))["installId"];
-      if (typeof v === "string" && UUID.test(v)) return (this.installId = v.toLowerCase());
-    } catch {
-      // pas encore créé
-    }
-    const idv = randomUUID();
-    await mkdir(this.d.dataDir, { recursive: true });
-    await writeAtomic(f, JSON.stringify({ installId: idv, note: "Identifiant d'installation ReLaunch (pas un compte) : cohortes de déploiement du service ReLink." }, null, 2));
-    return (this.installId = idv);
-  }
-
-  private opts(): NetOptions {
-    return { ...this.d.net, allowedHosts: WORKER_HOSTS, signal: AbortSignal.timeout(12000), headers: { "User-Agent": this.d.userAgent, Accept: "application/json" } };
-  }
-
-  /** Dernier état connu (cache), sans réseau. */
-  async cached(): Promise<RelinkState> {
-    if (this.state.data) return this.state;
-    try {
-      const c = obj(JSON.parse(await readFile(this.cacheFile, "utf8")));
-      const data = decodeBootstrap(c["raw"]);
-      this.state = { ok: true, stale: true, fetchedAt: typeof c["fetchedAt"] === "number" ? c["fetchedAt"] : null, error: null, data };
-    } catch {
-      // pas de cache
-    }
-    return this.state;
-  }
-
-  /** Bootstrap du Worker (toutes les données publiques du launcher). `force` : ignorer le délai de 60 s. */
-  async refresh(channel: ReleaseChannel = "stable", force = false): Promise<RelinkState> {
-    if (this.inflight) return this.inflight;
-    if (!force && this.state.fetchedAt && !this.state.stale && this.now() - this.state.fetchedAt < 60_000) return this.state;
-    this.inflight = (async () => {
-      await this.cached();
-      try {
-        const inst = await this.install();
-        const raw = await fetchJson(`${WORKER_URL}/launcher/bootstrap?channel=${channel}&installId=${inst}`, MAX_JSON, {}, this.opts());
-        const data = decodeBootstrap(raw);
-        const at = this.now();
-        this.state = { ok: true, stale: false, fetchedAt: at, error: null, data };
-        await mkdir(path.dirname(this.cacheFile), { recursive: true });
-        await writeAtomic(this.cacheFile, JSON.stringify({ fetchedAt: at, raw })).catch(() => undefined);
-      } catch (e) {
-        this.state = { ...this.state, ok: !!this.state.data, stale: true, error: explainWorkerError(e) };
-      }
-      return this.state;
-    })().finally(() => {
-      this.inflight = null;
-    });
-    return this.inflight;
-  }
-
-  /** Règles imposées par l'administration, d'après le dernier état connu (même ancien). */
-  policy(): { blockLaunch: boolean; maintenanceText: string; updatesKilled: boolean } {
-    const d = this.state.data;
-    return { blockLaunch: !!d?.maintenance.enabled && d.maintenance.blockLaunch, maintenanceText: d?.maintenance.text ?? "", updatesKilled: !!d?.updates.kill };
-  }
-
-  /** Une notification gardée plus longtemps que ça (sans être lue ni supprimée) disparaît toute seule. */
-  private static readonly NOTIF_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-
-  /** Enlève les notifications trop vieilles (sans date connue : jamais expirées, pour ne rien perdre par erreur). */
-  private pruneExpired(items: RelinkNotification[]): RelinkNotification[] {
-    const now = this.now();
-    return items.filter((n) => !n.at || now - Date.parse(n.at) < RelinkClient.NOTIF_MAX_AGE_MS);
-  }
-
-  /**
-   * Notifications : relève les nouvelles, les ENREGISTRE dans la boîte locale, puis seulement envoie l'accusé
-   * de lecture (ACK) au Worker. Renvoie la boîte (les plus récentes d'abord), amputée de celles trop anciennes.
-   */
-  async notifications(channel: ReleaseChannel = "stable"): Promise<{ items: RelinkNotification[]; error: string | null }> {
-    let box = await this.inbox();
-    let error: string | null = null;
-    try {
-      const inst = await this.install();
-      const raw = obj(await fetchJson(`${WORKER_URL}/launcher/notifications?deviceId=${inst}&channel=${channel}`, MAX_JSON, {}, this.opts()));
-      const fresh = list(raw["notifications"], decodeNotification, 50).filter((n) => !box.some((b) => b.id === n.id));
-      if (fresh.length) for (const n of fresh) await this.ack(n.id, inst).catch(() => undefined); // redemandé au prochain relevé si l'ACK échoue
-      box = this.pruneExpired([...fresh.map((n) => ({ ...n, at: n.at || new Date(this.now()).toISOString() })), ...box]).slice(0, 100);
-      await mkdir(path.dirname(this.inboxFile), { recursive: true });
-      await writeAtomic(this.inboxFile, JSON.stringify(box));
-    } catch (e) {
-      error = explainWorkerError(e);
-    }
-    return { items: box, error };
-  }
-
-  /** Supprime une notification de la boîte locale (définitif : elle n'a pas de raison de revenir, elle a déjà été acquittée au Worker). */
-  async dismissNotification(notifId: string): Promise<RelinkNotification[]> {
-    const box = (await this.inbox()).filter((n) => n.id !== notifId);
-    await mkdir(path.dirname(this.inboxFile), { recursive: true });
-    await writeAtomic(this.inboxFile, JSON.stringify(box)).catch(() => undefined);
-    return box;
-  }
-
-  private async inbox(): Promise<RelinkNotification[]> {
-    try {
-      return this.pruneExpired(list(JSON.parse(await readFile(this.inboxFile, "utf8")), decodeNotification, 100));
-    } catch {
-      return [];
-    }
-  }
-
-  private async ack(notificationId: string, deviceId: string): Promise<void> {
-    const url = checkUrl(`${WORKER_URL}/launcher/notifications/${encodeURIComponent(notificationId)}/ack`, WORKER_HOSTS).href;
-    const f = this.d.net?.fetch as unknown as typeof fetch | undefined;
-    const res = await (f ?? fetch)(url, {
-      method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(10000),
-      headers: { "Content-Type": "application/json", "User-Agent": this.d.userAgent },
-      body: JSON.stringify({ deviceId }),
-    });
-    await res.body?.cancel().catch(() => undefined);
-    if (!res.ok) throw new HttpError(url, res.status);
-  }
-
-  /** Adresse d'un fichier annoncé par le Worker (jamais une adresse fournie par l'interface). */
-  assetUrl(assetId: string, signature = false): string {
-    if (!ID.test(assetId)) throw new Error("Identifiant de fichier invalide.");
-    return `${WORKER_URL}/launcher/assets/${encodeURIComponent(assetId)}${signature ? "?signature=1" : ""}`;
-  }
-
-  /**
-   * Image d'un encart (bannière), en data: — jamais une adresse distante donnée directement à l'interface
-   * (CSP : connect-src 'none' côté renderer, voir index.html), donc le processus principal la télécharge ici.
-   */
-  async cardImage(bannerId: string): Promise<string | null> {
-    if (!/^[0-9a-f-]{1,100}$/i.test(bannerId)) return null;
-    try {
-      const url = checkUrl(`${WORKER_URL}/launcher/banners/${encodeURIComponent(bannerId)}`, WORKER_HOSTS).href;
-      const f = this.d.net?.fetch as unknown as typeof fetch | undefined;
-      const res = await (f ?? fetch)(url, { redirect: "error", signal: AbortSignal.timeout(10000), headers: { "User-Agent": this.d.userAgent, Accept: "image/*" } });
-      if (!res.ok) return null;
-      const type = (res.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
-      if (!/^image\/(png|jpe?g|webp|gif)$/.test(type)) return null;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > 4 * 1024 * 1024) return null; // bannière anormalement lourde : refusée plutôt que transmise telle quelle
-      return `data:${type};base64,${buf.toString("base64")}`;
-    } catch {
-      return null;
-    }
-  }
+/** Instance affichée par l'interface (lot E2). Aucun chemin : `id` est opaque. */
+export interface InstanceView {
+  id: string;
+  /** Nom affiché (réglage par instance, sinon nom lu dans l'instance). */
+  name: string;
+  source: "WeCraft" | "CurseForge" | "Modrinth" | "Prism";
+  version: string | null;
+  loader: "Fabric" | "Forge" | "NeoForge" | "Quilt" | null;
+  loaderVersion: string | null;
+  ram: number | null;
+  fav: boolean;
+  /** WePack créé par WeCraft (wecraft_modpack.json) : modifiable dans Découvrir (lot E7). */
+  modpack: boolean;
+  /** Icône choisie : dégradé + symbole de la bibliothèque, ou image importée (adresse app://). */
+  icon: InstanceIcon | null;
+  /** Fond choisi (adresse app://), copié dans .wecraft\backgrounds. */
+  background: string | null;
+  /** Modpack d'événement (wecraft_event.json) : seuls ses packs de ressources et shaders se modifient. */
+  event: { id: string; name: string } | null;
+  /** Dernière partie (date de logs/latest.log, écrit par le jeu) ; null si jamais lancée. */
+  lastPlayed: number | null;
 }
 
-async function writeAtomic(file: string, text: string): Promise<void> {
-  const tmp = `${file}.tmp`;
-  await writeFile(tmp, text, "utf8");
-  await rename(tmp, file);
+export type ContentKind = "mod" | "resourcepack" | "shader";
+export interface ContentItem {
+  kind: ContentKind;
+  /** Nom du fichier (ou du dossier) dans mods/, resourcepacks/ ou shaderpacks/. */
+  file: string;
+  name: string;
+  version: string;
+  disabled: boolean;
+  dir: boolean;
+  size: number;
+  /** Fourni par le modpack de l'instance. */
+  pack: boolean;
+  /** Imposé par un événement : ni désactivable ni retirable. */
+  locked: boolean;
 }
+export interface ContentList {
+  items: ContentItem[];
+  truncated: boolean;
+  event: boolean;
+  pack: { name: string; version: string; source: string; counts: Record<ContentKind, number> } | null;
+}
+export interface ContentMeta {
+  title: string;
+  slug: string;
+  /** Adresse app:// (image Modrinth vérifiée) ou null. */
+  icon: string | null;
+  author: string;
+  version: string;
+}
+export type ContentResult = { ok: true; file?: string } | { ok: false; message: string };
+export interface WorldView {
+  folder: string;
+  name: string;
+  last: number;
+}
+export interface FileEntry {
+  name: string;
+  dir: boolean;
+  size: number;
+  mtime: number;
+}
+
+export interface EventPackView {
+  name: string;
+  official: boolean;
+  enabled: boolean;
+}
+export interface EventInfo {
+  name: string;
+  resourcepacks: EventPackView[];
+  shaders: EventPackView[];
+  shader: string | null;
+  defaultShader: string | null;
+  /** Le joueur peut changer les packs de ressources (false : pack d'event verrouillé, shaders seulement). */
+  resourcepacksEditable: boolean;
+}
+export type EventResult = { ok: true } | { ok: false; message: string };
+
+export type InstanceIcon = { kind: "gen"; c: [string, string]; sym: string | null } | { kind: "file"; url: string };
+/** Icône à enregistrer : dégradé + symbole, ou nom renvoyé par `media.makeIcon`. */
+export type IconChoice = { c: [string, string]; sym: string | null } | { file: string };
+
+/** Réglages d'une instance (comme la fenêtre « Réglages de l'instance » de la version Python). */
+export interface InstanceEdit {
+  /** Nom affiché ; vide = nom d'origine. Le dossier n'est jamais renommé. */
+  name: string;
+  mc: string;
+  loader: "Vanilla" | "Fabric" | "NeoForge" | "Forge" | "Quilt";
+  loaderVersion: string | null;
+  /** null = RAM proposée par défaut. */
+  ram: number | null;
+}
+
+/** « Créer un WePack » > « Sur mesure » (instance vide, installée au premier lancement). */
+export interface CreateInstanceRequest {
+  name: string;
+  mc: string;
+  loader: "Vanilla" | "Fabric" | "NeoForge" | "Forge" | "Quilt";
+  /** null : version stable choisie au lancement. */
+  loaderVersion: string | null;
+  icon?: IconChoice | null;
+}
+export type CreateInstanceResult = { ok: true; id: string } | { ok: false; reason: "invalid" | "exists" | "write-failed"; name?: string };
+export interface LoaderVersionItem {
+  version: string;
+  stable: boolean;
+  recommended: boolean;
+}
+export type LoaderVersionList = { ok: true; versions: LoaderVersionItem[] } | { ok: false; message: string };
+
+export interface ScreenshotItem {
+  token: string;
+  name: string;
+  url: string;
+}
+export type BackgroundResult = { ok: true; url: string | null } | { ok: false; message?: string; canceled?: true };
+export type IconImportResult = { ok: true; key: string; ext: string; width: number; height: number; url: string } | { ok: false; message?: string; canceled?: true };
+export type MakeIconResult = { ok: true; icon: IconChoice; url: string } | { ok: false; message: string };
+
+export interface ShaderPrefsView {
+  /** Appliquer au lancement (sinon rien ne change dans les instances). */
+  on: boolean;
+  primary: string | null;
+  secondary: string | null;
+}
+
+export interface LogEntry {
+  time: string;
+  level: "error" | "warn" | "info";
+  origin: string;
+  text: string;
+  /** Niveau déduit du texte (journal sans niveau écrit). */
+  guessed: boolean;
+}
+
+export interface InstanceList {
+  instances: InstanceView[];
+  /** Instances masquées (réglage de la version Python), seulement comptées. */
+  hidden: number;
+}
+
+/** Étapes d'un lancement (lot E4), dans l'ordre ; « accord » : réponse de l'utilisateur attendue. */
+export type LaunchPhase = "fermeture" | "accord" | "installation" | "profil" | "ouverture" | "termine" | "erreur";
+
+/** État réel d'un lancement : rien n'est estimé ni simulé. */
+export interface LaunchStatus {
+  job: string;
+  phase: LaunchPhase;
+  /** Étape en cours, ou message d'erreur. */
+  message: string;
+  /** Fichiers réellement téléchargés / à télécharger dans l'étape en cours ; null si inconnu. */
+  progress: { done: number; total: number } | null;
+  notes: string[];
+  /** Nom du profil préparé (une fois le profil écrit et vérifié). */
+  profile: string | null;
+  /** Launcher officiel ouvert ? null tant que ce n'est pas fait. */
+  opened: boolean | null;
+}
+
+export type LaunchStartResult = { ok: true; job: string; offline?: boolean; viaOfficial?: boolean; /** Serveur à rejoindre à la main : le launcher officiel ne peut pas s'y connecter seul. */ join?: string } | { ok: false; reason: "busy" | "invalid" | "no-version" | "maintenance" | "login" | "pack" | "pack-integrity" | "minecraft" | "microsoft" | "event-microsoft" | "event-relink" | "offline-event-only" | "offline-not-allowed" };
+
+/** Suppression d'instance (lot E8) : dossier envoyé à la corbeille, jamais effacé définitivement. */
+export type DeleteResult =
+  | { ok: true; metaForgotten: boolean }
+  | { ok: false; reason: "invalid" | "refused" | "busy" | "trash-failed" };
+
+/** Vérification des mises à jour (lot E5). `auto` : installation automatique possible (sinon page de la release). */
+export type UpdateCheck =
+  | { state: "none"; current: string; latest: string | null }
+  | { state: "available"; current: string; latest: string; notes: string; auto: boolean }
+  | { state: "error"; message: string };
+
+/** Avancement réel du téléchargement de la mise à jour (octets reçus). */
+export interface UpdateStatus {
+  phase: "idle" | "download" | "restart" | "error";
+  done: number;
+  total: number;
+  message: string;
+}
+
+/** Lot E7 : modpacks Modrinth. */
+export interface ContentExtra {
+  project_id: string;
+  title: string;
+  type: "resourcepack" | "shader";
+}
+export interface ModpackRoot {
+  project_id: string;
+  title: string;
+}
+export interface ModpackHit {
+  id: string;
+  title: string;
+  author: string;
+  description: string;
+  downloads: number;
+  categories: string[];
+  slug: string | null;
+  /** Icône servie par ReLaunch (app://), null = image de remplacement. */
+  icon: string | null;
+}
+export type ModpackSearch = { ok: true; total: number; hits: ModpackHit[] } | { ok: false; message: string };
+export interface ModpackJob {
+  id: string;
+  phase: "en-cours" | "termine" | "erreur";
+  message: string;
+  done: number;
+  total: number;
+  warnings: string[];
+}
+export type ModpackStartResult = { ok: true; job: string } | { ok: false; reason: "busy" | "invalid" | "empty" | "exists" | "unchanged"; name?: string };
+export interface ModpackEditInfo {
+  id: string;
+  name: string;
+  mc: string;
+  loader: string;
+  selected: ModpackRoot[];
+  old: { project_id: string; title: string; dependency: boolean; required_by: string[] }[];
+}
+export interface PackRowView {
+  id: string;
+  title: string;
+  kind: "root" | "missing" | "dep" | "orphan";
+  parents: string[];
+  note: string;
+  tone: "warn" | "orphan" | "dep" | "muted";
+}
+export interface ModpackQuery {
+  query: string;
+  mc: string;
+  loader: string;
+  offset?: number;
+  categories?: string[];
+  envs?: string[];
+  sort?: string | null;
+}
+
+/** Pages Modrinth (grosse mise à jour). */
+export type ProjectType = "modpack" | "mod" | "resourcepack" | "shader";
+export interface ProjectHit {
+  id: string;
+  title: string;
+  author: string;
+  description: string;
+  downloads: number;
+  follows: number;
+  categories: string[];
+  slug: string | null;
+  type: ProjectType | null;
+  /** Icône servie par ReLaunch (app://), null = image de remplacement. */
+  icon: string | null;
+  banner: string | null;
+  updated: string | null;
+  clientSide: "required" | "optional" | "unsupported" | null;
+  serverSide: "required" | "optional" | "unsupported" | null;
+  mcVersions: string[];
+}
+export type ProjectSearch = { ok: true; total: number; hits: ProjectHit[] } | { ok: false; message: string };
+export interface ProjectQuery {
+  type: ProjectType;
+  query: string;
+  mc: string;
+  loader: string;
+  sort: string | null;
+  offset: number;
+  categories: string[];
+}
+/** Description convertie en blocs sûrs par le processus principal (jamais de HTML). */
+export type MdInline =
+  | { t: "text"; v: string }
+  | { t: "b"; c: MdInline[] }
+  | { t: "i"; c: MdInline[] }
+  | { t: "s"; c: MdInline[] }
+  | { t: "code"; v: string }
+  | { t: "a"; token: string | null; c: MdInline[] }
+  | { t: "img"; src: string | null; alt: string }
+  | { t: "br" };
+export type MdBlock =
+  | { t: "h"; level: 1 | 2 | 3 | 4; c: MdInline[] }
+  | { t: "p"; c: MdInline[] }
+  | { t: "ul" | "ol"; items: MdInline[][] }
+  | { t: "quote"; c: MdInline[] }
+  | { t: "pre"; v: string }
+  | { t: "hr" };
+export interface ProjectView {
+  id: string;
+  slug: string | null;
+  type: ProjectType | null;
+  title: string;
+  description: string;
+  body: MdBlock[];
+  icon: string | null;
+  author: string | null;
+  categories: string[];
+  extraCategories: string[];
+  loaders: string[];
+  mcVersions: string[];
+  clientSide: "required" | "optional" | "unsupported" | null;
+  serverSide: "required" | "optional" | "unsupported" | null;
+  downloads: number;
+  followers: number;
+  published: string | null;
+  updated: string | null;
+  license: { id: string | null; name: string | null; token: string | null } | null;
+  gallery: { url: string; title: string | null; description: string | null }[];
+  /** Liens officiels (jetons ouverts dans le navigateur par le processus principal). */
+  links: { label: string; token: string }[];
+  page: string | null;
+}
+export interface ProjectVersion {
+  id: string;
+  name: string;
+  number: string;
+  channel: "release" | "beta" | "alpha";
+  mcVersions: string[];
+  loaders: string[];
+  published: string | null;
+  downloads: number;
+  file: { name: string; size: number } | null;
+  dependencies: number;
+}
+
+export interface WeCraftApi {
+  app: {
+    getInfo(): Promise<AppInfo>;
+    /** L'interface est affichée : valide une mise à jour en attente (mark_update_healthy). */
+    rendered(): Promise<void>;
+    /** Ouvre le dossier des réglages (%APPDATA%\.wecraft) dans l'Explorateur. */
+    openDataDir(): Promise<boolean>;
+  };
+  settings: {
+    setTheme(theme: ThemeKey): Promise<SettingResult>;
+    /** RAM proposée par défaut au lancement (1 à 16 Go), clé « ram » de launcher_config.json. */
+    setRam(ram: number): Promise<boolean>;
+    /** Shaders préférés et noms des packs trouvés dans les instances (pour les proposer). */
+    shaders(): Promise<{ prefs: ShaderPrefsView; known: string[] }>;
+    setShaders(p: ShaderPrefsView): Promise<boolean>;
+  };
+  instances: {
+    /** `rescan` : relire aussi les autres launchers tout de suite (sinon au plus toutes les 60 s). */
+    list(rescan?: boolean): Promise<InstanceList>;
+    setFavorite(id: string, fav: boolean): Promise<SettingResult>;
+    /** Envoie l'instance à la corbeille. `confirmed` doit être true (confirmation affichée par l'interface). */
+    remove(id: string, confirmed: true): Promise<DeleteResult>;
+    /** Nouvelle instance vide (dossier et wecraft.json créés par le processus principal). */
+    create(req: CreateInstanceRequest): Promise<CreateInstanceResult>;
+    /** Versions du loader pour cette version de Minecraft ; ok:false = combinaison impossible ou hors ligne. */
+    loaderVersions(loader: string, mc: string): Promise<LoaderVersionList>;
+    /** Nom affiché, version, loader, RAM (instances_meta.json ; le dossier n'est pas modifié). */
+    edit(id: string, e: InstanceEdit): Promise<SettingResult>;
+    /** null = icône par défaut. */
+    setIcon(id: string, icon: IconChoice | null): Promise<SettingResult>;
+    /** Captures du dossier « screenshots » de l'instance, les plus récentes d'abord. */
+    screenshots(id: string): Promise<ScreenshotItem[]>;
+    /** Fond : capture listée (`shot` + jeton), image du PC (`import`, fenêtre du système) ou aucun (`clear`). */
+    setBackground(id: string, how: "shot" | "import" | "clear", token?: string): Promise<BackgroundResult>;
+    /** Mondes (dossier saves), les plus récents d'abord. */
+    worlds(id: string): Promise<WorldView[]>;
+    /** Premier niveau du dossier de jeu de l'instance. */
+    files(id: string): Promise<FileEntry[]>;
+    /** Ouvre le dossier de l'instance (ou l'un de ses sous-dossiers, par son nom) dans l'Explorateur. */
+    openFolder(id: string, sub?: string): Promise<boolean>;
+    /** Fin de logs/latest.log du jeu, données sensibles masquées. */
+    gameLog(id: string): Promise<{ lines: string[]; truncated: boolean; at: number | null }>;
+  };
+  relink: {
+    /** Données publiques du service ReLink (cache si hors ligne). `force` : relever tout de suite. */
+    state(force?: boolean): Promise<RelinkState>;
+    /** Notifications reçues (enregistrées sur ce PC, puis accusé de lecture envoyé au service). */
+    notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
+    /** Charge une bannière publique ReLink via le processus principal. */
+cardImage(bid: string): Promise<string | null>;
+  };
+  microsoft: {
+    state(): Promise<MicrosoftState>;
+    /** Ouvre la connexion Microsoft dans le navigateur ; lie ensuite le compte Minecraft au compte ReLink. */
+    login(): Promise<MicrosoftState>;
+    logout(): Promise<MicrosoftState>;
+    /** « Ouvrir le launcher officiel pour jouer » (sinon ReLaunch démarre le jeu lui-même). */
+    openOfficial(): Promise<boolean>;
+    setOpenOfficial(on: boolean): Promise<boolean>;
+  };
+  friends: {
+    state(): Promise<FriendsState>;
+    request(pseudo: string): Promise<FriendsActionResult>;
+    accept(id: string): Promise<FriendsActionResult>;
+    remove(id: string): Promise<FriendsActionResult>;
+    /** Prépare le lancement de l'instance (event ou modpack) où l'ami joue ; le jeu s'y connecte tout seul quand c'est possible. */
+    join(id: string): Promise<FriendJoinResult>;
+    setShare(on: boolean): Promise<boolean>;
+    /** Le joueur utilise le launcher (pour le statut « absent »). */
+    ping(): Promise<void>;
+  };
+  offline: {
+    state(): Promise<OfflineState>;
+    /** Vérifie le pseudo auprès de Mojang (refusé s'il appartient à un compte officiel), l'enregistre et l'utilise pour jouer. */
+    set(name: string): Promise<OfflineResult>;
+    /** Utiliser (ou non) le compte hors-ligne enregistré, sans l'oublier. */
+    setActive(on: boolean): Promise<OfflineResult>;
+    /** Oublie le compte hors-ligne. */
+    remove(): Promise<OfflineResult>;
+  };
+  account: {
+    state(): Promise<AccountState>;
+    /** Ouvre Discord dans le navigateur ; se termine quand le joueur a répondu (5 min au plus). */
+    login(): Promise<AccountState>;
+    logout(): Promise<AccountState>;
+    refresh(): Promise<AccountState>;
+    /** Fenêtre « Ouvrir » : PNG 64 × 64 envoyé comme skin Minecraft. */
+    uploadMinecraftSkin(model: "classic" | "slim"): Promise<AccountResult>;
+    removeMinecraftSkin(): Promise<AccountResult>;
+    /** « Skin ReLink en jeu » : installation automatique du mod de skins dans les instances moddées. */
+    skinMod(): Promise<boolean>;
+    setSkinMod(on: boolean): Promise<boolean>;
+    /** Image du skin Minecraft actuel (data:), ou null. */
+    minecraftSkinImage(): Promise<string | null>;
+    /** Achète un skin du launcher avec des Éclats. */
+    buySkin(relinkId: string): Promise<AccountResult>;
+    /** Débloque un skin avec un code (event, succès, partenaire…). */
+    redeemCode(code: string): Promise<AccountResult & { skinId?: string; skinName?: string }>;
+    /** Avantages & Quêtes du joueur (lu sur ReLink). */
+    quests(): Promise<QuestsState>;
+  };
+  skins: {
+    list(): Promise<InstalledSkin[]>;
+    /** Fenêtre « Ouvrir » : fichier .rlskin du PC, installé en aperçu local (non signé). */
+    importLocal(): Promise<SkinResult>;
+    /** Skin publié sur ReLink (fichier vérifié : SHA-256 + signature Ed25519). */
+    install(relinkId: string): Promise<SkinResult>;
+    remove(key: string): Promise<boolean>;
+  };
+  win: {
+    minimize(): Promise<void>;
+    /** Agrandit ou restaure (quitte d'abord le plein écran) ; renvoie l'état agrandi. */
+    maximize(): Promise<boolean>;
+    close(): Promise<void>;
+    state(): Promise<{ maximized: boolean; fullscreen: boolean }>;
+  };
+  content: {
+    /** Mods, packs de ressources et shaders de l'instance (lecture locale, rapide). */
+    list(id: string): Promise<ContentList | null>;
+    /** Icônes, noms, auteurs et versions trouvés sur Modrinth, par « genre/fichier ». */
+    details(id: string): Promise<Record<string, ContentMeta>>;
+    /** Active ou désactive (renommage .disabled). */
+    toggle(id: string, kind: ContentKind, file: string, on: boolean): Promise<ContentResult>;
+    /** Retire (corbeille). */
+    remove(id: string, kind: ContentKind, file: string): Promise<ContentResult>;
+  };
+  logs: {
+    /** Fin des journaux (relaunch.log, lancement.log, update.log), les plus récentes d'abord, textes masqués. */
+    read(): Promise<{ entries: LogEntry[]; truncated: boolean }>;
+    /** Ouvre le dossier des journaux dans l'Explorateur. */
+    openDir(): Promise<boolean>;
+    /** Copie dans le presse-papiers, après masquage des données sensibles. */
+    copy(text: string): Promise<boolean>;
+  };
+  events: {
+    /** Packs de ressources et shaders d'un modpack d'événement (null si ce n'en est pas un). */
+    info(id: string): Promise<EventInfo | null>;
+    setPack(id: string, name: string, on: boolean): Promise<EventResult>;
+    setShader(id: string, name: string | null): Promise<EventResult>;
+    /** Retire (corbeille) un pack ajouté par le joueur ; les fichiers officiels sont refusés. */
+    remove(id: string, kind: "resourcepack" | "shader", name: string): Promise<EventResult>;
+  };
+  media: {
+    /** Fenêtre « Ouvrir » du système : image PNG ou JPEG gardée avant recadrage. */
+    importIcon(): Promise<IconImportResult>;
+    /** Recadre l'image importée en icône carrée (256 px). */
+    makeIcon(key: string, ext: string, crop: { zoom: number; cx: number; cy: number }): Promise<MakeIconResult>;
+  };
+  launch: {
+    /** Prépare l'instance puis ouvre le launcher officiel. `ram` en Go (1 à 16) ; `repair` : tout réinstaller. */
+    start(id: string, opts: { ram: number; repair?: boolean }): Promise<LaunchStartResult>;
+    status(job: string): Promise<LaunchStatus | null>;
+    /** Réponse à « forcer la fermeture du launcher officiel ? » (phase « accord »). */
+    answer(job: string, force: boolean): Promise<boolean>;
+  };
+  modpacks: {
+    /** Versions de Minecraft (releases), la plus récente d'abord ; null si la liste est inaccessible. */
+    versions(): Promise<string[] | null>;
+    search(q: ModpackQuery): Promise<ModpackSearch>;
+    /** `extras` : packs de ressources et shaders ajoutés à l'instance après les mods (dernière version compatible). */
+    create(p: { name: string; mc: string; loader: string; roots: ModpackRoot[]; extras?: ContentExtra[] }): Promise<ModpackStartResult>;
+    /** Ajoute des mods (et leurs dépendances obligatoires) à une instance qui n'est pas un WePack. */
+    addMods(id: string, roots: ModpackRoot[]): Promise<ModpackStartResult>;
+    editInfo(id: string): Promise<ModpackEditInfo | null>;
+    rows(id: string | null, selected: ModpackRoot[]): Promise<PackRowView[]>;
+    edit(id: string, selected: ModpackRoot[]): Promise<ModpackStartResult>;
+    status(job: string): Promise<ModpackJob | null>;
+    /** Page Modrinth d'un mod (adresse construite par le processus principal). */
+    openPage(slug: string): Promise<boolean>;
+    /** Fenêtre « Ouvrir » du système : fichier .mrpack installé dans une nouvelle instance (suivi par status). */
+    importFile(): Promise<ModpackStartResult | { ok: false; reason: "canceled" }>;
+    /** Version d'un modpack Modrinth installée dans une nouvelle instance. */
+    installVersion(versionId: string, name?: string): Promise<ModpackStartResult>;
+    /** Modpacks officiels ReLaunch déjà installés sur ce PC. */
+    officialInstalled(): Promise<OfficialInstalled[]>;
+    /** Installe ou met à jour un modpack officiel du catalogue ReLink (fichiers signés). */
+    installOfficial(relinkId: string): Promise<ModpackStartResult>;
+    /** Fenêtre « Enregistrer » : exporte l'instance en pack partageable (.rlpack). */
+    exportShared(instanceId: string): Promise<{ ok: boolean; message: string; canceled?: boolean }>;
+  };
+  projects: {
+    search(q: ProjectQuery): Promise<ProjectSearch>;
+    get(id: string): Promise<ProjectView | { error: string }>;
+    versions(id: string, mc?: string, loader?: string): Promise<ProjectVersion[] | { error: string }>;
+    /** Ouvre un lien (jeton reçu dans une page de projet) dans le navigateur. */
+    openLink(token: string): Promise<boolean>;
+    /** Fichiers déjà présents dans resourcepacks / shaderpacks de l'instance (noms seuls). */
+    installed(instanceId: string, type: "resourcepack" | "shader"): Promise<string[]>;
+    /** Télécharge (SHA-512 vérifié) la version d'un pack de ressources ou d'un shader dans l'instance. */
+    installFile(instanceId: string, versionId: string): Promise<{ ok: true; file: string; dir: string } | { ok: false; message: string }>;
+  };
+  discord: {
+    /** askNow : demander l'accord (premier démarrage de cette version). */
+    state(): Promise<{ enabled: boolean; askNow: boolean }>;
+    /** `answer` : réponse à la question du premier démarrage (sinon simple réglage). */
+    set(on: boolean, answer?: boolean): Promise<boolean>;
+  };
+  update: {
+    check(manual: boolean): Promise<UpdateCheck>;
+    install(): Promise<boolean>;
+    status(): Promise<UpdateStatus>;
+    /** Ouvre la page de la release sur GitHub (installation à la main). */
+    openPage(): Promise<boolean>;
+    /** « Participer à la bêta » : reçoit aussi les préversions. */
+    beta(): Promise<boolean>;
+    setBeta(on: boolean): Promise<boolean>;
+  };
+  links: {
+    open(id: ExternalLinkId): Promise<boolean>;
+  };
+}
+
+// ---------------------------------------------------------------- service ReLink (Worker, lecture seule)
+export interface RelinkNews {
+  id: string;
+  title: string;
+  body: string;
+  date: string;
+  tags: { label: string; color: string }[];
+  cta: string;
+  /** Page du launcher à ouvrir ("" = aucune). */
+  open: string;
+}
+ export interface RelinkCard {
+   id: string;
+   title: string;
+   text: string;
+   cta: string;
+   open: string;
+   /** Type d’encart défini dans le PA (Event, Shop, Video, Contenu, Maj, à découvrir, réseaux). */
+   type: string;
+   /** Étiquette complémentaire affichée après le type. */
+   tag: string;
+   img: string | null;
+   newsId: string | null;
+ }
+export interface RelinkServer {
+  id: string;
+  name: string;
+  host: string;
+  state: "online" | "offline" | "maintenance" | "unknown";
+  players: number;
+  max: number;
+  pack: string;
+  event: string;
+  desc: string;
+  version: string;
+}
+export interface RelinkEvent {
+  id: string;
+  name: string;
+  desc: string;
+  status: string;
+  start: string;
+  end: string;
+  server: string;
+  pack: string;
+  /** Event réservé au compte Microsoft connecté dans ReLaunch (lié au compte ReLink). */
+  requireMicrosoft: boolean;
+  /** Event ouvert aux comptes hors-ligne (réglé dans le panel admin) ; sinon ils ne peuvent pas y jouer. */
+  allowOffline: boolean;
+  /** Serveur où les comptes hors-ligne sont connectés automatiquement au lancement (« domaine[:port] »), "" sinon. */
+  offlineHost: string;
+}
+export interface RelinkPartner {
+  id: string;
+  name: string;
+  channel: string;
+  category: string;
+  featured: boolean;
+  live: boolean;
+  viewers: number;
+}
+export interface RelinkModpack {
+  id: string;
+  name: string;
+  desc: string;
+  mc: string;
+  loader: string;
+  version: string;
+  /** Pack d'event (lié à un event ReLaunch). */
+  event: string | null;
+  /** Dernière version signée (manifeste relaunch-pack) ; null tant qu'aucune n'est publiée. */
+  latest: { id: string; version: string; sha256: string; size: number; locked: boolean; mandatory: boolean; changelog: string; overrides: { id: string; sha256: string; size: number } | null } | null;
+}
+export interface OfficialInstalled {
+  packId: string;
+  version: string;
+  locked: boolean;
+  folderName: string;
+}
+export interface RelinkSkin {
+  id: string;
+  name: string;
+  desc: string;
+  unlock: { event: boolean; shop: number; achievement: boolean; premium: boolean };
+  versions: { liquidGlass: boolean; mat: boolean };
+  followsTheme: boolean;
+  /** Fichier .rlskin publié (null tant que le Worker n'en annonce pas). */
+  file: { id: string; sha256: string; size: number; version: string } | null;
+}
+export interface RelinkNotification {
+  id: string;
+  title: string;
+  body: string;
+  open: string;
+  at: string;
+}
+export interface RelinkBootstrap {
+  generatedAt: string;
+  maintenance: { enabled: boolean; level: "info" | "warn" | "danger" | "critical"; text: string; blockLaunch: boolean };
+  updates: { kill: boolean; minVersion: string | null; blockOld: boolean; latest: string | null; paused: boolean; release: { version: string; mandatory: boolean; sha256: string } | null };
+  carousel: { count: number; autoplay: boolean; speedSeconds: number };
+  flags: string[];
+  cards: RelinkCard[];
+  news: RelinkNews[];
+  skins: RelinkSkin[];
+  modpacks: RelinkModpack[];
+  servers: RelinkServer[];
+  events: RelinkEvent[];
+  partners: RelinkPartner[];
+}
+/** Compte Minecraft officiel (Microsoft) connecté dans ReLaunch ; les jetons restent dans le processus principal. */
+export interface MicrosoftState {
+  connected: boolean;
+  profile: { id: string; name: string } | null;
+  loginPending: boolean;
+  /** L'application Microsoft de WeCraft est configurée (sinon la connexion n'est pas encore possible). */
+  available: boolean;
+  persisted: boolean;
+  error: string | null;
+}
+
+/** Compte hors-ligne (simple pseudo, sans Microsoft) : rien n'est envoyé à Mojang, pas d'accès aux serveurs qui vérifient le compte. */
+/** Statut d'un ami : en ligne, absent (aucune activité depuis plus de 30 min) ou hors ligne (launcher et jeu fermés). */
+export type FriendStatus = "online" | "away" | "offline";
+export interface FriendGame {
+  kind: "event" | "pack" | "instance";
+  /** Event ou modpack ReLink (null : instance locale, qui ne peut pas être rejointe). */
+  id: string | null;
+  name: string;
+  mc: string;
+  startedAt: number;
+}
+export interface FriendBrief {
+  id: string;
+  pseudo: string;
+}
+export interface Friend extends FriendBrief {
+  minecraftName: string | null;
+  status: FriendStatus;
+  /** Partie en cours (visible seulement si l'ami n'est pas hors ligne). */
+  game: FriendGame | null;
+  lastSeen: number | null;
+  /** Tu as l'instance (event ou modpack) où il joue : tu peux le rejoindre. */
+  joinable: boolean;
+}
+export interface FriendsState {
+  /** Connecté à ReLink : sinon, pas d'amis. */
+  loggedIn: boolean;
+  error: string | null;
+  friends: Friend[];
+  incoming: FriendBrief[];
+  outgoing: FriendBrief[];
+  /** Mon statut et ma partie sont visibles de mes amis. */
+  share: boolean;
+}
+export type FriendsActionResult = { ok: true; state: FriendsState; message?: string } | { ok: false; message: string };
+export type FriendJoinResult =
+  | { ok: true; /** Instance locale à lancer. */ instanceId: string; /** Serveur de l'event ou du modpack (« domaine[:port] »), ou null. */ address: string | null; friend: string }
+  | { ok: false; message: string };
+
+export interface OfflineState {
+  /** Pseudo enregistré (3 à 16 caractères : lettres, chiffres, « _ »), ou null. */
+  name: string | null;
+  /** UUID hors-ligne dérivé du pseudo (identique à celui d'un serveur en online-mode=false). */
+  uuid: string | null;
+  /** Le jeu démarre avec ce pseudo au lieu du compte Microsoft (events qui acceptent les comptes hors-ligne seulement). */
+  active: boolean;
+  /** Date (ms) avant laquelle le pseudo ne peut pas être changé ni oublié (90 jours après le dernier choix, fixé par le Worker), ou null. */
+  lockedUntil: number | null;
+  /** Connecté à ReLink : nécessaire pour choisir, changer ou oublier le pseudo (le Worker le vérifie et le verrouille). */
+  loggedIn: boolean;
+}
+export type OfflineResult =
+  | { ok: true; state: OfflineState }
+  | { ok: false; reason: "invalid" | "write-failed" | "login" | "taken-relink" }
+  /** Le pseudo appartient à un compte Minecraft officiel (`officialName` : écriture exacte chez Mojang). */
+  | { ok: false; reason: "taken"; officialName: string }
+  /** Le Worker n'a pas pu confirmer que le pseudo est libre (Mojang, réseau) : le pseudo est refusé. */
+  | { ok: false; reason: "unverified"; message: string }
+  /** Le pseudo a déjà été choisi il y a moins de 90 jours : changement refusé jusqu'à `until` (ms). */
+  | { ok: false; reason: "cooldown"; until: number };
+
+/** Compte ReLink du joueur (le jeton de session ne quitte jamais le processus principal). */
+export interface AccountState {
+  loggedIn: boolean;
+  user: { id: string; pseudo: string; minecraftName: string | null; minecraftUuid: string | null; minecraftVerified: boolean; eclats: number; premium: boolean } | null;
+  expiresAt: string | null;
+  /** Le service ReLink n'a pas répondu au dernier essai. */
+  offline: boolean;
+  /** Une connexion par Discord attend la réponse du navigateur. */
+  loginPending: boolean;
+  /** Skins du launcher possédés (offerts, gagnés en event…). */
+  launcherSkins: string[];
+  minecraftSkin: { model: "classic" | "slim"; sha256: string } | null;
+  /** false : pas de chiffrement système disponible, la session n'est pas gardée après fermeture. */
+  persisted: boolean;
+  error: string | null;
+}
+/** Quête « Avantages & Quêtes » (récompense en Éclats). */
+export interface Quest {
+  id: string;
+  category: "general" | "streak" | "event";
+  /** Event ReLink concerné (quêtes d'event). */
+  event: string | null;
+  title: string;
+  desc: string;
+  reward: number;
+  done: boolean;
+  claimed: boolean;
+}
+export interface QuestsState {
+  ok: boolean;
+  /** Message si la liste n'a pas pu être lue (hors ligne, pas connecté). */
+  error: string | null;
+  quests: Quest[];
+  /** Série de jours de jeu (streak) ; null si indisponible. */
+  streak: { current: number; longest: number; lastValidDate: string | null; days: number; dailyReward: number; milestones: { day: number; bonus: number }[] } | null;
+}
+export type AccountResult = { ok: true; state: AccountState; message?: string } | { ok: false; message: string; canceled?: boolean };
+
+export interface RelinkState {
+  /** Des données sont disponibles (fraîches ou en cache). */
+  ok: boolean;
+  /** Données venant du cache (le dernier relevé a échoué ou n'a pas encore eu lieu). */
+  stale: boolean;
+  fetchedAt: number | null;
+  error: string | null;
+  data: RelinkBootstrap | null;
+}
+
+// ---------------------------------------------------------------- skins du launcher (.rlskin)
+export interface SkinAnimation {
+  keyframes: Record<string, string | number>[];
+  durationMs: number;
+  iterations: number | "infinite";
+  direction: "normal" | "reverse" | "alternate" | "alternate-reverse";
+  easing: string;
+  delayMs: number;
+}
+export interface SkinVariant {
+  tokens: Record<string, string>;
+  barBackground: string | undefined;
+  cardBackground: string | undefined;
+}
+export interface SkinManifest {
+  id: string;
+  name: string;
+  author: string;
+  skinVersion: string;
+  description: string;
+  /** Garde les couleurs du thème choisi (le skin n'ajoute que le décor). */
+  followsTheme: boolean;
+  tokens: Record<string, string>;
+  fonts: { display: { file: string; family: string } | undefined; body: { file: string; family: string } | undefined };
+  background: { color: string | undefined; gradient: string | undefined; layers: { image: string; size: string; position: string; repeat: boolean; opacity: number; blend: string; animation: string | undefined }[]; overlay: "none" | "vignette" | "grain" };
+  bars: { pattern: string | undefined; patternOpacity: number; background: string | undefined; border: string | undefined; radius: number | undefined };
+  frames: { radius: number | undefined; border: string | undefined; glow: string | undefined; background: string | undefined };
+  playButton: { image: string | undefined; background: string | undefined; text: string | undefined; radius: number | undefined; animation: string | undefined };
+  transition: { type: "none" | "fade" | "slide" | "wave" | "zoom"; durationMs: number };
+  launchScreen: { image: string | undefined; text: string; animation: string | undefined };
+  animations: Record<string, SkinAnimation>;
+  variants: { liquidGlass: SkinVariant | undefined; mat: SkinVariant | undefined };
+}
+export interface InstalledSkin {
+  key: string;
+  signed: boolean;
+  source: "relink" | "local";
+  relinkId: string | null;
+  sha256: string;
+  /** Adresse app:// du dossier du skin (images, polices). */
+  base: string;
+  manifest: SkinManifest;
+}
+export type SkinResult = { ok: true; skin: InstalledSkin } | { ok: false; message: string; canceled?: boolean };
