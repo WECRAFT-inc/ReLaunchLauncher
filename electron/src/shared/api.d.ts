@@ -426,6 +426,10 @@ export interface WeCraftApi {
     notifications(): Promise<{ items: RelinkNotification[]; error: string | null }>;
     /** Charge une bannière publique ReLink via le processus principal. */
 cardImage(bid: string): Promise<string | null>;
+    /** Ouvre dans le navigateur le lien externe d'un encart (HTTPS seulement). */
+    cardLink(id: string): Promise<boolean>;
+    /** Aperçu (miniature) du direct d'un partenaire, en data:. */
+    partnerImage(id: string): Promise<string | null>;
   };
   microsoft: {
     state(): Promise<MicrosoftState>;
@@ -611,6 +615,8 @@ export interface RelinkNews {
    tag: string;
    img: string | null;
    newsId: string | null;
+   /** Lien externe HTTPS de l'encart (ouvert par le processus principal, jamais par l'interface). */
+   url?: string;
  }
 export interface RelinkServer {
   id: string;
@@ -648,6 +654,8 @@ export interface RelinkPartner {
   featured: boolean;
   live: boolean;
   viewers: number;
+  /** Le Worker a un aperçu du direct (miniature) à fournir. */
+  thumb?: boolean;
 }
 export interface RelinkModpack {
   id: string;
