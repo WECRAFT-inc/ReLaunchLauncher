@@ -109,6 +109,8 @@ export interface AppCtx {
   syncAccount: () => void;
   /** Rejoindre un ami : lance l'instance (event ou modpack) où il joue, si tu l'as. */
   joinFriend: (friendId: string) => void;
+  /** Rejoindre un serveur ReLaunch : lance l'instance de son event / modpack (si installé) et s'y connecte. */
+  joinServer: (serverId: string) => void;
 }
 
 export const Ctx = createContext<AppCtx | null>(null);
