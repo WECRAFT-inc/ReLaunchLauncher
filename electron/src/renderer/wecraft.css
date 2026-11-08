@@ -539,3 +539,12 @@ body.tb-off .app { height: 100vh !important; }
 .ncard .card-labels .card-type { display:inline-flex; align-items:center; padding:4px 12px; min-height:23px; border-radius:999px; background:var(--card-type-color) !important; color:#fff !important; border:1px solid var(--card-type-color) !important; font-size:10px; font-weight:800; line-height:1; letter-spacing:.045em; text-transform:uppercase; white-space:nowrap; }
 .card-labels .card-label-separator { display:inline-block; margin:0 7px; color:#fff; font-size:13px; font-weight:900; line-height:1; }
 .card-labels .card-extra-label { display:inline; color:#fff; font-size:11px; font-weight:700; line-height:1.3; overflow-wrap:anywhere; }
+
+/* Encarts de l'accueil : image entière (pas de recadrage, pas de zoom), sans motif en damier ; étiquette dans l'ovale du type */
+.ncard .sc::after { content: none; display: none; }
+.ncard:hover .sc { transform: none; }
+.ncard::before { background: linear-gradient(0deg, rgba(6,7,12,.78), rgba(6,7,12,.18) 38%, rgba(6,7,12,0) 62%); }
+.cinner { align-items: flex-start; }
+.ncard .card-labels .card-type { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ncard .card-type .card-label-separator { margin: 0 6px; font-size: inherit; font-weight: inherit; color: inherit; opacity: .8; }
+.ncard .card-type .card-extra-label { font-size: inherit; font-weight: inherit; line-height: inherit; color: inherit; overflow-wrap: normal; }
