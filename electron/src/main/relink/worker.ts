@@ -12,6 +12,7 @@ import path from "node:path";
 import type { RelinkBootstrap, RelinkCard, RelinkEvent, RelinkModpack, RelinkNews, RelinkNotification, RelinkPartner, RelinkServer, RelinkSkin, RelinkState } from "../../shared/api";
 import { parseServerAddress } from "../auth/offline";
 import { checkUrl, fetchJson, HttpError, type NetOptions } from "../net/download";
+import { safeExternalUrl } from "../links";
 
 export const WORKER_URL = "https://relink-auth.refugeemeraudien-direction.workers.dev";
 export const WORKER_HOSTS: ReadonlySet<string> = new Set([new URL(WORKER_URL).host]);
@@ -65,6 +66,21 @@ export function decodeNews(v: unknown): RelinkNews | null {
   if (!i || !title) return null;
   return { id: i, title, body: pick(o, ["body", "text"], 4000), date: pick(o, ["date", "d"], 60), tags: tags(o["tags"]), cta: pick(o, ["cta"], 40), open: openTarget(o["open"] ?? o["go"]) };
 }
+/** Première étiquette non vide parmi les clés données ; un tableau (« tags ») est réuni avec « · ». */
+function cardLabel(o: Obj, keys: string[]): string {
+  for (const k of keys) {
+    const v = o[k];
+    const s = Array.isArray(v)
+      ? v
+          .map((x) => (Array.isArray(x) ? str(x[0], 30) : typeof x === "string" ? str(x, 30) : str(obj(x)["label"] ?? obj(x)["n"], 30)))
+          .filter(Boolean)
+          .slice(0, 3)
+          .join(" · ")
+      : str(v, 60);
+    if (s) return s;
+  }
+  return "";
+}
 export function decodeCard(v: unknown): RelinkCard | null {
   const o = obj(v);
   const i = id(o["id"]);
@@ -73,14 +89,18 @@ export function decodeCard(v: unknown): RelinkCard | null {
   return {
     id: i,
     title,
-    text: pick(o, ["body", "text", "d", "desc"], 600),
+    // Le panneau enregistre le sous-titre dans « sub » ; les autres noms restent acceptés.
+    text: pick(o, ["body", "text", "sub", "d", "desc"], 600),
     cta: pick(o, ["cta"], 40),
-    open: openTarget(o["open"] ?? o["go"] ?? o["target"]),
+    // « dest » vaut « url » (lien externe, voir « url ») ou le nom d'une page du launcher.
+    open: openTarget(o["open"] ?? o["go"] ?? o["target"] ?? (o["dest"] === "url" ? undefined : o["dest"])),
+    url: (o["dest"] === "url" || o["dest"] === undefined) ? (safeExternalUrl(o["url"]) ?? "") : "",
     type: pick(o, ["type", "kind"], 30),
     // Le panneau peut nommer l’étiquette complémentaire "label", "badge" ou "tag".
     // Quand le type est explicite, "tag" est prioritaire ; sur les anciennes cartes,
     // "tag" pouvait contenir le type et "label" le texte secondaire.
-    tag: pick(o, pick(o, ["type", "kind"], 30) ? ["tag", "label", "badge", "etiquette", "caption"] : ["label", "badge", "etiquette", "caption", "tag"], 60),
+    // Le panneau écrit l'étiquette dans « tags » (texte, parfois tableau) : il est lu au même titre que « tag ».
+    tag: cardLabel(o, pick(o, ["type", "kind"], 30) ? ["tag", "tags", "label", "badge", "etiquette", "caption"] : ["label", "badge", "etiquette", "caption", "tag", "tags"]),
     img: bannerIdOf(o["img"] ?? o["imageUrl"] ?? o["banner"]) || null,
     /** Article Info & News que cet encart met en avant (le panneau peut lier un encart à un article publié). */
     newsId: id(o["newsId"]) || null,
@@ -123,7 +143,7 @@ export function decodePartner(v: unknown): RelinkPartner | null {
   const n = pick(o, ["n", "name"], 60);
   if (!i || !n) return null;
   const ch = str(o["ch"], 40);
-  return { id: i, name: n, channel: /^[A-Za-z0-9_]{1,40}$/.test(ch) ? ch : "", category: pick(o, ["cat", "category"], 40), featured: bool(o["featured"]), live: bool(o["live"]), viewers: Math.round(num(o["viewers"], 0, 1e8)) };
+  return { id: i, name: n, channel: /^[A-Za-z0-9_]{1,40}$/.test(ch) ? ch : "", category: pick(o, ["cat", "category"], 40), featured: bool(o["featured"]), live: bool(o["live"]), viewers: Math.round(num(o["viewers"], 0, 1e8)), thumb: bool(o["thumb"]) };
 }
 export function decodeModpack(v: unknown): RelinkModpack | null {
   const o = obj(v);
@@ -400,6 +420,30 @@ export class RelinkClient {
    * Image d'un encart (bannière), en data: — jamais une adresse distante donnée directement à l'interface
    * (CSP : connect-src 'none' côté renderer, voir index.html), donc le processus principal la télécharge ici.
    */
+  /** Adresse HTTPS d'un encart (clic sur l'encart) ; elle n'est jamais donnée à l'interface, seulement ouverte par le processus principal. */
+  cardLink(cardId: string): string | null {
+    const c = this.state.data?.cards.find((x) => x.id === cardId);
+    return c && c.url ? safeExternalUrl(c.url) : null;
+  }
+
+  /** Aperçu du direct d'un partenaire (miniature Twitch relayée par le Worker), en data: comme les bannières. */
+  async partnerImage(partnerId: string): Promise<string | null> {
+    if (!/^[A-Za-z0-9_-]{1,100}$/.test(partnerId)) return null;
+    try {
+      const url = checkUrl(`${WORKER_URL}/launcher/partners/${encodeURIComponent(partnerId)}/thumb`, WORKER_HOSTS).href;
+      const f = this.d.net?.fetch as unknown as typeof fetch | undefined;
+      const res = await (f ?? fetch)(url, { redirect: "error", signal: AbortSignal.timeout(10000), headers: { "User-Agent": this.d.userAgent, Accept: "image/*" } });
+      if (!res.ok) return null;
+      const type = (res.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
+      if (!/^image\/(png|jpe?g|webp)$/.test(type)) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 1024 * 1024) return null;
+      return `data:${type};base64,${buf.toString("base64")}`;
+    } catch {
+      return null;
+    }
+  }
+
   async cardImage(bannerId: string): Promise<string | null> {
     if (!/^[0-9a-f-]{1,100}$/i.test(bannerId)) return null;
     try {
