@@ -494,6 +494,21 @@ handle(CHANNELS.relinkCardImage, async (bannerId) => {
 
   return relink.cardImage(bannerId);
 });
+
+handle(CHANNELS.relinkCardLink, async (cardId) => {
+  const url = relink && typeof cardId === "string" ? relink.cardLink(cardId) : null;
+  if (!url) return false;
+  await shell.openExternal(url);
+  return true;
+});
+
+handle(CHANNELS.relinkPartnerImage, async (partnerId) => {
+  if (!relink || typeof partnerId !== "string") {
+    return null;
+  }
+
+  return relink.partnerImage(partnerId);
+});
   
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
   /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
