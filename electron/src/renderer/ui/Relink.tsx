@@ -177,8 +177,10 @@ function CardTypeTag({ type, label = "" }: { type: string; label?: string }) {
   const color = CARD_TYPE_COLORS[normalized] ?? CARD_TYPE_COLORS.contenu;
   return (
     <span className="ntags card-labels" style={{ "--card-type-color": color } as Css}>
-      <span className="ntag card-type">{t(knownType)}</span>
-      {label.trim() ? <><span className="card-label-separator" aria-hidden="true">·</span><span className="card-extra-label">{label.trim()}</span></> : null}
+      <span className="ntag card-type">
+        {t(knownType)}
+        {label.trim() ? <><span className="card-label-separator" aria-hidden="true">·</span><span className="card-extra-label">{label.trim()}</span></> : null}
+      </span>
     </span>
   );
 }
@@ -213,6 +215,8 @@ export function HomeCarousel() {
   // images des encarts (bannières) : jamais chargées directement par l'interface (CSP), le processus principal les
   // télécharge et les renvoie en data: (voir RelinkClient.cardImage) ; tant que ce n'est pas prêt, dégradé de secours.
   const [imgs, setImgs] = useState<Record<string, string>>({});
+  // proportions réelles de chaque bannière : l'encart prend les mêmes, l'image est donc affichée entière, sans recadrage
+  const [ratios, setRatios] = useState<Record<string, number>>({});
   const bannerIds = items.map((i) => i.img ?? "").join(",");
   useEffect(() => {
     let alive = true;
@@ -220,7 +224,13 @@ export function HomeCarousel() {
       const bid = it.img;
       if (bid && !(bid in imgs)) {
         void window.wecraft.relink.cardImage(bid).then((data) => {
-          if (alive && data) setImgs((m) => ({ ...m, [bid]: data }));
+          if (!alive || !data) return;
+          setImgs((m) => ({ ...m, [bid]: data }));
+          const im = new Image();
+          im.onload = () => {
+            if (alive && im.naturalWidth > 0 && im.naturalHeight > 0) setRatios((m) => ({ ...m, [bid]: im.naturalWidth / im.naturalHeight }));
+          };
+          im.src = data;
         }, () => undefined);
       }
     }
@@ -245,8 +255,8 @@ export function HomeCarousel() {
       <div className="ctrack">
         <div className="cinner" style={{ transform: `translateX(calc(-${p} * (100% + 12px) / ${n}))` }}>
           {items.map((x) => (
-            <button key={x.id} className="ncard" onClick={() => (x.newsId ? show("news", { newsSel: x.newsId }) : x.url ? void window.wecraft.relink.cardLink(x.id) : show(x.open || "news"))}>
-              <span className="sc" style={x.img && imgs[x.img] ? { backgroundImage: `url("${imgs[x.img]}")`, backgroundSize: "cover", backgroundPosition: "center" } : coverOf(x.id)}></span>
+            <button key={x.id} className="ncard" style={x.img && ratios[x.img] ? ({ height: "auto", aspectRatio: String(ratios[x.img]), minHeight: "132px", maxHeight: "min(62vh, 460px)" } as Css) : undefined} onClick={() => (x.newsId ? show("news", { newsSel: x.newsId }) : x.url ? void window.wecraft.relink.cardLink(x.id) : show(x.open || "news"))}>
+              <span className="sc" style={x.img && imgs[x.img] ? { backgroundImage: `url("${imgs[x.img]}")`, backgroundSize: "contain", backgroundRepeat: "no-repeat", backgroundPosition: "center" } : coverOf(x.id)}></span>
               <CardTypeTag type={x.type} label={x.tags} />
               <b>{x.title}</b>
               <small>{x.sub}</small>
@@ -280,7 +290,7 @@ export function HomeCarousel() {
 
 // ---------------------------------------------------------------- ReLaunch : serveurs et events
 export function RelinkServersEvents() {
-  const { relink } = useApp();
+  const { relink, joinServer } = useApp();
   const d = relink?.data;
   const servers = d?.servers ?? [];
   const events = d?.events ?? [];
@@ -309,7 +319,7 @@ export function RelinkServersEvents() {
                   {s.host ? <small className="faint">{s.host}</small> : null}
                 </div>
                 <span className="row">
-                  <button className="btn sm" disabled title={t("Rejoindre un serveur depuis ReLaunch : pas encore disponible (le modpack du serveur doit d'abord pouvoir s'installer).")}>
+                  <button className="btn sm pri" disabled={s.state === "offline" || s.state === "maintenance"} title={t("Lancer l'instance du serveur (event ou modpack) et s'y connecter. Il faut d'abord l'avoir installé.")} onClick={() => joinServer(s.id)}>
                     {t("Rejoindre")}
                   </button>
                 </span>
