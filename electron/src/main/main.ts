@@ -702,6 +702,25 @@ handle(CHANNELS.relinkPartnerImage, async (partnerId) => {
     pendingJoin = { instanceId, address, until: Date.now() + 120_000 };
     return { ok: true, instanceId, address, friend: friend.pseudo };
   });
+  handle(CHANNELS.relinkJoinServer, async (serverId) => {
+    const bad = (message: string) => ({ ok: false as const, message });
+    if (!relink || typeof serverId !== "string" || !/^[\w.:-]{1,100}$/.test(serverId)) return bad("Serveur invalide.");
+    const data = (await relink.cached()).data;
+    const srv = data?.servers.find((s) => s.id === serverId);
+    if (!srv) return bad("Ce serveur n'est plus dans le catalogue ReLaunch.");
+    if (srv.state === "maintenance") return bad("Ce serveur est en maintenance.");
+    if (srv.state === "offline") return bad("Ce serveur est hors ligne pour le moment.");
+    const a = parseServerAddress(srv.host);
+    if (!a) return bad("Ce serveur n'a pas d'adresse valide.");
+    if (!srv.event && !srv.pack) return bad("Ce serveur n'a ni event ni modpack associé : rejoins-le à la main depuis Minecraft.");
+    // instance locale du serveur : son event d'abord, sinon son modpack (jamais une adresse donnée par l'interface)
+    const keys = await localGameKeys();
+    const instanceId = (srv.event ? keys.get(`event:${srv.event}`) : undefined) ?? (srv.pack ? keys.get(`pack:${srv.pack}`) : undefined);
+    if (!instanceId) return bad(srv.event ? "Tu n'as pas l'event de ce serveur : installe-le d'abord depuis l'onglet ReLink." : "Tu n'as pas le modpack de ce serveur : installe-le d'abord (onglet Modpacks ReLaunch).");
+    const address = a.port === 25565 ? a.host : `${a.host}:${a.port}`;
+    pendingJoin = { instanceId, address, until: Date.now() + 120_000 };
+    return { ok: true as const, instanceId, address, server: srv.name };
+  });
   handle(CHANNELS.accountState, async () => (account ? account.state() : noAccount));
   handle(CHANNELS.accountLogin, async () => {
     if (!account) return noAccount;
