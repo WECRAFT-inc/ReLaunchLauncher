@@ -87,6 +87,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
   const app = useApp();
   const { nav, ui, pref, byId } = app;
   const unread = useUnread();
+  const livesNow = (app.relink?.data?.partners ?? []).filter((p) => p.live).length;
   const BS = barSize(nav);
   const BV = `${BS.v}px`;
   const BH = `${BS.h}px`;
@@ -122,7 +123,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
   );
   const utils = (): ReactNode[] => [
     drawerBtn("news", t("Nouveautés et notifications"), "bell"),
-    <button key={k("live")} className="nb" data-go="live" data-a="nav-live" data-tip={t("Diffusion Partenaires · 0 lives")} aria-label={t("Diffusion Partenaires")} {...(current("live") ? { "aria-current": "page" as const } : {})}>
+    <button key={k("live")} className="nb" data-go="live" data-a="nav-live" data-tip={`${t("Diffusion Partenaires")} · ${livesNow} ${t("live(s) en cours")}`} aria-label={t("Diffusion Partenaires")} {...(current("live") ? { "aria-current": "page" as const } : {})}>
       <Ic n="live" />
     </button>,
     drawerBtn("downloads", "Download Manager", "downloads"),
