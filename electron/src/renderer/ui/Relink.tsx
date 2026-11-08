@@ -2,7 +2,7 @@
 // events, partenaires, notifications, maintenance et politique de version. Rien n'est inventé : sans
 // réponse du service, la page le dit (et garde le dernier état connu, signalé comme ancien).
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { OfficialInstalled, RelinkModpack, RelinkNews, RelinkState } from "../../shared/api";
+import type { OfficialInstalled, RelinkModpack, RelinkNews, RelinkPartner, RelinkState } from "../../shared/api";
 import { JobView, useJob } from "./Import";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
@@ -160,13 +160,24 @@ const CARD_TYPE_COLORS: Record<string, string> = {
   reseaux: "#db2777",
 };
 const normalizeCardType = (value: string) => value.trim().toLocaleLowerCase("fr-FR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+// Le panneau peut envoyer le type en anglais (« social », « discover »…) : il est ramené au type français.
+const CARD_TYPE_ALIASES: Record<string, string> = {
+  social: "réseaux", socials: "réseaux", "social media": "réseaux", reseau: "réseaux", "reseaux sociaux": "réseaux",
+  discover: "à découvrir", discovery: "à découvrir", decouverte: "à découvrir", decouvrir: "à découvrir",
+  update: "Maj", updates: "Maj", "mise a jour": "Maj",
+  content: "Contenu", store: "Shop", videos: "Video", events: "Event",
+};
+const canonicalType = (v: string): string => {
+  const n = normalizeCardType(v);
+  return CARD_TYPES.find((item) => normalizeCardType(item) === n) ?? CARD_TYPE_ALIASES[n] ?? v;
+};
 function CardTypeTag({ type, label = "" }: { type: string; label?: string }) {
-  const normalized = normalizeCardType(type);
-  const knownType = CARD_TYPES.find((item) => normalizeCardType(item) === normalized);
+  const knownType = canonicalType(type);
+  const normalized = normalizeCardType(knownType);
   const color = CARD_TYPE_COLORS[normalized] ?? CARD_TYPE_COLORS.contenu;
   return (
     <span className="ntags card-labels" style={{ "--card-type-color": color } as Css}>
-      <span className="ntag card-type">{knownType ?? type}</span>
+      <span className="ntag card-type">{t(knownType)}</span>
       {label.trim() ? <><span className="card-label-separator" aria-hidden="true">·</span><span className="card-extra-label">{label.trim()}</span></> : null}
     </span>
   );
@@ -192,12 +203,12 @@ export function HomeCarousel() {
   const items = cards.length
     ? cards.map((c) => {
         const legacyType = CARD_TYPES.find((item) => normalizeCardType(item) === normalizeCardType(c.tag));
-        return { id: c.id, title: c.title, sub: c.text, type: c.type || legacyType || "Contenu", tags: legacyType && !c.type ? "" : c.tag, open: c.open, img: c.img, newsId: c.newsId };
+        return { id: c.id, title: c.title, sub: c.text, type: c.type || legacyType || "Contenu", tags: legacyType && !c.type ? "" : c.tag, open: c.open, img: c.img, newsId: c.newsId, url: c.url ?? "" };
       })
     : news.map((n) => {
         const firstTag = n.tags[0]?.label ?? "";
         const legacyType = CARD_TYPES.find((item) => normalizeCardType(item) === normalizeCardType(firstTag));
-        return { id: n.id, title: n.title, sub: n.date, type: legacyType || "Contenu", tags: legacyType ? n.tags.slice(1).map((x) => x.label).join(" · ") : firstTag, open: "news", img: null as string | null, newsId: n.id as string | null };
+        return { id: n.id, title: n.title, sub: n.date, type: legacyType || "Contenu", tags: legacyType ? n.tags.slice(1).map((x) => x.label).join(" · ") : firstTag, open: "news", img: null as string | null, newsId: n.id as string | null, url: "" };
       });
   // images des encarts (bannières) : jamais chargées directement par l'interface (CSP), le processus principal les
   // télécharge et les renvoie en data: (voir RelinkClient.cardImage) ; tant que ce n'est pas prêt, dégradé de secours.
@@ -234,7 +245,7 @@ export function HomeCarousel() {
       <div className="ctrack">
         <div className="cinner" style={{ transform: `translateX(calc(-${p} * (100% + 12px) / ${n}))` }}>
           {items.map((x) => (
-            <button key={x.id} className="ncard" onClick={() => (x.newsId ? show("news", { newsSel: x.newsId }) : show(x.open || "news"))}>
+            <button key={x.id} className="ncard" onClick={() => (x.newsId ? show("news", { newsSel: x.newsId }) : x.url ? void window.wecraft.relink.cardLink(x.id) : show(x.open || "news"))}>
               <span className="sc" style={x.img && imgs[x.img] ? { backgroundImage: `url("${imgs[x.img]}")`, backgroundSize: "cover", backgroundPosition: "center" } : coverOf(x.id)}></span>
               <CardTypeTag type={x.type} label={x.tags} />
               <b>{x.title}</b>
@@ -434,6 +445,32 @@ function EventHero({ ev }: { ev: { id: string; name: string; desc: string; statu
 }
 
 // ---------------------------------------------------------------- Diffusion Partenaires
+/** Aperçu du direct d'un partenaire : miniature relayée par le Worker (rafraîchie toutes les 2 minutes), sinon dégradé. */
+function PartnerCover({ p }: { p: RelinkPartner }) {
+  const [img, setImg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!p.live || !p.thumb) {
+      setImg(null);
+      return;
+    }
+    let alive = true;
+    const load = () =>
+      void window.wecraft.relink.partnerImage(p.id).then((d) => {
+        if (alive && d) setImg(d);
+      }, () => undefined);
+    load();
+    const timer = window.setInterval(load, 120_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [p.id, p.live, p.thumb]);
+  return (
+    <div className="cover" style={img ? { backgroundImage: `url("${img}")`, backgroundSize: "cover", backgroundPosition: "center" } : coverOf(p.id)}>
+      {p.live ? <span className="livebadge rl-live">● LIVE</span> : null}
+    </div>
+  );
+}
 export function LivePage() {
   const { relink } = useApp();
   const ps = [...(relink?.data?.partners ?? [])].sort((a, b) => Number(b.live) - Number(a.live) || Number(b.featured) - Number(a.featured) || b.viewers - a.viewers);
@@ -452,9 +489,7 @@ export function LivePage() {
         <div className="favgrid">
           {ps.map((p) => (
             <div key={p.id} className="favc" data-a={`partner-${p.id}`}>
-              <div className="cover" style={coverOf(p.id)}>
-                {p.live ? <span className="livebadge rl-live">● LIVE</span> : null}
-              </div>
+              <PartnerCover p={p} />
               <span className="row">
                 <b>{p.name}</b>
                 {p.featured ? <span className="tag">{t("À la une")}</span> : null}
