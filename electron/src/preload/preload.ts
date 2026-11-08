@@ -5,6 +5,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
 
 const RELINK_CARD_IMAGE = "relink:card-image";
+const RELINK_CARD_LINK = "relink:card-link";
+const RELINK_PARTNER_IMAGE = "relink:partner-image";
 const GET_INFO = "app:get-info";
 const RENDERED = "app:rendered";
 const OPEN_DATA_DIR = "app:open-data-dir";
@@ -146,6 +148,12 @@ relink: Object.freeze({
   
 cardImage: (bid: string) =>
   ipcRenderer.invoke(RELINK_CARD_IMAGE, bid),
+
+cardLink: (id: string) =>
+  ipcRenderer.invoke(RELINK_CARD_LINK, id),
+
+partnerImage: (id: string) =>
+  ipcRenderer.invoke(RELINK_PARTNER_IMAGE, id),
 }),
   microsoft: Object.freeze({
     state: () => ipcRenderer.invoke(MS_STATE),
