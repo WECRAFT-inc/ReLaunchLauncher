@@ -7,6 +7,7 @@ import type { ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
 const RELINK_CARD_IMAGE = "relink:card-image";
 const RELINK_CARD_LINK = "relink:card-link";
 const RELINK_PARTNER_IMAGE = "relink:partner-image";
+const RELINK_JOIN_SERVER = "relink:join-server";
 const GET_INFO = "app:get-info";
 const RENDERED = "app:rendered";
 const OPEN_DATA_DIR = "app:open-data-dir";
@@ -154,6 +155,9 @@ cardLink: (id: string) =>
 
 partnerImage: (id: string) =>
   ipcRenderer.invoke(RELINK_PARTNER_IMAGE, id),
+
+joinServer: (id: string) =>
+  ipcRenderer.invoke(RELINK_JOIN_SERVER, id),
 }),
   microsoft: Object.freeze({
     state: () => ipcRenderer.invoke(MS_STATE),
