@@ -222,8 +222,8 @@ export function App() {
     reloadSkins();
     const pull = () => void window.wecraft.relink?.notifications().then((r) => setNotifs(r.items), () => undefined);
     pull();
-    // bootstrap toutes les 10 min, notifications toutes les 3 min (fenêtre visible seulement)
-    const a = window.setInterval(() => document.visibilityState === "visible" && refreshRelink(), 600_000);
+    // bootstrap toutes les 2 min, notifications toutes les 3 min (fenêtre visible seulement)
+    const a = window.setInterval(() => document.visibilityState === "visible" && refreshRelink(), 120_000); // lives des partenaires : relevé toutes les 2 min (le client limite à 1 requête / 60 s)
     const b = window.setInterval(() => document.visibilityState === "visible" && pull(), 180_000);
     return () => {
       window.clearInterval(a);
@@ -542,6 +542,23 @@ export function App() {
           }
           setUi({ sel: r.instanceId, drawer: null });
           toast(r.address ? `Tu rejoins ${r.friend} : le jeu se connecte à ${r.address} au démarrage.` : `Tu rejoins ${r.friend} : lance le jeu puis rejoins le même serveur (aucune adresse connue).`, 5000);
+          launch(r.instanceId);
+        },
+        () => toast("Impossible de rejoindre pour le moment.", 4000),
+      );
+    },
+    [launch, setUi, toast],
+  );
+  const joinServer = useCallback(
+    (serverId: string) => {
+      void window.wecraft.relink.joinServer(serverId).then(
+        (r) => {
+          if (!r.ok) {
+            toast(r.message, 5000);
+            return;
+          }
+          setUi({ sel: r.instanceId, drawer: null });
+          toast(r.address ? `Tu rejoins ${r.server} : le jeu se connecte à ${r.address} au démarrage.` : `Tu rejoins ${r.server} : lance le jeu puis rejoins le serveur.`, 5000);
           launch(r.instanceId);
         },
         () => toast("Impossible de rejoindre pour le moment.", 4000),
@@ -1099,6 +1116,7 @@ export function App() {
     setAccount,
     syncAccount,
     joinFriend,
+    joinServer,
   };
 
   const extras: ExtrasProps = { toastMsg, tip, launchUi, setLaunchUi, ram, setRam, startLaunch, upd, setUpd, job };
