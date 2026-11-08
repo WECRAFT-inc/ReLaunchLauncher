@@ -430,6 +430,8 @@ cardImage(bid: string): Promise<string | null>;
     cardLink(id: string): Promise<boolean>;
     /** Aperçu (miniature) du direct d'un partenaire, en data:. */
     partnerImage(id: string): Promise<string | null>;
+    /** Prépare « Rejoindre » un serveur du catalogue : instance locale (event ou modpack du serveur) à lancer + adresse. */
+    joinServer(id: string): Promise<RelinkJoinResult>;
   };
   microsoft: {
     state(): Promise<MicrosoftState>;
@@ -752,6 +754,9 @@ export interface FriendsState {
   share: boolean;
 }
 export type FriendsActionResult = { ok: true; state: FriendsState; message?: string } | { ok: false; message: string };
+export type RelinkJoinResult =
+  | { ok: true; /** Instance locale à lancer. */ instanceId: string; /** « domaine[:port] » du serveur. */ address: string | null; server: string }
+  | { ok: false; message: string };
 export type FriendJoinResult =
   | { ok: true; /** Instance locale à lancer. */ instanceId: string; /** Serveur de l'event ou du modpack (« domaine[:port] »), ou null. */ address: string | null; friend: string }
   | { ok: false; message: string };
