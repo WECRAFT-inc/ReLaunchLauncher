@@ -107,6 +107,7 @@ export const CHANNELS = {
   relinkCardImage: "relink:card-image",
   relinkCardLink: "relink:card-link",
   relinkPartnerImage: "relink:partner-image",
+  relinkJoinServer: "relink:join-server",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];
