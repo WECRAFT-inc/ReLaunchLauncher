@@ -68,6 +68,8 @@ export interface RawFriend extends FriendBrief {
   game: { kind: "event" | "pack" | "instance"; id: string | null; name: string; mc: string; startedAt: number } | null;
   /** Ce que l'ami écoute (s'il le partage ; route de présence du Worker). */
   music: { title: string; artist: string; app: string } | null;
+  /** Chaîne Twitch renseignée par l'ami (vide si aucune). */
+  channel?: string;
   lastSeen: number | null;
 }
 
@@ -272,7 +274,8 @@ export class RelinkAccount {
       const mu = obj(o["music"]);
       const music = status !== "offline" && typeof mu["title"] === "string" && str(mu["title"], 100) ? { title: str(mu["title"], 100), artist: str(mu["artist"], 100), app: str(mu["app"], 40) } : null;
       const seen = typeof o["lastSeen"] === "string" ? Date.parse(o["lastSeen"]) : NaN;
-      friends.push({ ...b, minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
+      const chRaw = str(o["channel"] ?? o["ch"], 40);
+      friends.push({ ...b, ...(/^[A-Za-z0-9_]{1,40}$/.test(chRaw) ? { channel: chRaw } : {}), minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
     }
     return { friends, incoming: list(r["incoming"]).map(brief).filter((x): x is FriendBrief => !!x), outgoing: list(r["outgoing"]).map(brief).filter((x): x is FriendBrief => !!x) };
   }
