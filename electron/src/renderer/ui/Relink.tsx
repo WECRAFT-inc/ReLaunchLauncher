@@ -2,7 +2,7 @@
 // events, partenaires, notifications, maintenance et politique de version. Rien n'est inventé : sans
 // réponse du service, la page le dit (et garde le dernier état connu, signalé comme ancien).
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { OfficialInstalled, RelinkModpack, RelinkNews, RelinkPartner, RelinkState } from "../../shared/api";
+import type { Friend, FriendsState, OfficialInstalled, RelinkModpack, RelinkNews, RelinkPartner, RelinkState } from "../../shared/api";
 import { JobView, useJob } from "./Import";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
@@ -455,36 +455,187 @@ function EventHero({ ev }: { ev: { id: string; name: string; desc: string; statu
 }
 
 // ---------------------------------------------------------------- Diffusion Partenaires
-/** Aperçu du direct d'un partenaire : miniature relayée par le Worker (rafraîchie toutes les 2 minutes), sinon dégradé. */
-function PartnerCover({ p }: { p: RelinkPartner }) {
+// Disposition du prototype (lecteur + « autres lives » + grille), avec trois filtres : Tous, Partenaires, Mes amis.
+// Le lecteur Twitch intégré ne se charge QU'APRÈS un clic (rien n'est contacté à l'ouverture de la page).
+type StreamKind = "partner" | "friend";
+interface Stream {
+  key: string;
+  kind: StreamKind;
+  name: string;
+  /** Catégorie du partenaire, ou partie en cours de l'ami. */
+  sub: string;
+  channel: string;
+  live: boolean;
+  viewers: number;
+  featured: boolean;
+  /** Une miniature peut être relevée (direct confirmé). */
+  hasThumb: boolean;
+  partnerId: string;
+}
+type LiveFilter = "all" | StreamKind;
+const LOGIN_RE = /^[A-Za-z0-9_]{1,40}$/;
+/** Lecteur Twitch : « parent » = hôte de l'interface (app://wecraft). */
+const playerUrl = (channel: string): string => `https://player.twitch.tv/?channel=${encodeURIComponent(channel.toLowerCase())}&parent=wecraft&autoplay=true`;
+
+function partnerStream(p: RelinkPartner): Stream {
+  return { key: `p:${p.id}`, kind: "partner", name: p.name, sub: p.category, channel: p.channel, live: p.live, viewers: p.viewers, featured: p.featured, hasThumb: !!p.thumb, partnerId: p.id };
+}
+function friendStream(f: Friend): Stream | null {
+  if (!f.channel) return null; // un ami sans chaîne renseignée ne diffuse rien de visible ici
+  return { key: `f:${f.id}`, kind: "friend", name: f.pseudo, sub: f.game?.name ?? "", channel: f.channel, live: f.live === true, viewers: 0, featured: false, hasThumb: f.live === true, partnerId: "" };
+}
+const streamInfo = (s: Stream): string => (s.live ? (s.viewers > 0 ? `${s.viewers.toLocaleString("fr-FR")} ${t("spectateurs")}` : t("En direct")) : t("Hors ligne"));
+const kindLabel = (s: Stream): string => (s.kind === "friend" ? t("Ami") : t("Partenaire"));
+
+/** Aperçu du direct (miniature relayée par le Worker ou relevée sur Twitch, rafraîchie toutes les 2 minutes), sinon dégradé. */
+function useThumb(s: Stream): string | null {
   const [img, setImg] = useState<string | null>(null);
   useEffect(() => {
-    if (!p.live || !p.thumb) {
+    if (!s.live || !s.hasThumb) {
       setImg(null);
       return;
     }
     let alive = true;
     const load = () =>
-      void window.wecraft.relink.partnerImage(p.id).then((d) => {
-        if (alive && d) setImg(d);
-      }, () => undefined);
+      void (s.partnerId ? window.wecraft.relink.partnerImage(s.partnerId) : window.wecraft.relink.channelImage(s.channel)).then(
+        (d) => {
+          if (alive && d) setImg(d);
+        },
+        () => undefined,
+      );
     load();
     const timer = window.setInterval(load, 120_000);
     return () => {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [p.id, p.live, p.thumb]);
+  }, [s.key, s.live, s.hasThumb, s.partnerId, s.channel]);
+  return img;
+}
+function Sc({ s }: { s: Stream }) {
+  const img = useThumb(s);
+  return <span className="sc live-sc" style={img ? { ...coverOf(s.key), backgroundImage: `url("${img}")` } : coverOf(s.key)}></span>;
+}
+
+function LivePlayer({ s, playing, onPlay, onStop }: { s: Stream; playing: boolean; onPlay: () => void; onStop: () => void }) {
+  const canEmbed = LOGIN_RE.test(s.channel);
   return (
-    <div className="cover" style={img ? { backgroundImage: `url("${img}")`, backgroundSize: "cover", backgroundPosition: "center" } : coverOf(p.id)}>
-      {p.live ? <span className="livebadge rl-live">● LIVE</span> : null}
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: 0 }}>
+      <div className="screen" data-a="live-player">
+        {playing && canEmbed ? (
+          <iframe
+            key={s.channel}
+            className="live-frame"
+            title={`${t("Direct de")} ${s.name}`}
+            src={playerUrl(s.channel)}
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+            referrerPolicy="origin"
+            sandbox="allow-scripts allow-same-origin"
+          />
+        ) : (
+          <>
+            <Sc s={s} />
+            <div className="ov">
+              <span className="row" style={{ justifyContent: "flex-start" }}>
+                {s.live ? <span className="livebadge">● LIVE</span> : null}
+                <span className="viewers">{streamInfo(s)}</span>
+                <span className="viewers">Twitch</span>
+              </span>
+              <span className="streamer">
+                <span className="fa">{s.name.slice(0, 1).toUpperCase()}</span>
+                <span>
+                  <b>{s.name}</b>
+                  {s.sub ? <small>{s.sub}</small> : null}
+                </span>
+              </span>
+            </div>
+            {canEmbed && s.live ? (
+              <button className="bigplay" onClick={onPlay} aria-label={t("Lancer le direct")}>
+                <Ic n="play" />
+              </button>
+            ) : null}
+          </>
+        )}
+      </div>
+      <span className="row" style={{ justifyContent: "flex-start", flexWrap: "wrap" }}>
+        {playing && canEmbed ? (
+          <button className="btn pri" onClick={onStop}>
+            {t("Arrêter le lecteur")}
+          </button>
+        ) : canEmbed && s.live ? (
+          <button className="btn pri" onClick={onPlay}>
+            <Ic n="play" />
+            {t("Regarder dans l'application")}
+          </button>
+        ) : null}
+        {canEmbed ? (
+          <button className="btn" onClick={() => void window.wecraft.relink.openChannel(s.channel)}>
+            <Ic n="ext" />
+            {t("Ouvrir sur Twitch")}
+          </button>
+        ) : null}
+        <span className="tag">{kindLabel(s)}</span>
+        {!canEmbed ? <small className="faint">{t("Pas de chaîne Twitch renseignée : lecteur indisponible.")}</small> : null}
+      </span>
     </div>
   );
 }
+
 export function LivePage() {
   const { relink } = useApp();
-  const ps = [...(relink?.data?.partners ?? [])].sort((a, b) => Number(b.live) - Number(a.live) || Number(b.featured) - Number(a.featured) || b.viewers - a.viewers);
-  const lives = ps.filter((p) => p.live);
+  const [filter, setFilter] = useState<LiveFilter>("all");
+  const [sel, setSel] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<string | null>(null);
+  const [friends, setFriends] = useState<FriendsState | null>(null);
+
+  // Amis : état relevé à l'ouverture puis toutes les 2 minutes (même rythme que les partenaires).
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      void window.wecraft.friends.state().then(
+        (st) => {
+          if (alive) setFriends(st);
+        },
+        () => undefined,
+      );
+    load();
+    const timer = window.setInterval(() => document.visibilityState === "visible" && load(), 120_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const order = (a: Stream, b: Stream) => Number(b.live) - Number(a.live) || Number(b.featured) - Number(a.featured) || b.viewers - a.viewers;
+  const partners = (relink?.data?.partners ?? []).map(partnerStream);
+  const friendList = (friends?.friends ?? []).map(friendStream).filter((x): x is Stream => !!x);
+  const all = [...(filter === "friend" ? [] : partners), ...(filter === "partner" ? [] : friendList)].sort(order);
+  const lives = all.filter((x) => x.live);
+  const offline = all.filter((x) => !x.live);
+  const liveCount = [...partners, ...friendList].filter((x) => x.live).length;
+  const cur = lives.find((x) => x.key === sel) ?? lives[0] ?? null;
+  const choose = (x: Stream) => {
+    setSel(x.key);
+    setPlaying(LOGIN_RE.test(x.channel) ? x.key : null); // un clic sur un live le lance directement
+  };
+
+  const emptyText =
+    filter === "friend"
+      ? !friends?.loggedIn
+        ? t("Connecte-toi à ReLink pour voir tes amis qui diffusent.")
+        : friendList.length
+          ? t("Aucun ami en direct pour l'instant.")
+          : t("Aucun de tes amis n'a renseigné sa chaîne Twitch.")
+      : relink?.ok
+        ? t("Aucun live pour l'instant.")
+        : "";
+  const tabs: [LiveFilter, string][] = [
+    ["all", t("Tous")],
+    ["partner", t("Partenaires")],
+    ["friend", t("Mes amis")],
+  ];
+
   return (
     <>
       <div className="vhead">
@@ -492,26 +643,79 @@ export function LivePage() {
           <h2>{t("Diffusion Partenaires")}</h2>
           <div className="sub">{t("Les partenaires en direct sur nos events et ailleurs")}</div>
         </div>
-        <span className="online">{`${lives.length} ${t("live(s) en cours")}`}</span>
+        <span className="online">{`${liveCount} ${t("live(s) en cours")}`}</span>
       </div>
       <RelinkStatus st={relink} what={t("Les partenaires")} />
-      {ps.length ? (
-        <div className="favgrid">
-          {ps.map((p) => (
-            <div key={p.id} className="favc" data-a={`partner-${p.id}`}>
-              <PartnerCover p={p} />
-              <span className="row">
-                <b>{p.name}</b>
-                {p.featured ? <span className="tag">{t("À la une")}</span> : null}
-              </span>
-              <small>{[p.category, p.channel ? `@${p.channel}` : "", p.live ? (p.viewers > 0 ? `${p.viewers.toLocaleString("fr-FR")} ${t("spectateurs")}` : t("En direct")) : t("Hors ligne")].filter(Boolean).join(" · ")}</small>
-            </div>
-          ))}
+      <div className="tabs" id="liveTabs">
+        {tabs.map(([k, label]) => (
+          <button key={k} className="chip" aria-pressed={filter === k ? "true" : "false"} onClick={() => setFilter(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {cur ? (
+        <div className="player">
+          <LivePlayer s={cur} playing={playing === cur.key} onPlay={() => setPlaying(cur.key)} onStop={() => setPlaying(null)} />
+          <div className="side3">
+            <h3 className="live-h3">{t("Autres lives")}</h3>
+            {lives
+              .filter((x) => x.key !== cur.key)
+              .map((x) => (
+                <button key={x.key} className="mini3" onClick={() => choose(x)} data-a={`mini-${x.key}`}>
+                  <span className="th">
+                    <Sc s={x} />
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <b>{x.name}</b>
+                    <small>{[streamInfo(x), kindLabel(x)].join(" · ")}</small>
+                  </span>
+                </button>
+              ))}
+          </div>
         </div>
-      ) : relink?.ok ? (
-        <div className="empty">{t("Aucun partenaire publié.")}</div>
+      ) : emptyText ? (
+        <div className="empty">{emptyText}</div>
       ) : null}
-      <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le lecteur intégré n'est pas encore branché. Les directs Twitch sont détectés automatiquement (relevé toutes les 2 minutes) dès qu'un pseudo de chaîne est renseigné côté ReLink ; pour YouTube, c'est l'état saisi à la main dans le panneau qui s'affiche.")}</p>
+      {lives.length ? (
+        <div className="sect">
+          <h3>{t("En direct maintenant")}</h3>
+          <div className="lgrid">
+            {lives.map((x) => (
+              <button key={x.key} className="lcard" onClick={() => choose(x)} data-a={`live-${x.key}`}>
+                <span className="th">
+                  <Sc s={x} />
+                  <span className="livebadge">LIVE</span>
+                  <span className="tag">{kindLabel(x)}</span>
+                  <span className="viewers">{streamInfo(x)}</span>
+                </span>
+                <b>{x.sub || x.name}</b>
+                <small>{[x.name, x.channel ? `@${x.channel}` : ""].filter(Boolean).join(" · ")}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {offline.length ? (
+        <div className="sect">
+          <h3>{t("Hors ligne")}</h3>
+          <div className="favgrid">
+            {offline.map((x) => (
+              <div key={x.key} className="favc" data-a={`offline-${x.key}`}>
+                <div className="cover live-cover" style={coverOf(x.key)}></div>
+                <span className="row">
+                  <b>{x.name}</b>
+                  {x.featured ? <span className="tag">{t("À la une")}</span> : null}
+                </span>
+                <small>{[kindLabel(x), x.sub, x.channel ? `@${x.channel}` : "", t("Hors ligne")].filter(Boolean).join(" · ")}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {filter !== "friend" && !partners.length && relink?.ok ? <div className="empty">{t("Aucun partenaire publié.")}</div> : null}
+      <p className="faint" style={{ fontSize: "12.5px" }}>
+        {t("Les directs Twitch sont détectés automatiquement (relevé toutes les 2 minutes) dès qu'un pseudo de chaîne est renseigné ; le lecteur ne se charge qu'au clic. Pour YouTube, c'est l'état saisi à la main dans le panneau ReLink qui s'affiche, sans lecteur intégré.")}
+      </p>
     </>
   );
 }
