@@ -575,3 +575,11 @@ body.tb-off .app { height: 100vh !important; }
 .mus-key { font-family: var(--f-mono); min-width: 120px; }
 .mus-key.rec { border-color: var(--acc); }
 .fr-music { color: var(--acc) !important; }
+
+/* ---- Diffusion Partenaires : lecteur intégré et vignettes (disposition du prototype) ---- */
+.live-sc { background: linear-gradient(135deg, var(--c1), var(--c2)); background-size: cover; background-position: center; }
+.live-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
+.live-h3 { font-size: 13px; font-family: var(--f-mono); font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+.mini3 .th .live-sc { border-radius: 8px; }
+/* Diffusion : pas de quadrillage « nappe » par-dessus les aperçus */
+.live-sc::after, .live-cover::after { content: none !important; background: none !important; }
