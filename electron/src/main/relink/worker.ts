@@ -323,7 +323,7 @@ export class RelinkClient {
   /** Bootstrap du Worker (toutes les données publiques du launcher). `force` : ignorer le délai de 60 s. */
   async refresh(channel: ReleaseChannel = "stable", force = false): Promise<RelinkState> {
     if (this.inflight) return this.inflight;
-    if (!force && this.state.fetchedAt && !this.state.stale && this.now() - this.state.fetchedAt < 60_000) return this.state;
+    if (!force && this.state.fetchedAt && !this.state.stale && this.now() - this.state.fetchedAt < 30_000) return this.state;
     this.inflight = (async () => {
       await this.cached();
       try {
