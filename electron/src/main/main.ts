@@ -12,6 +12,7 @@ import type { AppInfo, DeleteResult, InstanceList, InvalidFileNotice, LaunchStar
 import { CHANNELS } from "../shared/channels";
 import { cleanMusicSettings, Settings } from "./config";
 import { loadXmcl } from "./install/xmcl";
+import { PlayerHost } from "./player";
 import { instancesDir } from "./instances/detect";
 import { InstanceService } from "./instances/service";
 import { loaderVersionList } from "./install/loaderList";
@@ -53,8 +54,6 @@ import {
   APP_ENTRY,
   APP_SCHEME,
   CONTENT_SECURITY_POLICY,
-  PLAYER_ORIGIN,
-  isPlayerRequest,
   isTwitchLogin,
   EXTERNAL_LINKS,
   isAppUrl,
@@ -86,6 +85,7 @@ const RENDERER_ROOT = path.join(__dirname, "..", "renderer");
 const PRELOAD = path.join(__dirname, "..", "preload", "preload.js");
 
 let mainWindow: BrowserWindow | null = null;
+const player = new PlayerHost(() => mainWindow, (line) => void appLog?.warn("Lecteur", line));
 /** Mesuré une seule fois, à la première demande de l'interface (diagnostic de lenteur au démarrage). */
 let startupMs: number | undefined;
 const store = new JsonStore();
@@ -164,6 +164,11 @@ process.on("uncaughtException", (e) => void appLog?.error("Application", `Erreur
 
 // ---------------------------------------------------------------- règles appliquées à tout contenu web
 app.on("web-contents-created", (_event, contents: WebContents) => {
+  // Le lecteur Twitch (session à part) a ses propres règles : celles ci-dessous annuleraient les redirections de Twitch.
+  if (player.owns(contents)) {
+    player.guard(contents);
+    return;
+  }
   // Aucune navigation hors de l'interface, aucune fenêtre secondaire, aucune <webview>.
   contents.on("will-navigate", (e, url) => {
     if (!isAppUrl(url)) e.preventDefault();
@@ -242,18 +247,13 @@ async function serveAsset(request: Request): Promise<Response> {
 
 function lockDownSession(): void {
   const s = session.defaultSession;
-  // caméra, micro, notifications… refusés. Seule exception : le plein écran, pour l'interface et le lecteur Twitch.
-  const fullscreenOk = (permission: string, url: string): boolean => permission === "fullscreen" && (isAppUrl(url) || url.startsWith(`${PLAYER_ORIGIN}/`));
-  s.setPermissionRequestHandler((_wc, permission, callback, details) => callback(fullscreenOk(permission, details.requestingUrl)));
-  s.setPermissionCheckHandler((_wc, permission, requestingOrigin) => fullscreenOk(permission, requestingOrigin));
+  s.setPermissionRequestHandler((_wc, _permission, callback) => callback(false)); // caméra, micro, notifications…
+  s.setPermissionCheckHandler(() => false);
   s.setDevicePermissionHandler(() => false);
   // L'interface ne fait aucune requête réseau : tout ce qui n'est pas app:// est bloqué.
-  // Exception étroite : le lecteur Twitch intégré (cadre https://player.twitch.tv et ses seuls domaines Twitch).
+  // (Le lecteur Twitch vit dans sa propre session isolée : voir player.ts.)
   s.webRequest.onBeforeRequest((details, callback) => {
-    const allowed =
-      details.url.startsWith(`${APP_SCHEME}://`) ||
-      details.url.startsWith("devtools://") ||
-      isPlayerRequest(details.url, details.resourceType, details.frame?.url ?? null);
+    const allowed = details.url.startsWith(`${APP_SCHEME}://`) || details.url.startsWith("devtools://");
     callback({ cancel: !allowed });
   });
 }
@@ -405,6 +405,7 @@ async function start(): Promise<void> {
   }
   app.on("will-quit", () => {
     globalShortcut.unregisterAll();
+    player.dispose();
     music?.stop();
   });
   friendsPresence = new FriendsPresence({
@@ -461,6 +462,7 @@ function createWindow(): void {
     }
   });
   mainWindow.on("closed", () => {
+    player.stop();
     mainWindow = null;
   });
   void mainWindow.loadURL(APP_ENTRY);
@@ -642,6 +644,21 @@ handle(CHANNELS.relinkChannelImage, async (channel) => {
   if (!twitchLive || !isTwitchLogin(channel)) return null;
   const c = await twitchLive.check(channel);
   return c?.live ? c.thumb : null;
+});
+
+// Lecteur intégré : vue native posée sur l'emplacement du lecteur (voir player.ts). null = arrêter ou masquer.
+handle(CHANNELS.playerSet, async (req) => {
+  const r = (typeof req === "object" && req !== null ? req : {}) as { channel?: unknown; rect?: unknown };
+  if (!isTwitchLogin(r.channel)) {
+    player.stop();
+    return true;
+  }
+  const q = (typeof r.rect === "object" && r.rect !== null ? r.rect : null) as Record<string, unknown> | null;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
+  const rect = q ? { x: n(q["x"]), y: n(q["y"]), width: n(q["width"]), height: n(q["height"]) } : null;
+  const ok = rect && [rect.x, rect.y, rect.width, rect.height].every((v) => Number.isFinite(v)) && rect.width > 0 && rect.height > 0;
+  await player.show(r.channel, ok ? rect : null);
+  return true;
 });
 
 // « Regarder sur Twitch » : ouvre la chaîne dans le navigateur (adresse construite ici, pseudo validé).
