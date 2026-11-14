@@ -1,7 +1,7 @@
 // Données du service ReLink (Worker, lecture seule) dans l'interface : actualités et encarts, serveurs,
 // events, partenaires, notifications, maintenance et politique de version. Rien n'est inventé : sans
 // réponse du service, la page le dit (et garde le dernier état connu, signalé comme ancien).
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import type { Friend, FriendsState, OfficialInstalled, RelinkModpack, RelinkNews, RelinkPartner, RelinkState } from "../../shared/api";
 import { JobView, useJob } from "./Import";
 import { useApp } from "./ctx";
@@ -474,8 +474,55 @@ interface Stream {
 }
 type LiveFilter = "all" | StreamKind;
 const LOGIN_RE = /^[A-Za-z0-9_]{1,40}$/;
-/** Lecteur Twitch : « parent » = hôte de l'interface (app://wecraft). */
-const playerUrl = (channel: string): string => `https://player.twitch.tv/?channel=${encodeURIComponent(channel.toLowerCase())}&parent=wecraft&autoplay=true`;
+/**
+ * Lecteur Twitch : une vue native (processus principal, session isolée) est posée par-dessus l'emplacement `slot`.
+ * Elle suit l'emplacement (défilement, redimensionnement), est rognée aux limites de la zone principale, et se masque
+ * quand un panneau, un menu ou une fenêtre s'ouvre par-dessus (une vue native passerait sinon devant).
+ */
+function useNativePlayer(channel: string | null, slot: RefObject<HTMLDivElement | null>): void {
+  useEffect(() => {
+    if (!channel) return;
+    const main = document.getElementById("main");
+    let raf = 0;
+    const send = () => {
+      const el = slot.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const m = main?.getBoundingClientRect();
+      let x1 = r.left;
+      let y1 = r.top;
+      let x2 = r.right;
+      let y2 = r.bottom;
+      if (m) {
+        x1 = Math.max(x1, m.left);
+        y1 = Math.max(y1, m.top);
+        x2 = Math.min(x2, m.right);
+        y2 = Math.min(y2, m.bottom);
+      }
+      const covered = !!document.querySelector(".overlay:not([hidden]), .drawer:not([hidden]), .menu");
+      const visible = !covered && x2 - x1 > 8 && y2 - y1 > 8;
+      void window.wecraft.relink.setPlayer({ channel, rect: visible ? { x: x1, y: y1, width: x2 - x1, height: y2 - y1 } : null }).catch(() => undefined);
+    };
+    const tick = () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(send);
+    };
+    tick();
+    const ro = new ResizeObserver(tick);
+    if (slot.current) ro.observe(slot.current);
+    main?.addEventListener("scroll", tick, { passive: true });
+    window.addEventListener("resize", tick);
+    const poll = window.setInterval(tick, 400); // filet : animations, panneaux ouverts ou fermés
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearInterval(poll);
+      ro.disconnect();
+      main?.removeEventListener("scroll", tick);
+      window.removeEventListener("resize", tick);
+      void window.wecraft.relink.setPlayer({ channel: null, rect: null }).catch(() => undefined); // quitter la page ou arrêter = la lecture s'arrête
+    };
+  }, [channel, slot]);
+}
 
 function partnerStream(p: RelinkPartner): Stream {
   return { key: `p:${p.id}`, kind: "partner", name: p.name, sub: p.category, channel: p.channel, live: p.live, viewers: p.viewers, featured: p.featured, hasThumb: !!p.thumb, partnerId: p.id };
@@ -519,20 +566,13 @@ function Sc({ s }: { s: Stream }) {
 
 function LivePlayer({ s, playing, onPlay, onStop }: { s: Stream; playing: boolean; onPlay: () => void; onStop: () => void }) {
   const canEmbed = LOGIN_RE.test(s.channel);
+  const slot = useRef<HTMLDivElement | null>(null);
+  useNativePlayer(playing && canEmbed ? s.channel : null, slot);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: 0 }}>
       <div className="screen" data-a="live-player">
         {playing && canEmbed ? (
-          <iframe
-            key={s.channel}
-            className="live-frame"
-            title={`${t("Direct de")} ${s.name}`}
-            src={playerUrl(s.channel)}
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-            referrerPolicy="origin"
-            sandbox="allow-scripts allow-same-origin"
-          />
+          <div className="live-slot" ref={slot} aria-label={`${t("Direct de")} ${s.name}`} />
         ) : (
           <>
             <Sc s={s} />
