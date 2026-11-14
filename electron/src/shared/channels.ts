@@ -108,6 +108,13 @@ export const CHANNELS = {
   relinkCardLink: "relink:card-link",
   relinkPartnerImage: "relink:partner-image",
   relinkJoinServer: "relink:join-server",
+  musicState: "music:state",
+  musicControl: "music:control",
+  musicChoose: "music:choose",
+  musicSettings: "music:settings",
+  musicSetSettings: "music:set-settings",
+  musicApps: "music:apps",
+  musicOpenApp: "music:open-app",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];

@@ -6,6 +6,7 @@ import { useApp } from "./ctx";
 import { NotifList } from "./Relink";
 import { useEscapeLayer } from "./keys";
 import { Ic } from "./Ic";
+import { MusicPanel } from "./Music";
 import { detail, gById, type Inst } from "./model";
 import { t } from "./i18n";
 import { InstIcon } from "./symbols";
@@ -231,6 +232,7 @@ function FriendsPanel() {
         <span className="fr-who">
           <b>{f.pseudo}</b>
           <small className="faint">{g ? `${t(FRIEND_LABEL[f.status])} · ${sub}` : sub}</small>
+          {f.music && f.status !== "offline" ? <small className="faint fr-music" title={f.music.app}>{`♪ ${t("Écoute")} ${f.music.title}${f.music.artist ? ` · ${f.music.artist}` : ""}`}</small> : null}
         </span>
         {g && g.id ? (
           <button className="btn sm pri" disabled={!f.joinable || busy} title={f.joinable ? t("Lancer la même instance et te connecter à son serveur") : g.kind === "event" ? t("Tu n'as pas cet event") : t("Tu n'as pas ce modpack")} onClick={() => joinFriend(f.id)}>
@@ -322,6 +324,7 @@ function FriendsPanel() {
 const DRAWERS: Record<string, [string, string, string]> = {
   downloads: ["downloads", "Téléchargements", "Aucun téléchargement en cours."],
   friends: ["friends", "Amis", ""],
+  music: ["music", "Musique", ""],
   news: ["bell", "Nouveautés", "Aucune notification pour l'instant."],
   staff: ["staff", "Menu staff", "Pas encore disponible."],
 };
@@ -342,7 +345,7 @@ export function Drawer() {
               ✕
             </button>
           </header>
-          <div className="dbody">{ui.drawer === "news" ? <NotifList /> : ui.drawer === "friends" ? <FriendsPanel /> : <div className="empty">{T[2]}</div>}</div>
+          <div className="dbody">{ui.drawer === "news" ? <NotifList /> : ui.drawer === "friends" ? <FriendsPanel /> : ui.drawer === "music" ? <MusicPanel /> : <div className="empty">{T[2]}</div>}</div>
         </>
       ) : null}
     </aside>

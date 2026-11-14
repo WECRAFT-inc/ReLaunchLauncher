@@ -13,8 +13,17 @@ export interface PresenceGame {
   mc: string;
 }
 
+/** Morceau écouté, envoyé seulement si le joueur a activé le partage de sa musique. */
+export interface PresenceMusic {
+  title: string;
+  artist: string;
+  app: string;
+}
+
 export interface FriendsPresenceDeps {
-  send: (body: { idleMs: number; game: PresenceGame | null }) => Promise<void>;
+  send: (body: { idleMs: number; game: PresenceGame | null; music?: PresenceMusic | null }) => Promise<void>;
+  /** Morceau en cours à partager (null : rien, ou partage coupé). */
+  music?: () => Promise<PresenceMusic | null>;
   clear: () => Promise<void>;
   /** Partage activé ET compte ReLink connecté. */
   active: () => Promise<boolean>;
@@ -77,7 +86,8 @@ export class FriendsPresence {
         }
         return;
       }
-      await this.d.send({ idleMs: await this.idleMs(), game: this.game?.info ?? null });
+      const music = this.d.music ? await this.d.music().catch(() => null) : undefined;
+      await this.d.send({ idleMs: await this.idleMs(), game: this.game?.info ?? null, ...(music !== undefined ? { music } : {}) });
       this.sent = true;
     } catch {
       /* Worker injoignable : le prochain signal réessaie */

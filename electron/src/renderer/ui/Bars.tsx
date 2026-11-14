@@ -1,4 +1,5 @@
 // Barres de navigation (port de renderBars, navBtn, pinsHTML… du prototype). Même balisage, mêmes règles.
+import { MusicBarButton } from "./Music";
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { useApp } from "./ctx";
 import { useUnread } from "./Relink";
@@ -128,6 +129,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
     </button>,
     drawerBtn("downloads", "Download Manager", "downloads"),
     drawerBtn("friends", t("Amis"), "friends"),
+    <MusicBarButton key={k("music")} pressed={ui.drawer === "music"} size={BS.b} />,
   ];
   const logo = () =>
     goBtn(

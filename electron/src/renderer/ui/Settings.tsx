@@ -1,4 +1,5 @@
 // Page Réglages (port de RENDER.settings, mini, pinMgr… du prototype), même balisage.
+import { MusicSettingsGroup } from "./Music";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { ShaderPrefsView } from "../../shared/api";
 import { useApp } from "./ctx";
@@ -528,6 +529,7 @@ export function Settings() {
     ["accueil", "Accueil", "home"],
     ["jeu", "Jeu", "game"],
     ["comportement", "Comportement", "behave"],
+    ["musique", "Musique", "music"],
     ["logs", "Logs", "news"],
     ["compte", "Compte ReLink", "relink"],
   ];
@@ -666,6 +668,8 @@ export function Settings() {
     body = <NavTab />;
   } else if (ui.setTab === "logs") {
     body = <LogsTab />;
+  } else if (ui.setTab === "musique") {
+    body = <MusicSettingsGroup />;
   } else if (ui.setTab === "accueil") {
     body = (
       <>

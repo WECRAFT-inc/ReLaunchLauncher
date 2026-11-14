@@ -8,6 +8,13 @@ const RELINK_CARD_IMAGE = "relink:card-image";
 const RELINK_CARD_LINK = "relink:card-link";
 const RELINK_PARTNER_IMAGE = "relink:partner-image";
 const RELINK_JOIN_SERVER = "relink:join-server";
+const MUSIC_STATE = "music:state";
+const MUSIC_CONTROL = "music:control";
+const MUSIC_CHOOSE = "music:choose";
+const MUSIC_SETTINGS = "music:settings";
+const MUSIC_SET_SETTINGS = "music:set-settings";
+const MUSIC_APPS = "music:apps";
+const MUSIC_OPEN_APP = "music:open-app";
 const GET_INFO = "app:get-info";
 const RENDERED = "app:rendered";
 const OPEN_DATA_DIR = "app:open-data-dir";
@@ -174,6 +181,15 @@ joinServer: (id: string) =>
     join: (id: string) => ipcRenderer.invoke(FR_JOIN, id),
     setShare: (on: boolean) => ipcRenderer.invoke(FR_SHARE, on === true),
     ping: () => ipcRenderer.invoke(FR_PING),
+  }),
+  music: Object.freeze({
+    state: () => ipcRenderer.invoke(MUSIC_STATE),
+    control: (action: string, sessionId?: string) => ipcRenderer.invoke(MUSIC_CONTROL, action, sessionId ?? null),
+    choose: (sessionId: string | null) => ipcRenderer.invoke(MUSIC_CHOOSE, sessionId),
+    settings: () => ipcRenderer.invoke(MUSIC_SETTINGS),
+    setSettings: (patch: unknown) => ipcRenderer.invoke(MUSIC_SET_SETTINGS, patch),
+    apps: () => ipcRenderer.invoke(MUSIC_APPS),
+    openApp: (id: string) => ipcRenderer.invoke(MUSIC_OPEN_APP, id),
   }),
   offline: Object.freeze({
     state: () => ipcRenderer.invoke(OFF_STATE),

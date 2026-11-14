@@ -548,3 +548,30 @@ body.tb-off .app { height: 100vh !important; }
 .ncard .card-labels .card-type { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ncard .card-type .card-label-separator { margin: 0 6px; font-size: inherit; font-weight: inherit; color: inherit; opacity: .8; }
 .ncard .card-type .card-extra-label { font-size: inherit; font-weight: inherit; line-height: inherit; color: inherit; overflow-wrap: normal; }
+
+/* Musique : bouton de la barre, panneau latéral et raccourcis */
+.mus-nb { position: relative; }
+.mus-nb img { border-radius: 6px; object-fit: cover; }
+.mus-eq { position: absolute; right: 4px; bottom: 4px; display: flex; align-items: flex-end; gap: 1.5px; height: 9px; }
+.mus-eq i { width: 2px; background: var(--acc); border-radius: 1px; animation: mus-eq 0.9s ease-in-out infinite; }
+.mus-eq i:nth-child(2) { animation-delay: -0.3s; }
+.mus-eq i:nth-child(3) { animation-delay: -0.6s; }
+@keyframes mus-eq { 0%, 100% { height: 3px; } 50% { height: 9px; } }
+@media (prefers-reduced-motion: reduce) { .mus-eq i { animation: none; height: 6px; } }
+.mus-panel { display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
+.mus-now { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 6px 0; }
+.mus-cover { width: 168px; height: 168px; border-radius: 16px; overflow: hidden; display: grid; place-items: center; background: rgba(255,255,255,.05); border: 1px solid var(--line); margin-bottom: 8px; }
+.mus-cover img { width: 100%; height: 100%; object-fit: cover; }
+.mus-cover svg { width: 56px; height: 56px; opacity: .5; }
+.mus-title { font-size: 15px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-now small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-ctl { display: flex; gap: 10px; margin-top: 10px; }
+.mus-ctl .btn { min-width: 46px; font-size: 16px; }
+.mus-src { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid transparent; color: inherit; font: inherit; cursor: pointer; margin-bottom: 6px; }
+.mus-src.on { border-color: var(--acc); }
+.mus-src b, .mus-src small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mus-apps { display: flex; flex-wrap: wrap; gap: 6px; }
+.mus-keys { display: flex; align-items: center; gap: 6px; }
+.mus-key { font-family: var(--f-mono); min-width: 120px; }
+.mus-key.rec { border-color: var(--acc); }
+.fr-music { color: var(--acc) !important; }

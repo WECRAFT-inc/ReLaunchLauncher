@@ -66,6 +66,8 @@ export interface RawFriend extends FriendBrief {
   minecraftName: string | null;
   status: "online" | "away" | "offline";
   game: { kind: "event" | "pack" | "instance"; id: string | null; name: string; mc: string; startedAt: number } | null;
+  /** Ce que l'ami écoute (s'il le partage ; route de présence du Worker). */
+  music: { title: string; artist: string; app: string } | null;
   lastSeen: number | null;
 }
 
@@ -267,8 +269,10 @@ export class RelinkAccount {
       const game: RawFriend["game"] = status !== "offline" && kind && (kind === "instance" || gid)
   ? { kind, id: kind === "instance" ? null : gid, name: str(g["name"], 60), mc: str(g["mc"], 24), startedAt: typeof g["startedAt"] === "number" ? g["startedAt"] : 0 }
   : null;
+      const mu = obj(o["music"]);
+      const music = status !== "offline" && typeof mu["title"] === "string" && str(mu["title"], 100) ? { title: str(mu["title"], 100), artist: str(mu["artist"], 100), app: str(mu["app"], 40) } : null;
       const seen = typeof o["lastSeen"] === "string" ? Date.parse(o["lastSeen"]) : NaN;
-      friends.push({ ...b, minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, lastSeen: Number.isFinite(seen) ? seen : null });
+      friends.push({ ...b, minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
     }
     return { friends, incoming: list(r["incoming"]).map(brief).filter((x): x is FriendBrief => !!x), outgoing: list(r["outgoing"]).map(brief).filter((x): x is FriendBrief => !!x) };
   }
@@ -287,7 +291,7 @@ export class RelinkAccount {
   }
 
   /** Signal de présence (voir friendsPresence.ts). */
-  async presencePut(body: { idleMs: number; game: { kind: string; id: string | null; name: string; mc: string } | null }): Promise<void> {
+  async presencePut(body: { idleMs: number; game: { kind: string; id: string | null; name: string; mc: string } | null; music?: { title: string; artist: string; app: string } | null }): Promise<void> {
     await this.call("PUT", "/launcher/me/presence", { auth: true, json: body, timeout: 8000 });
   }
 

@@ -1,7 +1,7 @@
 // Réglages WeCraft (launcher_config.json), partagés avec la version Python.
 // Lecture tolérante et écriture sûre via JsonStore (lot E1). Seules les clés que la version Electron
 // gère sont modifiées ; toutes les autres (y compris inconnues) sont conservées telles quelles.
-import type { SettingResult, ThemeKey } from "../shared/api";
+import type { MusicSettings, MusicShortcuts, SettingResult, ThemeKey } from "../shared/api";
 import path from "node:path";
 import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "./storage/jsonStore";
 import type { ShaderPrefs } from "./launch/shaders";
@@ -12,6 +12,28 @@ export function cleanShaderPrefs(v: unknown): ShaderPrefs {
   const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
   const name = (x: unknown) => (typeof x === "string" && x.trim() && !/[\\/:*?"<>|\x00-\x1f]/.test(x) ? x.trim().slice(0, 120) : null);
   return { on: o["on"] === true, primary: name(o["primary"]), secondary: name(o["secondary"]) };
+}
+
+/**
+ * Raccourci global de la musique, au format des accélérateurs Electron : au moins Ctrl ou Alt (pour ne pas voler
+ * une touche à Minecraft), puis une touche simple. Ex. « Ctrl+Alt+Right », « Alt+Shift+P ».
+ */
+const ACC_KEY = /^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Left|Right|Up|Down|Home|End|PageUp|PageDown|Insert|Delete|Plus|Minus|num[0-9])$/;
+export function isMusicAccelerator(v: unknown): v is string {
+  if (typeof v !== "string" || v.length > 40) return false;
+  const parts = v.split("+");
+  const key = parts.pop() ?? "";
+  const mods = new Set(parts);
+  if (mods.size !== parts.length || ![...mods].every((m) => ["Ctrl", "Alt", "Shift", "Super"].includes(m))) return false;
+  return (mods.has("Ctrl") || mods.has("Alt")) && ACC_KEY.test(key);
+}
+
+export function cleanMusicSettings(v: unknown): MusicSettings {
+  const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+  const k = (typeof o["shortcuts"] === "object" && o["shortcuts"] !== null ? o["shortcuts"] : {}) as Record<string, unknown>;
+  const acc = (x: unknown) => (isMusicAccelerator(x) ? x : null);
+  const shortcuts: MusicShortcuts = { toggle: acc(k["toggle"]), next: acc(k["next"]), prev: acc(k["prev"]) };
+  return { enabled: o["enabled"] !== false, share: o["share"] === true, shortcuts };
 }
 
 export const THEME_KEYS: readonly ThemeKey[] = ["phenix", "relink", "aurore", "glace"];
@@ -166,6 +188,39 @@ export class Settings {
     const v = cleanShaderPrefs(p);
     try {
       await this.store.update(this.file, (data) => ({ ...data, relaunch_shaders: v }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Musique (clé « relaunch_music ») : mini-lecteur activé, partage aux amis désactivé, aucun raccourci par défaut. */
+  async music(): Promise<MusicSettings> {
+    return cleanMusicSettings((await this.store.read(this.file))?.["relaunch_music"]);
+  }
+
+  async setMusic(next: MusicSettings): Promise<boolean> {
+    const v = cleanMusicSettings(next);
+    try {
+      await this.store.update(this.file, (data) => ({ ...data, relaunch_music: v }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Appli de musique choisie par le joueur (clé « relaunch_music_source », identifiant Windows) ; null : suivre Windows. */
+  async musicSource(): Promise<string | null> {
+    const v = (await this.store.read(this.file))?.["relaunch_music_source"];
+    return typeof v === "string" && /^[^\r\n]{1,300}$/.test(v) ? v : null;
+  }
+
+  async setMusicSource(id: string | null): Promise<boolean> {
+    try {
+      await this.store.update(this.file, (data) => {
+        const { relaunch_music_source: _s, ...rest } = data as Record<string, unknown>;
+        return id ? { ...rest, relaunch_music_source: id } : rest;
+      });
       return true;
     } catch {
       return false;

@@ -453,6 +453,16 @@ cardImage(bid: string): Promise<string | null>;
     /** Le joueur utilise le launcher (pour le statut « absent »). */
     ping(): Promise<void>;
   };
+  music: {
+    state(): Promise<MusicState>;
+    control(action: MusicAction, sessionId?: string): Promise<boolean>;
+    /** Appli à piloter ; null : suivre Windows. */
+    choose(sessionId: string | null): Promise<boolean>;
+    settings(): Promise<MusicSettings>;
+    setSettings(patch: Partial<MusicSettings>): Promise<MusicSettingsResult>;
+    apps(): Promise<MusicApp[]>;
+    openApp(id: string): Promise<boolean>;
+  };
   offline: {
     state(): Promise<OfflineState>;
     /** Vérifie le pseudo auprès de Mojang (refusé s'il appartient à un compte officiel), l'enregistre et l'utilise pour jouer. */
@@ -724,6 +734,61 @@ export interface MicrosoftState {
 /** Compte hors-ligne (simple pseudo, sans Microsoft) : rien n'est envoyé à Mojang, pas d'accès aux serveurs qui vérifient le compte. */
 /** Statut d'un ami : en ligne, absent (aucune activité depuis plus de 30 min) ou hors ligne (launcher et jeu fermés). */
 export type FriendStatus = "online" | "away" | "offline";
+/** Musique : appli qui joue, vue par les commandes multimédias de Windows. */
+export type MusicAction = "play" | "pause" | "toggle" | "next" | "prev";
+export interface MusicSession {
+  /** Identifiant donné par Windows (appli). */
+  id: string;
+  /** Nom lisible de l'appli (Spotify, Deezer, Google Chrome…). */
+  app: string;
+  title: string;
+  artist: string;
+  album: string;
+  playing: boolean;
+  status: string;
+  canPlay: boolean;
+  canPause: boolean;
+  canNext: boolean;
+  canPrev: boolean;
+  hasThumb: boolean;
+}
+export interface MusicState {
+  available: boolean;
+  /** Pourquoi la musique n'est pas disponible (si `available` est faux). */
+  reason?: string;
+  sessions: MusicSession[];
+  /** Session pilotée. */
+  selected: string | null;
+  /** Appli choisie par le joueur (null : suivre Windows). */
+  chosen: string | null;
+  track: (MusicSession & { thumb: string | null }) | null;
+}
+export interface MusicShortcuts {
+  toggle: string | null;
+  next: string | null;
+  prev: string | null;
+}
+export interface MusicSettings {
+  /** Mini-lecteur dans la barre du haut (et pont multimédia actif). */
+  enabled: boolean;
+  /** « Écoute … » visible des amis ReLink (désactivé par défaut). */
+  share: boolean;
+  shortcuts: MusicShortcuts;
+}
+export interface MusicApp {
+  id: string;
+  name: string;
+  /** L'appli est installée (sinon, la version web est ouverte). */
+  installed: boolean;
+}
+export type MusicSettingsResult = { ok: true; settings: MusicSettings; /** Raccourcis refusés (déjà pris par une autre appli). */ refused: (keyof MusicShortcuts)[] } | { ok: false; message: string };
+/** Morceau partagé avec les amis. */
+export interface FriendMusic {
+  title: string;
+  artist: string;
+  app: string;
+}
+
 export interface FriendGame {
   kind: "event" | "pack" | "instance";
   /** Event ou modpack ReLink (null : instance locale, qui ne peut pas être rejointe). */
@@ -741,6 +806,8 @@ export interface Friend extends FriendBrief {
   status: FriendStatus;
   /** Partie en cours (visible seulement si l'ami n'est pas hors ligne). */
   game: FriendGame | null;
+  /** Ce que l'ami écoute (s'il le partage). */
+  music?: FriendMusic | null;
   lastSeen: number | null;
   /** Tu as l'instance (event ou modpack) où il joue : tu peux le rejoindre. */
   joinable: boolean;

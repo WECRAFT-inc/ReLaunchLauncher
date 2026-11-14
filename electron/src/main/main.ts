@@ -1,7 +1,7 @@
 // Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, protocol, safeStorage, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, protocol, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -10,7 +10,7 @@ import type { ModpackEditInfo, ModpackJob, ModpackSearch, ModpackStartResult, Pa
 import type { LoaderVersionList } from "../shared/api";
 import type { AppInfo, DeleteResult, InstanceList, InvalidFileNotice, LaunchStartResult, LaunchStatus, SettingResult } from "../shared/api";
 import { CHANNELS } from "../shared/channels";
-import { Settings } from "./config";
+import { cleanMusicSettings, Settings } from "./config";
 import { loadXmcl } from "./install/xmcl";
 import { instancesDir } from "./instances/detect";
 import { InstanceService } from "./instances/service";
@@ -19,6 +19,7 @@ import { isSafeVersionId } from "./install/vanilla";
 import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLook";
 import { explainWorkerError, RelinkClient, WORKER_HOSTS, WORKER_URL } from "./relink/worker";
 import { TwitchLiveDetector } from "./relink/twitchLive";
+import { isMusicAction, MUSIC_APPS, MusicBridge } from "./media/music";
 import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore, verifyDetached } from "./skins/skins";
 import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
 import { PackIntegrityError } from "./modpacks/relaunchPack";
@@ -99,6 +100,26 @@ let skins: SkinStore | null = null;
 let account: RelinkAccount | null = null;
 /** Statut envoyé aux amis ReLink (en ligne / absent / hors ligne) et partie en cours. */
 let friendsPresence: FriendsPresence | null = null;
+let music: MusicBridge | null = null;
+
+/** Raccourcis globaux de la musique (fonctionnent aussi quand Minecraft est au premier plan). Renvoie ceux refusés. */
+function applyMusicShortcuts(sc: import("../shared/api").MusicShortcuts): (keyof typeof sc)[] {
+  globalShortcut.unregisterAll();
+  const refused: (keyof typeof sc)[] = [];
+  const acts: [keyof typeof sc, "toggle" | "next" | "prev"][] = [["toggle", "toggle"], ["next", "next"], ["prev", "prev"]];
+  for (const [k, action] of acts) {
+    const acc = sc[k];
+    if (!acc) continue;
+    let ok = false;
+    try {
+      ok = globalShortcut.register(acc, () => void music?.control(action));
+    } catch {
+      ok = false;
+    }
+    if (!ok) refused.push(k);
+  }
+  return refused;
+}
 /** Partie préparée par instance (dossier de jeu) : ce que les amis verront une fois le jeu démarré. */
 const gameCtx = new Map<string, PresenceGame>();
 const gameKey = (dir: string): string => (process.platform === "win32" ? path.resolve(dir).toLowerCase() : path.resolve(dir));
@@ -365,7 +386,26 @@ async function start(): Promise<void> {
   presence = new DiscordPresence({ clientId: discordClientId(dc.config), enabled: dc.enabled, version: app.getVersion() });
   if (dc.enabled) void presence.idle();
   // Statut des amis : signal toutes les minutes tant que le launcher est ouvert, partage activé et compte ReLink connecté
+  // Musique : commandes multimédias de Windows (pont démarré seulement quand l'interface demande l'état)
+  music = new MusicBridge({ log: (l) => void appLog?.info("Musique", l) });
+  music.choose(await settings.musicSource());
+  const musicPrefs = await settings.music();
+  if (musicPrefs.enabled) {
+    const refused = applyMusicShortcuts(musicPrefs.shortcuts);
+    if (refused.length) void appLog?.warn("Musique", `Raccourci(s) déjà pris par une autre appli : ${refused.join(", ")}`);
+  }
+  app.on("will-quit", () => {
+    globalShortcut.unregisterAll();
+    music?.stop();
+  });
   friendsPresence = new FriendsPresence({
+    music: async () => {
+      if (!music || !settings) return null;
+      const m = await settings.music();
+      if (!m.enabled || !m.share) return null;
+      const tr = music.lastTrack();
+      return tr && tr.playing && tr.title ? { title: tr.title.slice(0, 100), artist: tr.artist.slice(0, 100), app: tr.app } : null;
+    },
     send: (b) => (account ? account.presencePut(b) : Promise.resolve()),
     clear: () => (account ? account.presenceClear() : Promise.resolve()),
     active: async () => !!account && !!settings && (await settings.sharePresence()) && (await account.state()).loggedIn,
@@ -500,6 +540,58 @@ handle(CHANNELS.relinkState, async (force) =>
         data: null,
       }
 );
+
+handle(CHANNELS.musicState, async () => {
+  const off = { available: false, reason: "Musique désactivée dans les paramètres.", sessions: [], selected: null, chosen: null, track: null };
+  if (!music || !settings) return { ...off, reason: "Indisponible." };
+  return (await settings.music()).enabled ? music.state() : off;
+});
+handle(CHANNELS.musicControl, async (action, id) => {
+  if (!music || !settings || !isMusicAction(action) || !(await settings.music()).enabled) return false;
+  return music.control(action, typeof id === "string" ? id : null);
+});
+handle(CHANNELS.musicChoose, async (id) => {
+  if (!music || !settings || (id !== null && (typeof id !== "string" || id.length > 300 || /[\r\n]/.test(id)))) return false;
+  music.choose(id);
+  return settings.setMusicSource(id);
+});
+handle(CHANNELS.musicSettings, async () => (settings ? settings.music() : cleanMusicSettings(null)));
+handle(CHANNELS.musicSetSettings, async (patch) => {
+  if (!settings || typeof patch !== "object" || patch === null) return { ok: false, message: "Réglage invalide." };
+  const cur = await settings.music();
+  const p = patch as Record<string, unknown>;
+  const next = cleanMusicSettings({
+    enabled: "enabled" in p ? p["enabled"] === true : cur.enabled,
+    share: "share" in p ? p["share"] === true : cur.share,
+    shortcuts: { ...cur.shortcuts, ...(typeof p["shortcuts"] === "object" && p["shortcuts"] !== null ? (p["shortcuts"] as object) : {}) },
+  });
+  // un raccourci invalide est remplacé par « aucun » : on le signale au lieu de l'enregistrer en silence
+  const asked = (typeof p["shortcuts"] === "object" && p["shortcuts"] !== null ? p["shortcuts"] : {}) as Record<string, unknown>;
+  for (const k of ["toggle", "next", "prev"] as const) if (typeof asked[k] === "string" && next.shortcuts[k] === null) return { ok: false, message: "Raccourci invalide : utilise Ctrl ou Alt avec une touche." };
+  const used = [next.shortcuts.toggle, next.shortcuts.next, next.shortcuts.prev].filter(Boolean);
+  if (new Set(used).size !== used.length) return { ok: false, message: "Ce raccourci est déjà utilisé pour une autre commande." };
+  if (!(await settings.setMusic(next))) return { ok: false, message: "Réglage non enregistré." };
+  const refused = next.enabled ? applyMusicShortcuts(next.shortcuts) : (globalShortcut.unregisterAll(), []);
+  if (!next.enabled) music?.stop();
+  void friendsPresence?.beat(); // partage coupé : retiré tout de suite chez les amis
+  return { ok: true, settings: next, refused };
+});
+handle(CHANNELS.musicApps, async () =>
+  MUSIC_APPS.map((a) => ({ id: a.id, name: a.name, installed: !!a.scheme && process.platform === "win32" && !!app.getApplicationNameForProtocol(`${a.scheme}://`) })),
+);
+handle(CHANNELS.musicOpenApp, async (id) => {
+  const a = MUSIC_APPS.find((x) => x.id === id);
+  if (!a) return false;
+  const installed = !!a.scheme && process.platform === "win32" && !!app.getApplicationNameForProtocol(`${a.scheme}://`);
+  try {
+    await shell.openExternal(installed ? `${a.scheme}:` : a.web);
+    return true;
+  } catch {
+    if (!installed) return false;
+    await shell.openExternal(a.web).catch(() => undefined);
+    return true;
+  }
+});
 
 handle(CHANNELS.relinkNotifications, async () =>
   relink
