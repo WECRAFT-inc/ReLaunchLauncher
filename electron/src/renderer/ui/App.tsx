@@ -223,7 +223,7 @@ export function App() {
     const pull = () => void window.wecraft.relink?.notifications().then((r) => setNotifs(r.items), () => undefined);
     pull();
     // bootstrap toutes les 2 min, notifications toutes les 3 min (fenêtre visible seulement)
-    const a = window.setInterval(() => document.visibilityState === "visible" && refreshRelink(), 120_000); // lives des partenaires : relevé toutes les 2 min (le client limite à 1 requête / 60 s)
+    const a = window.setInterval(() => document.visibilityState === "visible" && refreshRelink(), 30_000); // lives des partenaires : relevé toutes les 30s (le client limite à 1 requête / 30 s)
     const b = window.setInterval(() => document.visibilityState === "visible" && pull(), 180_000);
     return () => {
       window.clearInterval(a);
