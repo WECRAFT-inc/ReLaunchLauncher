@@ -396,7 +396,7 @@ async function start(): Promise<void> {
   if (dc.enabled) void presence.idle();
   // Statut des amis : signal toutes les minutes tant que le launcher est ouvert, partage activé et compte ReLink connecté
   // Musique : commandes multimédias de Windows (pont démarré seulement quand l'interface demande l'état)
-  music = new MusicBridge({ log: (l) => void appLog?.info("Musique", l) });
+  music = new MusicBridge({ log: (l) => void appLog?.info("Musique", l), dataDir: path.join(wecraftDataDir(pathEnv()), "cache") });
   music.choose(await settings.musicSource());
   const musicPrefs = await settings.music();
   if (musicPrefs.enabled) {

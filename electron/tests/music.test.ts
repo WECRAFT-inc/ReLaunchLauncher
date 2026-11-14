@@ -113,9 +113,45 @@ test("pont : échec au démarrage (ex. API Windows absente) → raison affichée
   assert.ok(logs.some((l) => l.includes("Type introuvable")));
 });
 
+test("script du pont : ASCII, sans guillemet double, jamais encodé (passe en -Command comme les autres appels)", () => {
+  assert.match(BRIDGE_SCRIPT, /^[\x00-\x7f]*$/);
+  assert.ok(!BRIDGE_SCRIPT.includes('"'));
+});
+
 test("script du pont : jamais de changement d'encodage de la console (lancé sans console)", () => {
   assert.doesNotMatch(BRIDGE_SCRIPT, /\[Console\]::(Input|Output)Encoding\s*=/);
   assert.match(BRIDGE_SCRIPT, /OpenStandardInput\(\)/);
+});
+
+test("pont : -Command refusé (spawn EPERM, antivirus) → essai immédiat par fichier .ps1", async () => {
+  const modes: number[] = [];
+  const b = new MusicBridge({
+    platform: "win32",
+    dataDir: "/tmp/relaunch-test",
+    spawnBridge: (mode) => {
+      modes.push(mode);
+      if (mode === 0) {
+        const ev = new EventEmitter();
+        setImmediate(() => ev.emit("error", Object.assign(new Error("spawn EPERM"), { code: "EPERM" })));
+        return { stdin: { write: () => true }, stdout: { on: () => undefined }, on: (e, cb) => ev.on(e, cb), kill: () => undefined };
+      }
+      return fakeBridge([spotify]).child;
+    },
+  });
+  const st = await b.state();
+  assert.deepEqual(modes, [0, 1]);
+  assert.equal(st.available, true);
+  // les deux refusés : raison claire (antivirus)
+  const b2 = new MusicBridge({
+    platform: "win32",
+    dataDir: "/tmp/relaunch-test",
+    spawnBridge: () => {
+      const ev = new EventEmitter();
+      setImmediate(() => ev.emit("error", new Error("spawn EPERM")));
+      return { stdin: { write: () => true }, stdout: { on: () => undefined }, on: (e, cb) => ev.on(e, cb), kill: () => undefined };
+    },
+  });
+  assert.match((await b2.state()).reason ?? "", /antivirus/);
 });
 
 test("réglages : par défaut mini-lecteur actif, partage coupé, aucun raccourci", () => {

@@ -8,14 +8,18 @@
 // - Les identifiants de session viennent de Windows ; une commande n'accepte qu'un identifiant vu dans le dernier état.
 // - Hors Windows : fonction indisponible (aucun processus lancé).
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import type { MusicAction, MusicSession, MusicState } from "../../shared/api";
 
-/** Script PowerShell du pont (gardé ici pour être livré dans l'archive de l'appli, sans fichier à écrire). */
+/**
+ * Script PowerShell du pont (ASCII, sans guillemet double : il passe tel quel en argument `-Command`).
+ * Pas de `-EncodedCommand` : un script encodé en base64 est le schéma classique des malwares et certains
+ * antivirus (ex. 360 Total Security) refusent alors le lancement (`spawn EPERM`).
+ */
 export const BRIDGE_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
-# Lancé SANS console (fenêtre cachée) : ne jamais toucher à [Console]::*Encoding (« descripteur non valide »).
-# On lit et écrit directement les flux standard, en UTF-8 sans BOM.
+# Lance sans console : ne jamais toucher a [Console]::*Encoding ; flux standard lus et ecrits en UTF-8.
 $rlUtf8 = New-Object Text.UTF8Encoding $false
 $rlIn = New-Object IO.StreamReader([Console]::OpenStandardInput(), $rlUtf8)
 $rlOut = New-Object IO.StreamWriter([Console]::OpenStandardOutput(), $rlUtf8)
@@ -31,7 +35,7 @@ try {
   $mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
   $propType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]
   $mgr = Wait-Op ($mgrType::RequestAsync()) $mgrType
-  if (-not $mgr) { throw 'gestionnaire multimédia indisponible' }
+  if (-not $mgr) { throw 'gestionnaire multimedia indisponible' }
 } catch {
   Out-Line @{ fatal = [string]$_.Exception.Message }
   exit 2
@@ -90,7 +94,10 @@ export interface BridgeChild {
 export interface MusicDeps {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
-  spawnBridge?: () => BridgeChild;
+  /** Lancement du pont (tests) ; `mode` : 0 = -Command, 1 = fichier .ps1. */
+  spawnBridge?: (mode: number) => BridgeChild;
+  /** Dossier où écrire le script si le lancement en `-Command` est refusé (secours `-File`). */
+  dataDir?: string;
   now?: () => number;
   log?: (line: string) => void;
 }
@@ -205,11 +212,25 @@ export class MusicBridge {
     return this.chosen;
   }
 
+  /** Méthode de lancement : 0 = script en clair (`-Command`, comme les autres appels PowerShell), 1 = fichier .ps1. */
+  private mode = 0;
+  private spawnRefused = false;
+
   private spawnDefault(): BridgeChild {
     const env = this.d.env ?? process.env;
     const ps = path.win32.join(env["SystemRoot"] ?? env["windir"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-    const encoded = Buffer.from(BRIDGE_SCRIPT, "utf16le").toString("base64");
-    return spawn(ps, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] }) as unknown as BridgeChild;
+    const base = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass"];
+    let args: string[];
+    if (this.mode === 1 && this.d.dataDir) {
+      const file = path.join(this.d.dataDir, "music-bridge.ps1");
+      fs.mkdirSync(this.d.dataDir, { recursive: true });
+      fs.writeFileSync(file, `\ufeff${BRIDGE_SCRIPT}`, "utf8"); // réécrit à chaque lancement : toujours le script livré
+      args = [...base, "-File", file];
+    } else {
+      args = [...base, "-Command", BRIDGE_SCRIPT];
+    }
+    this.d.log?.(`Musique : démarrage du pont (${this.mode === 1 ? "fichier .ps1" : "-Command"}).`);
+    return spawn(ps, args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] }) as unknown as BridgeChild;
   }
 
   private start(): Promise<void> {
@@ -217,7 +238,7 @@ export class MusicBridge {
     this.ready = new Promise<void>((resolve, reject) => {
       let child: BridgeChild;
       try {
-        child = (this.d.spawnBridge ?? (() => this.spawnDefault()))();
+        child = this.d.spawnBridge ? this.d.spawnBridge(this.mode) : this.spawnDefault();
       } catch (e) {
         reject(e);
         return;
@@ -281,7 +302,11 @@ export class MusicBridge {
       child.stderr?.on("data", (b) => {
         if (errText.length < 4000) errText += typeof b === "string" ? b : b.toString("utf8");
       });
-      child.on("error", (e) => dead(e instanceof Error ? e.message : String(e)));
+      child.on("error", (e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/EPERM|EACCES/.test(msg)) this.spawnRefused = true;
+        dead(msg);
+      });
       child.on("exit", (code) => dead(`code ${String(code)}`));
     });
     const mine = this.ready;
@@ -297,10 +322,22 @@ export class MusicBridge {
     if (!this.supported) return null;
     if (!this.child && this.now() < this.retryAt) return null;
     try {
+      this.spawnRefused = false;
       await this.start();
     } catch (e) {
       this.lastError = e instanceof Error ? e.message : String(e);
-      return null;
+      // lancement refusé par Windows / l'antivirus : on essaie l'autre méthode tout de suite
+      if (!(this.spawnRefused && this.mode === 0 && this.d.dataDir)) return null;
+      this.mode = 1;
+      this.retryAt = 0;
+      try {
+        this.spawnRefused = false;
+        await this.start();
+      } catch (e2) {
+        const m = e2 instanceof Error ? e2.message : String(e2);
+        this.lastError = /EPERM|EACCES/.test(m) ? `${m} : lancement de PowerShell bloqué, sans doute par l'antivirus` : m;
+        return null;
+      }
     }
     const id = String(++this.seq);
     return new Promise<Reply | null>((resolve) => {
