@@ -53,6 +53,9 @@ import {
   APP_ENTRY,
   APP_SCHEME,
   CONTENT_SECURITY_POLICY,
+  PLAYER_ORIGIN,
+  isPlayerRequest,
+  isTwitchLogin,
   EXTERNAL_LINKS,
   isAppUrl,
   isExternalLinkId,
@@ -239,12 +242,18 @@ async function serveAsset(request: Request): Promise<Response> {
 
 function lockDownSession(): void {
   const s = session.defaultSession;
-  s.setPermissionRequestHandler((_wc, _permission, callback) => callback(false)); // caméra, micro, notifications…
-  s.setPermissionCheckHandler(() => false);
+  // caméra, micro, notifications… refusés. Seule exception : le plein écran, pour l'interface et le lecteur Twitch.
+  const fullscreenOk = (permission: string, url: string): boolean => permission === "fullscreen" && (isAppUrl(url) || url.startsWith(`${PLAYER_ORIGIN}/`));
+  s.setPermissionRequestHandler((_wc, permission, callback, details) => callback(fullscreenOk(permission, details.requestingUrl)));
+  s.setPermissionCheckHandler((_wc, permission, requestingOrigin) => fullscreenOk(permission, requestingOrigin));
   s.setDevicePermissionHandler(() => false);
   // L'interface ne fait aucune requête réseau : tout ce qui n'est pas app:// est bloqué.
+  // Exception étroite : le lecteur Twitch intégré (cadre https://player.twitch.tv et ses seuls domaines Twitch).
   s.webRequest.onBeforeRequest((details, callback) => {
-    const allowed = details.url.startsWith(`${APP_SCHEME}://`) || details.url.startsWith("devtools://");
+    const allowed =
+      details.url.startsWith(`${APP_SCHEME}://`) ||
+      details.url.startsWith("devtools://") ||
+      isPlayerRequest(details.url, details.resourceType, details.frame?.url ?? null);
     callback({ cancel: !allowed });
   });
 }
@@ -627,6 +636,20 @@ handle(CHANNELS.relinkPartnerImage, async (partnerId) => {
   const c = await twitchLive.check(p.channel);
   return c?.live ? c.thumb : null;
 });
+
+// Aperçu d'une chaîne Twitch (amis qui diffusent) : seulement si elle est en direct, sans aucun compte ni clé.
+handle(CHANNELS.relinkChannelImage, async (channel) => {
+  if (!twitchLive || !isTwitchLogin(channel)) return null;
+  const c = await twitchLive.check(channel);
+  return c?.live ? c.thumb : null;
+});
+
+// « Regarder sur Twitch » : ouvre la chaîne dans le navigateur (adresse construite ici, pseudo validé).
+handle(CHANNELS.relinkOpenChannel, async (channel) => {
+  if (!isTwitchLogin(channel)) return false;
+  await shell.openExternal(`https://www.twitch.tv/${channel.toLowerCase()}`);
+  return true;
+});
   
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };
   /** Lie le compte Minecraft officiel connecté dans ReLaunch au compte ReLink (si les deux sont connectés). */
@@ -751,7 +774,13 @@ handle(CHANNELS.relinkPartnerImage, async (partnerId) => {
         loggedIn: true,
         incoming: r.incoming,
         outgoing: r.outgoing,
-        friends: r.friends.map((f) => ({ ...f, joinable: !!f.game?.id && keys.has(`${f.game.kind}:${f.game.id}`) })),
+        friends: await Promise.all(
+          r.friends.map(async (f) => {
+            // un ami qui a renseigné sa chaîne Twitch : en direct si Twitch le confirme (même méthode que les partenaires)
+            const c = f.channel && twitchLive ? await twitchLive.check(f.channel).catch(() => null) : null;
+            return { ...f, joinable: !!f.game?.id && keys.has(`${f.game.kind}:${f.game.id}`), live: c?.live === true };
+          }),
+        ),
       };
     } catch (e) {
       return { ...base, loggedIn: (await account.state()).loggedIn, error: e instanceof Error ? e.message : String(e) };
