@@ -430,6 +430,10 @@ cardImage(bid: string): Promise<string | null>;
     cardLink(id: string): Promise<boolean>;
     /** Aperçu (miniature) du direct d'un partenaire, en data:. */
     partnerImage(id: string): Promise<string | null>;
+    /** Aperçu (miniature) d'une chaîne Twitch en direct (ami qui diffuse), en data: ; null si hors ligne. */
+    channelImage(channel: string): Promise<string | null>;
+    /** Ouvre la chaîne Twitch dans le navigateur. */
+    openChannel(channel: string): Promise<boolean>;
     /** Prépare « Rejoindre » un serveur du catalogue : instance locale (event ou modpack du serveur) à lancer + adresse. */
     joinServer(id: string): Promise<RelinkJoinResult>;
   };
@@ -811,6 +815,10 @@ export interface Friend extends FriendBrief {
   lastSeen: number | null;
   /** Tu as l'instance (event ou modpack) où il joue : tu peux le rejoindre. */
   joinable: boolean;
+  /** Chaîne Twitch que l'ami a renseignée (absente sinon). */
+  channel?: string;
+  /** L'ami est en direct sur sa chaîne Twitch (confirmé par Twitch). */
+  live?: boolean;
 }
 export interface FriendsState {
   /** Connecté à ReLink : sinon, pas d'amis. */
