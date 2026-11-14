@@ -15,9 +15,6 @@ export const APP_ENTRY = `${APP_ORIGIN}/index.html`;
  * Pas d'eval, pas de script en ligne, pas de connexion réseau depuis l'interface
  * (tout passe par le processus principal), pas de cadre, pas d'objet.
  */
-/** Seul cadre externe toléré dans l'interface : le lecteur Twitch (lancé par un clic du joueur, jamais à l'ouverture de la page). */
-export const PLAYER_ORIGIN = "https://player.twitch.tv";
-
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   `script-src ${APP_ORIGIN}`,
@@ -30,45 +27,13 @@ export const CONTENT_SECURITY_POLICY = [
   "connect-src 'none'",
   "media-src 'none'",
   "object-src 'none'",
-  `frame-src ${PLAYER_ORIGIN}`,
+  "frame-src 'none'",
   "worker-src 'none'",
-  `child-src ${PLAYER_ORIGIN}`,
+  "child-src 'none'",
   "form-action 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
 ].join("; ");
-
-/** Domaines dont dépend le lecteur Twitch (page du lecteur, vidéo, images). Rien d'autre n'est joignable. */
-const TWITCH_DOMAINS = ["twitch.tv", "ttvnw.net", "jtvnw.net", "twitchcdn.net", "twitchsvc.net", "live-video.net"] as const;
-
-export function isTwitchHost(host: string): boolean {
-  const h = host.toLowerCase();
-  return TWITCH_DOMAINS.some((d) => h === d || h.endsWith(`.${d}`));
-}
-
-/**
- * Une requête réseau est-elle celle du lecteur Twitch intégré ?
- * Oui seulement si : (1) c'est le cadre du lecteur lui-même, demandé par l'interface ; ou (2) la requête est faite
- * PAR un cadre Twitch (le lecteur et ses sous-cadres) vers un domaine Twitch, en HTTPS. L'interface, elle, ne peut
- * toujours rien joindre d'autre que ses propres fichiers.
- */
-export function isPlayerRequest(url: string, resourceType: string, requesterUrl: string | null): boolean {
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return false;
-  }
-  if (u.protocol !== "https:" || u.username !== "" || u.password !== "" || !isTwitchHost(u.hostname)) return false;
-  if (resourceType === "subFrame" && u.origin === PLAYER_ORIGIN && requesterUrl !== null && isAppUrl(requesterUrl)) return true;
-  if (!requesterUrl) return false;
-  try {
-    const r = new URL(requesterUrl);
-    return r.protocol === "https:" && isTwitchHost(r.hostname);
-  } catch {
-    return false;
-  }
-}
 
 /** Chaîne Twitch valide (même règle que le Worker et le détecteur de lives). */
 export function isTwitchLogin(v: unknown): v is string {
