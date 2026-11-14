@@ -49,23 +49,27 @@ async function readSmall(url: string, opts: NetOptions): Promise<string> {
  * par exemple le WeCraft.exe de la version Python) ; un tag qui ne donne pas un nom sûr = pas d'installeur.
  */
 export async function fetchLatestRelease(opts: NetOptions = {}, repo: string = GITHUB_REPO, beta = false): Promise<ReleaseInfo> {
-  if (beta) {
-    const d = await pickBeta(opts, repo);
-    if (d) return parseRelease(d, opts, repo);
-  }
-  const d = await fetchJson<Record<string, unknown>>(`https://api.github.com/repos/${repo}/releases/latest`, 2 * 1024 * 1024, {}, net(opts));
-  return parseRelease(d, opts, repo);
+  // Le launcher choisit lui-même la release la plus récente PAR NUMÉRO DE VERSION. « /releases/latest » ne suffit
+  // pas : GitHub la choisit d'après la date de création, identique pour toutes les releases de WeCraft-Releases
+  // (date du commit du dépôt), et pouvait ainsi rester sur 2.0.23-rc1 quand 2.0.23-rc2 était publiée.
+  const d = await pickNewest(opts, repo, beta).catch(() => null);
+  if (d) return parseRelease(d, opts, repo);
+  const latest = await fetchJson<Record<string, unknown>>(`https://api.github.com/repos/${repo}/releases/latest`, 2 * 1024 * 1024, {}, net(opts));
+  return parseRelease(latest, opts, repo);
 }
 
 /**
- * Canal bêta (« Participer à la bêta ») : la release publiée la plus récente, préversions comprises
- * (jamais un brouillon), qui contient l'installeur ReLaunch. null si aucune : on revient à « latest ».
+ * Release publiée la plus récente (jamais un brouillon) qui contient l'installeur ReLaunch.
+ * Les releases marquées « prerelease » sur GitHub ne sont retenues que sur le canal bêta (« Participer à la bêta »).
+ * Les tags « -rcN » publiés comme releases normales sont proposés à tous, dans l'ordre rc1 < rc2 < version finale.
+ * null si aucune : on revient à « latest ».
  */
-async function pickBeta(opts: NetOptions, repo: string): Promise<Record<string, unknown> | null> {
+async function pickNewest(opts: NetOptions, repo: string, beta: boolean): Promise<Record<string, unknown> | null> {
   const list = await fetchJson<unknown>(`https://api.github.com/repos/${repo}/releases?per_page=30`, 4 * 1024 * 1024, {}, net(opts));
   let best: Record<string, unknown> | null = null;
   for (const r of Array.isArray(list) ? (list as Record<string, unknown>[]) : []) {
-    if (r["draft"] === true || typeof r["tag_name"] !== "string") continue;
+    if (!r || typeof r !== "object" || r["draft"] === true || typeof r["tag_name"] !== "string") continue;
+    if (r["prerelease"] === true && !beta) continue;
     const assets = Array.isArray(r["assets"]) ? (r["assets"] as Asset[]) : [];
     if (!assets.some((a) => typeof a.name === "string" && a.name.toLowerCase() === PUBLISHED_NAME.toLowerCase())) continue;
     if (!best || isNewer(r["tag_name"], String(best["tag_name"]))) best = r;

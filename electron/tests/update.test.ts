@@ -104,6 +104,29 @@ test("release : installeur ReLaunch.exe seulement, empreinte (digest ou .sha256)
   await assert.rejects(fetchLatestRelease({ fetch: fakeFetch({ [API]: { body: JSON.stringify(evil) } }) }), /serveur non autorisé/);
 });
 
+test("release : la plus récente PAR VERSION (rc1 < rc2 < finale), pas celle que GitHub appelle « latest »", async () => {
+  const LIST = "https://api.github.com/repos/Rexidelamort/WeCraft-Releases/releases?per_page=30";
+  const rel = (tag: string, extra: Record<string, unknown> = {}) => ({
+    tag_name: tag,
+    body: "",
+    html_url: `https://github.com/Rexidelamort/WeCraft-Releases/releases/tag/${tag}`,
+    created_at: "2026-10-14T10:20:34Z", // identique pour toutes, comme sur le vrai dépôt
+    assets: [{ name: "ReLaunch.exe", browser_download_url: `https://github.com/Rexidelamort/WeCraft-Releases/releases/download/${tag}/ReLaunch.exe`, size: 1 }],
+    ...extra,
+  });
+  const list = [rel("v2.0.23-rc1"), rel("v2.0.23-rc2"), rel("v2.0.22"), rel("v2.0.24-rc1", { draft: true }), rel("v2.0.25", { prerelease: true }), rel("v2.0.30", { assets: [] })];
+  const routes = { [LIST]: { body: JSON.stringify(list) }, [API]: { body: JSON.stringify(rel("v2.0.23-rc1")) } };
+  assert.equal((await fetchLatestRelease({ fetch: fakeFetch(routes) })).version, "2.0.23-rc2");
+  // canal bêta : les « prerelease » GitHub en plus
+  assert.equal((await fetchLatestRelease({ fetch: fakeFetch(routes) }, undefined, true)).version, "2.0.25");
+  // rc puis version finale
+  const fin = { ...routes, [LIST]: { body: JSON.stringify([rel("v2.0.23-rc3"), rel("v2.0.23")]) } };
+  assert.equal((await fetchLatestRelease({ fetch: fakeFetch(fin) })).version, "2.0.23");
+  // liste illisible : on revient à « latest »
+  assert.equal((await fetchLatestRelease({ fetch: fakeFetch({ [API]: routes[API] }) })).version, "2.0.23-rc1");
+  assert.ok(isNewer("2.0.23-rc2", "2.0.23-rc1") && isNewer("2.0.23", "2.0.23-rc3") && !isNewer("2.0.23-rc1", "2.0.23-rc2"));
+});
+
 test("téléchargement : signature vérifiée AVANT, empreinte ensuite ; rien de gardé en cas d'échec", async () => {
   const { dir, cleanup } = tempDir("e5-dl");
   try {
