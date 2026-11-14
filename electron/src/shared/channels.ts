@@ -109,6 +109,7 @@ export const CHANNELS = {
   relinkPartnerImage: "relink:partner-image",
   relinkChannelImage: "relink:channel-image",
   relinkOpenChannel: "relink:open-channel",
+  playerSet: "player:set",
   relinkJoinServer: "relink:join-server",
   musicState: "music:state",
   musicControl: "music:control",
