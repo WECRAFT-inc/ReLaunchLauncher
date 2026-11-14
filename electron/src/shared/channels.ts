@@ -107,6 +107,8 @@ export const CHANNELS = {
   relinkCardImage: "relink:card-image",
   relinkCardLink: "relink:card-link",
   relinkPartnerImage: "relink:partner-image",
+  relinkChannelImage: "relink:channel-image",
+  relinkOpenChannel: "relink:open-channel",
   relinkJoinServer: "relink:join-server",
   musicState: "music:state",
   musicControl: "music:control",
