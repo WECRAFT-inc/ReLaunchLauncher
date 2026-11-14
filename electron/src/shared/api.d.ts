@@ -658,6 +658,8 @@ export interface RelinkPartner {
   viewers: number;
   /** Le Worker a un aperçu du direct (miniature) à fournir. */
   thumb?: boolean;
+  /** « twitch » : direct détecté par le launcher lui-même (pas par le Worker) ; nombre de spectateurs alors inconnu. */
+  liveSource?: "twitch";
 }
 export interface RelinkModpack {
   id: string;

@@ -504,14 +504,14 @@ export function LivePage() {
                 <b>{p.name}</b>
                 {p.featured ? <span className="tag">{t("À la une")}</span> : null}
               </span>
-              <small>{[p.category, p.channel ? `@${p.channel}` : "", p.live ? `${p.viewers.toLocaleString("fr-FR")} ${t("spectateurs")}` : t("Hors ligne")].filter(Boolean).join(" · ")}</small>
+              <small>{[p.category, p.channel ? `@${p.channel}` : "", p.live ? (p.viewers > 0 ? `${p.viewers.toLocaleString("fr-FR")} ${t("spectateurs")}` : t("En direct")) : t("Hors ligne")].filter(Boolean).join(" · ")}</small>
             </div>
           ))}
         </div>
       ) : relink?.ok ? (
         <div className="empty">{t("Aucun partenaire publié.")}</div>
       ) : null}
-      <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le lecteur intégré n'est pas encore branché. Pour Twitch, l'état « en direct » et le nombre de spectateurs se mettent à jour automatiquement si un pseudo de chaîne est renseigné côté ReLink ; sinon (YouTube ou chaîne non renseignée), c'est l'état saisi à la main dans le panneau qui s'affiche.")}</p>
+      <p className="faint" style={{ fontSize: "12.5px" }}>{t("Le lecteur intégré n'est pas encore branché. Les directs Twitch sont détectés automatiquement (relevé toutes les 2 minutes) dès qu'un pseudo de chaîne est renseigné côté ReLink ; pour YouTube, c'est l'état saisi à la main dans le panneau qui s'affiche.")}</p>
     </>
   );
 }

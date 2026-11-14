@@ -18,6 +18,7 @@ import { loaderVersionList } from "./install/loaderList";
 import { isSafeVersionId } from "./install/vanilla";
 import { registerContentIpc, registerLookIpc, registerProjectIpc } from "./ipcLook";
 import { explainWorkerError, RelinkClient, WORKER_HOSTS, WORKER_URL } from "./relink/worker";
+import { TwitchLiveDetector } from "./relink/twitchLive";
 import { RELINK_SIGNING_PUBLIC_KEY, SkinError, SkinStore, verifyDetached } from "./skins/skins";
 import { hostedByHash, modrinthByHash } from "./modpacks/lookups";
 import { PackIntegrityError } from "./modpacks/relaunchPack";
@@ -60,6 +61,23 @@ import {
   secureWebPreferences,
 } from "./security";
 
+/**
+ * Ouverture par ShellExecute (sans processus enfant) : contourne les `spawn EPERM` vus sur certains PC.
+ * `shell:AppsFolder\…` passe par openExternal, un chemin de fichier par openPath (qui renvoie l'erreur en texte).
+ */
+async function shellOpenTarget(target: string): Promise<void> {
+  if (target.toLowerCase().startsWith("shell:")) {
+    try {
+      await shell.openExternal(target, { activate: true });
+      return;
+    } catch {
+      // essai suivant : openPath
+    }
+  }
+  const err = await shell.openPath(target);
+  if (err) throw new Error(err);
+}
+
 const RENDERER_ROOT = path.join(__dirname, "..", "renderer");
 const PRELOAD = path.join(__dirname, "..", "preload", "preload.js");
 
@@ -76,6 +94,7 @@ let presence: DiscordPresence | null = null;
 let updateEnv: UpdateEnv | null = null;
 let media: MediaStore | null = null;
 let relink: RelinkClient | null = null;
+let twitchLive: TwitchLiveDetector | null = null;
 let skins: SkinStore | null = null;
 let account: RelinkAccount | null = null;
 /** Statut envoyé aux amis ReLink (en ligne / absent / hors ligne) et partie en cours. */
@@ -261,6 +280,7 @@ async function start(): Promise<void> {
   media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
   const ua = `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`;
   relink = new RelinkClient({ dataDir: wecraftDataDir(env), userAgent: ua });
+  twitchLive = new TwitchLiveDetector({ userAgent: ua });
   account = new RelinkAccount({
     dataDir: wecraftDataDir(env),
     userAgent: ua,
@@ -338,7 +358,7 @@ async function start(): Promise<void> {
     },
     onGameExit: (t) => friendsPresence?.gameStopped(t.gameDir),
     close: (o) => closeOfficialLauncher(o, { platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
-    open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
+    open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog, shellOpen: shellOpenTarget }),
   });
   // Statut Discord (lot E9) : désactivé par défaut, comme la version Python
   const dc = await settings.discord(app.getVersion());
@@ -471,7 +491,7 @@ function registerIpc(): void {
   });
 handle(CHANNELS.relinkState, async (force) =>
   relink
-    ? relink.refresh("stable", force === true)
+    ? relink.refresh("stable", force === true).then((st) => (twitchLive ? twitchLive.apply(st).catch(() => st) : st))
     : {
         ok: false,
         stale: true,
@@ -507,7 +527,13 @@ handle(CHANNELS.relinkPartnerImage, async (partnerId) => {
     return null;
   }
 
-  return relink.partnerImage(partnerId);
+  // miniature du Worker d'abord ; sinon celle relevée par le launcher sur Twitch (direct détecté localement)
+  const fromWorker = await relink.partnerImage(partnerId);
+  if (fromWorker || !twitchLive) return fromWorker;
+  const p = (await relink.cached()).data?.partners.find((x) => x.id === partnerId);
+  if (!p?.channel) return null;
+  const c = await twitchLive.check(p.channel);
+  return c?.live ? c.thumb : null;
 });
   
   const noAccount = { loggedIn: false, user: null, expiresAt: null, offline: true, loginPending: false, launcherSkins: [], minecraftSkin: null, persisted: false, error: "Indisponible." };

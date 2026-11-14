@@ -57,6 +57,11 @@ export interface LauncherEnv {
   runner: CommandRunner;
   /** Journal de diagnostic (aucune donnée de compte). */
   log?: (line: string) => void;
+  /**
+   * Ouverture par le shell Windows (ShellExecute, ex. `shell.openExternal` d'Electron) : aucun processus enfant
+   * n'est créé par ReLaunch, ce qui contourne les refus `spawn EPERM` (antivirus, stratégie, droits).
+   */
+  shellOpen?: (target: string) => Promise<void>;
 }
 
 const defaultEnv = (): LauncherEnv => ({ platform: process.platform, env: process.env, runner: nodeRunner });
@@ -137,6 +142,22 @@ export async function storeAppId(e: LauncherEnv): Promise<string | null> {
   }
 }
 
+type Attempt = readonly [label: string, run: () => Promise<void>];
+
+/** Essaie chaque méthode d'ouverture dans l'ordre ; s'arrête à la première qui ne lève pas d'erreur. */
+async function tryOpen(e: LauncherEnv, target: string, attempts: Attempt[]): Promise<boolean> {
+  for (const [label, run] of attempts) {
+    e.log?.(`Ouverture (${label}) : ${target}`);
+    try {
+      await run();
+      return true;
+    } catch (err) {
+      e.log?.(`Ouverture (${label}) refusée : ${(err as Error).message}`);
+    }
+  }
+  return false;
+}
+
 async function anyLauncherRunning(e: LauncherEnv): Promise<boolean> {
   for (const n of OFFICIAL_LAUNCHER_PROCESSES) if (await winRunning(e, n)) return true;
   return false;
@@ -153,17 +174,24 @@ export async function openOfficialLauncher(e: LauncherEnv = defaultEnv()): Promi
       for (const [name, def] of [["ProgramFiles(x86)", "C:\\Program Files (x86)"], ["ProgramFiles", "C:\\Program Files"]] as const) {
         const exe = path.win32.join(e.env[name] ?? def, "Minecraft Launcher", "MinecraftLauncher.exe");
         if (await e.runner.exists(exe)) {
-          e.log?.(`Ouverture : ${exe}`);
-          await e.runner.start(exe, []);
-          started = true;
+          started = await tryOpen(e, exe, [
+            ["exe", () => e.runner.start(exe, [])],
+            ...(e.shellOpen ? [["shell", () => e.shellOpen!(exe)] as Attempt] : []),
+          ]);
           break;
         }
       }
       if (!started) {
         const id = (await storeAppId(e)) ?? STORE_APP.slice("shell:AppsFolder\\".length);
-        e.log?.(`Ouverture : explorer.exe shell:AppsFolder\\${id}`);
-        await e.runner.start(path.win32.join(e.env["SystemRoot"] ?? e.env["windir"] ?? "C:\\Windows", "explorer.exe"), [`shell:AppsFolder\\${id}`]);
+        const target = `shell:AppsFolder\\${id}`; // id validé (AUMID) ou constant : jamais de texte externe
+        const root = e.env["SystemRoot"] ?? e.env["windir"] ?? "C:\\Windows";
+        started = await tryOpen(e, target, [
+          ["explorer.exe", () => e.runner.start(path.win32.join(root, "explorer.exe"), [target])],
+          ...(e.shellOpen ? [["shell", () => e.shellOpen!(target)] as Attempt] : []),
+          ["cmd start", () => e.runner.start(path.win32.join(root, "System32", "cmd.exe"), ["/d", "/c", "start", target])],
+        ]);
       }
+      if (!started) return false;
       const deadline = e.runner.now() + OPEN_CHECK_MS;
       while (e.runner.now() < deadline) {
         if (await anyLauncherRunning(e)) {

@@ -335,6 +335,45 @@ test("ouverture : version classique si présente, sinon Store/Xbox (identifiant 
   assert.equal(await openOfficialLauncher(winEnv(f.r)), false);
 });
 
+test("ouverture : explorer.exe refusé (spawn EPERM) → secours par le shell Windows, puis cmd", async () => {
+  const eperm = () => Object.assign(new Error("spawn EPERM"), { code: "EPERM" });
+  // explorer refusé, ShellExecute accepté : le launcher s'ouvre quand même
+  let script = { running: new Set<string>() };
+  let f = fakeRunner(script);
+  f.r.start = async (file, args) => {
+    f.calls.push(["start", file, ...args].join(" "));
+    throw eperm();
+  };
+  const opened: string[] = [];
+  const lines: string[] = [];
+  const shellOpen = async (t: string) => {
+    opened.push(t);
+    script.running.add("Minecraft.exe");
+  };
+  assert.equal(await openOfficialLauncher({ ...winEnv(f.r), shellOpen, log: (l) => lines.push(l) }), true);
+  assert.deepEqual(opened, [STORE_APP]);
+  assert.ok(lines.some((l) => l.startsWith("Ouverture (explorer.exe) refusée : spawn EPERM")));
+
+  // pas de shell (ou refusé) : dernier essai par cmd start, cible validée
+  script = { running: new Set<string>() };
+  f = fakeRunner(script);
+  f.r.start = async (file, args) => {
+    f.calls.push(["start", file, ...args].join(" "));
+    if (file.endsWith("explorer.exe")) throw eperm();
+    script.running.add("Minecraft.exe");
+  };
+  assert.equal(await openOfficialLauncher(winEnv(f.r)), true);
+  assert.deepEqual(f.calls.filter((c) => c.startsWith("start")).at(-1), `start C:\\Windows\\System32\\cmd.exe /d /c start ${STORE_APP}`);
+
+  // tout refusé : échec honnête, sans attendre 20 s pour rien
+  script = { running: new Set<string>() };
+  f = fakeRunner(script);
+  f.r.start = async () => {
+    throw eperm();
+  };
+  assert.equal(await openOfficialLauncher({ ...winEnv(f.r), shellOpen: async () => { throw new Error("refus"); } }), false);
+});
+
 test("journal du lancement : une ligne par message, taille limitée", async () => {
   const { dir, cleanup } = tempDir("journal");
   try {
