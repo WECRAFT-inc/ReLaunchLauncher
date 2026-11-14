@@ -9,6 +9,7 @@ const RELINK_CARD_LINK = "relink:card-link";
 const RELINK_PARTNER_IMAGE = "relink:partner-image";
 const RELINK_CHANNEL_IMAGE = "relink:channel-image";
 const RELINK_OPEN_CHANNEL = "relink:open-channel";
+const PLAYER_SET = "player:set";
 const RELINK_JOIN_SERVER = "relink:join-server";
 const MUSIC_STATE = "music:state";
 const MUSIC_CONTROL = "music:control";
@@ -170,6 +171,9 @@ channelImage: (channel: string) =>
 
 openChannel: (channel: string) =>
   ipcRenderer.invoke(RELINK_OPEN_CHANNEL, channel),
+
+setPlayer: (req: { channel: string | null; rect: { x: number; y: number; width: number; height: number } | null }) =>
+  ipcRenderer.invoke(PLAYER_SET, req),
 
 joinServer: (id: string) =>
   ipcRenderer.invoke(RELINK_JOIN_SERVER, id),
