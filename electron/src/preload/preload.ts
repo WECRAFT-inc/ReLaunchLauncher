@@ -7,6 +7,8 @@ import type { ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
 const RELINK_CARD_IMAGE = "relink:card-image";
 const RELINK_CARD_LINK = "relink:card-link";
 const RELINK_PARTNER_IMAGE = "relink:partner-image";
+const RELINK_CHANNEL_IMAGE = "relink:channel-image";
+const RELINK_OPEN_CHANNEL = "relink:open-channel";
 const RELINK_JOIN_SERVER = "relink:join-server";
 const MUSIC_STATE = "music:state";
 const MUSIC_CONTROL = "music:control";
@@ -162,6 +164,12 @@ cardLink: (id: string) =>
 
 partnerImage: (id: string) =>
   ipcRenderer.invoke(RELINK_PARTNER_IMAGE, id),
+
+channelImage: (channel: string) =>
+  ipcRenderer.invoke(RELINK_CHANNEL_IMAGE, channel),
+
+openChannel: (channel: string) =>
+  ipcRenderer.invoke(RELINK_OPEN_CHANNEL, channel),
 
 joinServer: (id: string) =>
   ipcRenderer.invoke(RELINK_JOIN_SERVER, id),
