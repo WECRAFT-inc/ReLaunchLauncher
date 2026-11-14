@@ -100,6 +100,24 @@ test("pont : hors Windows, rien n'est lancé ; pont mort → indisponible sans e
   assert.equal(n, 2);
 });
 
+test("pont : échec au démarrage (ex. API Windows absente) → raison affichée, pas d'attente infinie", async () => {
+  const out = new EventEmitter();
+  const ev = new EventEmitter();
+  const child: BridgeChild = { stdin: { write: () => true }, stdout: { on: (e, cb) => out.on(e, cb) }, on: (e, cb) => ev.on(e, cb), kill: () => undefined };
+  setImmediate(() => out.emit("data", '{"fatal":"Type introuvable"}\r\n'));
+  const logs: string[] = [];
+  const b = new MusicBridge({ platform: "win32", spawnBridge: () => child, log: (l) => logs.push(l) });
+  const st = await b.state();
+  assert.equal(st.available, false);
+  assert.match(st.reason ?? "", /Type introuvable/);
+  assert.ok(logs.some((l) => l.includes("Type introuvable")));
+});
+
+test("script du pont : jamais de changement d'encodage de la console (lancé sans console)", () => {
+  assert.doesNotMatch(BRIDGE_SCRIPT, /\[Console\]::(Input|Output)Encoding\s*=/);
+  assert.match(BRIDGE_SCRIPT, /OpenStandardInput\(\)/);
+});
+
 test("réglages : par défaut mini-lecteur actif, partage coupé, aucun raccourci", () => {
   assert.deepEqual(cleanMusicSettings(undefined), { enabled: true, share: false, shortcuts: { toggle: null, next: null, prev: null } });
   assert.deepEqual(cleanMusicSettings({ enabled: false, share: true, shortcuts: { toggle: "Ctrl+Alt+Space", next: "Right", prev: "Ctrl+Alt+Left" } }).shortcuts, { toggle: "Ctrl+Alt+Space", next: null, prev: "Ctrl+Alt+Left" });

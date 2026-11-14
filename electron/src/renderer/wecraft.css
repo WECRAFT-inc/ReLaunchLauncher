@@ -583,3 +583,4 @@ body.tb-off .app { height: 100vh !important; }
 .mini3 .th .live-sc { border-radius: 8px; }
 /* Diffusion : pas de quadrillage « nappe » par-dessus les aperçus */
 .live-sc::after, .live-cover::after { content: none !important; background: none !important; }
+.mus-err { color: #ff8a80 !important; }

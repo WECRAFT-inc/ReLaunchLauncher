@@ -199,6 +199,26 @@ function ShortcutInput({ label, value, onSet }: { label: string; value: string |
   );
 }
 
+/** Ligne d'état : ce que le pont voit, ou pourquoi il ne marche pas (pour diagnostiquer sans ouvrir les journaux). */
+function MusicStatus({ on }: { on: boolean }) {
+  const m = useMusic();
+  const text = !on
+    ? t("Musique désactivée dans les paramètres.")
+    : m.available
+      ? m.sessions.length
+        ? `${m.sessions.length} ${t("appli(s) détectée(s)")} : ${m.sessions.map((x) => x.app).join(", ")}`
+        : t("Prêt : aucune appli ne joue pour l'instant.")
+      : m.reason ?? t("Recherche des applis de musique…");
+  return (
+    <div className="setrow">
+      <span>
+        <b>{t("État")}</b>
+        <small className={on && !m.available && m.reason ? "mus-err" : undefined}>{text}</small>
+      </span>
+    </div>
+  );
+}
+
 export function MusicSettingsGroup() {
   const { toast } = useApp();
   const [s, setS] = useState<MusicSettings | null>(null);
@@ -232,6 +252,7 @@ export function MusicSettingsGroup() {
           </span>
           <button className="toggle" role="switch" aria-checked={tf(s?.enabled !== false)} disabled={!s} onClick={() => s && save({ enabled: !s.enabled })} aria-label={t("Mini-lecteur")}></button>
         </div>
+        <MusicStatus on={s?.enabled !== false} />
         <div className="setrow">
           <span>
             <b>{t("Partager ma musique avec mes amis")}</b>

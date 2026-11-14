@@ -14,21 +14,32 @@ import type { MusicAction, MusicSession, MusicState } from "../../shared/api";
 /** Script PowerShell du pont (gardé ici pour être livré dans l'archive de l'appli, sans fichier à écrire). */
 export const BRIDGE_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
-[Console]::InputEncoding = New-Object Text.UTF8Encoding $false
-[Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
-$null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
-$asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation${"`"}1' } | Select-Object -First 1
-function Wait-Op($op, [Type]$type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); [void]$t.Wait(5000); return $t.Result }
-function Out-Line($o) { [Console]::Out.WriteLine(($o | ConvertTo-Json -Compress -Depth 5)); [Console]::Out.Flush() }
-$mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
-$propType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]
-$mgr = Wait-Op ($mgrType::RequestAsync()) $mgrType
+# Lancé SANS console (fenêtre cachée) : ne jamais toucher à [Console]::*Encoding (« descripteur non valide »).
+# On lit et écrit directement les flux standard, en UTF-8 sans BOM.
+$rlUtf8 = New-Object Text.UTF8Encoding $false
+$rlIn = New-Object IO.StreamReader([Console]::OpenStandardInput(), $rlUtf8)
+$rlOut = New-Object IO.StreamWriter([Console]::OpenStandardOutput(), $rlUtf8)
+$rlOut.AutoFlush = $true
+function Out-Line($o) { $rlOut.WriteLine(($o | ConvertTo-Json -Compress -Depth 5)) }
+try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
+  $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
+  $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation${"`"}1' } | Select-Object -First 1
+  if (-not $asTask) { throw 'AsTask introuvable' }
+  function Wait-Op($op, [Type]$type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); [void]$t.Wait(5000); return $t.Result }
+  $mgrType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
+  $propType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties]
+  $mgr = Wait-Op ($mgrType::RequestAsync()) $mgrType
+  if (-not $mgr) { throw 'gestionnaire multimédia indisponible' }
+} catch {
+  Out-Line @{ fatal = [string]$_.Exception.Message }
+  exit 2
+}
 function Find-Session([string]$id) { foreach ($s in $mgr.GetSessions()) { if ($s.SourceAppUserModelId -eq $id) { return $s } }; return $null }
 Out-Line @{ ready = $true }
 while ($true) {
-  $line = [Console]::In.ReadLine()
+  $line = $rlIn.ReadLine()
   if ($null -eq $line) { break }
   $parts = $line.Split([char[]]@(' '), 3)
   $rid = $parts[0]
@@ -71,6 +82,7 @@ while ($true) {
 export interface BridgeChild {
   stdin: { write(s: string): unknown } | null;
   stdout: { on(ev: "data", cb: (b: Buffer | string) => void): unknown } | null;
+  stderr?: { on(ev: "data", cb: (b: Buffer | string) => void): unknown } | null;
   on(ev: "exit" | "error", cb: (...a: unknown[]) => void): unknown;
   kill(): unknown;
 }
@@ -197,7 +209,7 @@ export class MusicBridge {
     const env = this.d.env ?? process.env;
     const ps = path.win32.join(env["SystemRoot"] ?? env["windir"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     const encoded = Buffer.from(BRIDGE_SCRIPT, "utf16le").toString("base64");
-    return spawn(ps, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] }) as unknown as BridgeChild;
+    return spawn(ps, ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] }) as unknown as BridgeChild;
   }
 
   private start(): Promise<void> {
@@ -222,6 +234,13 @@ export class MusicBridge {
         try {
           o = JSON.parse(line) as Reply;
         } catch {
+          return;
+        }
+        if (typeof o["fatal"] === "string") {
+          clearTimeout(timer);
+          this.lastError = o["fatal"].slice(0, 300);
+          this.d.log?.(`Musique : le pont n'a pas pu démarrer (${this.lastError}).`);
+          reject(new Error(this.lastError));
           return;
         }
         if (o["ready"] === true) {
@@ -253,9 +272,15 @@ export class MusicBridge {
         this.ready = null;
         for (const cb of this.pending.values()) cb(null);
         this.pending.clear();
-        this.d.log?.(`Musique : pont arrêté (${why}).`);
+        const err = errText.replace(/\s+/g, " ").trim().slice(0, 600);
+        if (err && !this.lastError) this.lastError = err.slice(0, 300);
+        this.d.log?.(`Musique : pont arrêté (${why})${err ? ` : ${err}` : "."}`);
         reject(new Error(why));
       };
+      let errText = "";
+      child.stderr?.on("data", (b) => {
+        if (errText.length < 4000) errText += typeof b === "string" ? b : b.toString("utf8");
+      });
       child.on("error", (e) => dead(e instanceof Error ? e.message : String(e)));
       child.on("exit", (code) => dead(`code ${String(code)}`));
     });
@@ -317,12 +342,14 @@ export class MusicBridge {
     if (!this.supported) return { available: false, reason: "Disponible seulement sous Windows.", sessions: [], selected: null, chosen: null, track: null };
     const r = await this.call("state");
     if (!r || r["ok"] !== true) {
-      return { available: false, reason: this.lastError ? "Les commandes multimédias de Windows ne répondent pas." : "Lecture de l'état impossible.", sessions: [], selected: null, chosen: this.chosen, track: null };
+      const why = this.lastError ? `Les commandes multimédias de Windows ne répondent pas (${this.lastError}).` : "Lecture de l'état impossible.";
+      return { available: false, reason: why, sessions: [], selected: null, chosen: this.chosen, track: null };
     }
     const sessions = decodeSessions(r["sessions"]);
     const current = typeof r["current"] === "string" && r["current"] ? r["current"] : null;
     this.last = { sessions, current };
     this.failures = 0;
+    this.lastError = null;
     const sel = pickSession(sessions, this.chosen, current);
     return { available: true, sessions, selected: sel?.id ?? null, chosen: this.chosen, track: sel ? { ...sel, thumb: await this.thumbFor(sel) } : null };
   }

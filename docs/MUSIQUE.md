@@ -53,3 +53,9 @@ Sans ce module, le reste marche : le Worker ignore simplement le champ `music`.
 6. Déploie.
 
 La table `relinked_presence_music` se crée toute seule. Un morceau n'est montré que si l'ami est en ligne ou absent et que son dernier signal date de moins de 3 minutes. Si le joueur coupe le partage, le launcher envoie `music: null` et la ligne est supprimée.
+
+## Dépannage
+
+- **Paramètres → Musique → État** indique ce que voit le launcher : les applis détectées, ou la raison exacte si les commandes multimédias de Windows ne répondent pas.
+- Le journal (Paramètres → Logs, catégorie « Musique ») contient le message d'erreur de PowerShell si le pont s'arrête.
+- Correctif du 14/11/2026 : le pont plantait dès son démarrage, parce qu'il modifiait l'encodage de la console alors qu'il est lancé sans console. Il lit et écrit désormais directement ses flux standard.
