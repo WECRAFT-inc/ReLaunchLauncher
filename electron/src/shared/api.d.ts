@@ -434,6 +434,8 @@ cardImage(bid: string): Promise<string | null>;
     channelImage(channel: string): Promise<string | null>;
     /** Ouvre la chaîne Twitch dans le navigateur. */
     openChannel(channel: string): Promise<boolean>;
+    /** Lecteur Twitch intégré (vue native). rect : emplacement à l'écran (px de l'interface) ; rect null = masqué ; channel null = arrêté. */
+    setPlayer(req: { channel: string | null; rect: { x: number; y: number; width: number; height: number } | null }): Promise<boolean>;
     /** Prépare « Rejoindre » un serveur du catalogue : instance locale (event ou modpack du serveur) à lancer + adresse. */
     joinServer(id: string): Promise<RelinkJoinResult>;
   };
