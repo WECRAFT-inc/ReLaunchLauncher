@@ -40,7 +40,8 @@ import {
 } from "./model";
 import { DeleteConfirm, DiscordAsk, Drawer, LaunchBox, Notice, Pop, RamDialog, UpdateDialog, type LaunchUi } from "./Overlays";
 import { handleEscape, useEscapeLayer } from "./keys";
-import { BASE_THEMES, cleanRotation, previewRotation, useThemeRotation } from "./theme";
+import { BASE_THEMES, cleanRotation, previewRotation, reducedMotion, useThemeRotation } from "./theme";
+import { IntroOverlay } from "./Intro";
 import { setLang } from "./i18n";
 import { moveNav, playFlip, Settings, snapPos } from "./Settings";
 import { Discover, emptyDraft } from "./Discover";
@@ -122,6 +123,16 @@ export function App() {
   const [hidden, setHidden] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [pref, setPref] = useState<Pref>(loadPref);
+  // intro cinématique : à chaque démarrage (réglable), jamais si les animations sont réduites
+  const [intro, setIntro] = useState(() => {
+    const p = loadPref();
+    return p.intro !== false && !reducedMotion(p.anim);
+  });
+  useEffect(() => {
+    const replay = () => setIntro(true);
+    window.addEventListener("rl-replay-intro", replay);
+    return () => window.removeEventListener("rl-replay-intro", replay);
+  }, []);
   const [car, setCar] = useState<Car>(loadCar);
   const [home, setHome] = useState<HomePref>(loadHome);
   const [nav, setNav] = useState<NavConfig>(() => {
@@ -1123,6 +1134,7 @@ export function App() {
   return (
     <Ctx.Provider value={ctx}>
       <TitleBar />
+      {intro ? <IntroOverlay sound={pref.introSound !== false} onDone={() => setIntro(false)} /> : null}
       <Notice lines={notice} onClose={() => setNotice([])} />
       <CreateModal
         open={createOpen}
