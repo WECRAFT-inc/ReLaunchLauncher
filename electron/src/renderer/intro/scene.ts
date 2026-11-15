@@ -1,4 +1,4 @@
-// Intro cinématique de ReLaunch : le phénix s'éveille, s'embrase, s'élève, explose en lumière, puis le titre.
+// Intro cinématique de ReLaunch : l'aigle-phénix s'éveille, s'embrase, s'élève, explose en lumière, puis le titre.
 //
 // Rendu DÉTERMINISTE : l'image ne dépend que du temps `t` (secondes). Les particules ne sont pas simulées pas à pas :
 // chacune a une naissance, une graine et une trajectoire calculées. La même fonction sert au démarrage du launcher
@@ -12,8 +12,8 @@ export const REF_W = 1920;
 export const REF_H = 1080;
 
 export interface IntroAssets {
-  phoenix: CanvasImageSource; // masque blanc 1024 × 1024 (alpha)
-  crest: CanvasImageSource; // V et étoile, masque blanc 1024 × 1024
+  eagle: CanvasImageSource; // aigle de face, masque blanc 1024 × 1024 (alpha)
+  back: CanvasImageSource; // grandes plumes arrière (ailes et queue), masque blanc 1024 × 1024
   title: string; // « RELAUNCH »
   font: string; // famille de la police du titre
 }
@@ -46,10 +46,10 @@ const ctx2d = (c: Canvas) => c.getContext("2d") as Ctx;
 
 // ------------------------------------------------------------------ chorégraphie (positions de l'emblème et caméra)
 const EMBLEM_PX = 1024;
-/** Les deux yeux (repère du masque 1024) : le profil n'en montre qu'un, le second s'efface à la révélation. */
+/** Les deux yeux de l'aigle (repère du masque 1024). */
 const EYES: [number, number][] = [
-  [524, 198],
-  [557, 186],
+  [468, 337],
+  [556, 337],
 ];
 const IGNITE_AT = 3.0;
 const ASCEND_AT = 4.6;
@@ -66,11 +66,11 @@ interface Pose {
 
 /** Position de l'emblème dans le monde au temps t. */
 function pose(t: number): Pose {
-  const finalY = 395;
-  const finalS = 0.5;
+  const finalY = 372;
+  const finalS = 0.64;
   // au sol (scènes 1-2), puis ascension (3), apex et retour à la place finale (4)
-  const ground = { x: 960, y: 640, s: 0.62 };
-  const apex = { x: 960, y: 330, s: 0.66 };
+  const ground = { x: 960, y: 620, s: 0.72 };
+  const apex = { x: 960, y: 330, s: 0.76 };
   let x = ground.x;
   let y = ground.y;
   let s = ground.s;
@@ -147,7 +147,7 @@ export function createIntroScene(a: IntroAssets): IntroScene {
   // points de l'emblème d'où partent les flammes (échantillonnés dans le masque)
   const sample = makeCanvas(256, 256);
   const sc = ctx2d(sample);
-  sc.drawImage(a.phoenix, 0, 0, 256, 256);
+  sc.drawImage(a.eagle, 0, 0, 256, 256);
   const px = sc.getImageData(0, 0, 256, 256).data;
   const pts: [number, number][] = [];
   for (let y = 0; y < 256; y += 2) for (let x = 0; x < 256; x += 2) if (px[(y * 256 + x) * 4 + 3]! > 160) pts.push([x * 4 + 2, y * 4 + 2]);
@@ -157,7 +157,7 @@ export function createIntroScene(a: IntroAssets): IntroScene {
     return px[i - 8]! < 100 || px[i + 8]! < 100 || px[i - 256 * 8]! < 100 || px[i + 256 * 8]! < 100;
   });
 
-  const wingPts = edge.filter(([x, y]) => Math.abs(x - 520) > 170 && y < 640);
+  const wingPts = edge.filter(([x, y]) => Math.abs(x - 512) > 190 && y < 620);
 
   // versions teintées de l'emblème
   const tint = (src: CanvasImageSource, paint: (c: Ctx) => void): Canvas => {
@@ -174,7 +174,7 @@ export function createIntroScene(a: IntroAssets): IntroScene {
     g.fillStyle = gr;
     g.fillRect(0, 0, EMBLEM_PX, EMBLEM_PX);
   };
-  const goldPhoenix = tint(a.phoenix, (g) =>
+  const goldEagle = tint(a.eagle, (g) =>
     vgrad(g, [
       [0.12, "#fff6d8"],
       [0.32, "#ffd36b"],
@@ -183,7 +183,7 @@ export function createIntroScene(a: IntroAssets): IntroScene {
       [1, "#8a2f10"],
     ]),
   );
-  const firePhoenix = tint(a.phoenix, (g) =>
+  const fireEagle = tint(a.eagle, (g) =>
     vgrad(g, [
       [0.1, "#fff1b0"],
       [0.4, "#ff9a2e"],
@@ -191,11 +191,22 @@ export function createIntroScene(a: IntroAssets): IntroScene {
       [1, "#7a1206"],
     ]),
   );
-  const darkPhoenix = tint(a.phoenix, (g) => {
+  const darkEagle = tint(a.eagle, (g) => {
     g.fillStyle = "#120a08";
     g.fillRect(0, 0, EMBLEM_PX, EMBLEM_PX);
   });
-  const crest = tint(a.crest, (g) =>
+  const darkBack = tint(a.back, (g) => {
+    g.fillStyle = "#0c0605";
+    g.fillRect(0, 0, EMBLEM_PX, EMBLEM_PX);
+  });
+  const fireBack = tint(a.back, (g) =>
+    vgrad(g, [
+      [0, "#ff8a3a"],
+      [0.45, "#d8361a"],
+      [1, "#5c0e0a"],
+    ]),
+  );
+  const crest = tint(a.back, (g) =>
     vgrad(g, [
       [0, "#e0703a"],
       [0.3, "#9c2418"],
@@ -207,10 +218,10 @@ export function createIntroScene(a: IntroAssets): IntroScene {
   {
     const g = ctx2d(glow);
     g.filter = "blur(38px)";
-    g.drawImage(goldPhoenix, 0, 0);
+    g.drawImage(goldEagle, 0, 0);
     g.filter = "blur(14px)";
     g.globalAlpha = 0.8;
-    g.drawImage(goldPhoenix, 0, 0);
+    g.drawImage(goldEagle, 0, 0);
   }
 
   // sprites de particules (dégradé radial, additif)
@@ -325,7 +336,7 @@ export function createIntroScene(a: IntroAssets): IntroScene {
       const pt = pts[Math.floor(rnd(k, 2) * pts.length)]!;
       // le feu se propage depuis le cœur de l'oiseau vers les ailes et la traîne
       const front = easeOut(seg(tb, IGNITE_AT, IGNITE_AT + 1.4)) * 720 + 40;
-      const d = Math.hypot(pt[0] - 520, pt[1] - 520);
+      const d = Math.hypot(pt[0] - 512, pt[1] - 500);
       if (d > front) continue;
       const p0 = toWorld(pose(tb), pt[0], pt[1]);
       // vitesse : montée + dispersion + traîne opposée au mouvement de l'oiseau
@@ -354,7 +365,7 @@ export function createIntroScene(a: IntroAssets): IntroScene {
         const sd = b * 1000 + i;
         const pt = wingPts[Math.floor(rnd(sd, 1) * wingPts.length)]!;
         const w0 = toWorld(p, pt[0], pt[1]);
-        const side = pt[0] > 520 ? 1 : -1;
+        const side = pt[0] > 512 ? 1 : -1;
         const sp = 110 + rnd(sd, 2) * 230;
         const ang = (rnd(sd, 3) - 0.3) * 0.9;
         const x = w0.x + side * Math.cos(ang) * sp * age;
@@ -506,7 +517,7 @@ export function createIntroScene(a: IntroAssets): IntroScene {
     const back = seg(t, 1.0, 2.6) * (1 - seg(t, IGNITE_AT, ASCEND_AT));
     if (back > 0) {
       g.globalCompositeOperation = "lighter";
-      const c0 = toWorld(p, 520, 430);
+      const c0 = toWorld(p, 512, 420);
       const R = 620 * p.scale;
       const gr = g.createRadialGradient(c0.x, c0.y, 0, c0.x, c0.y, R);
       gr.addColorStop(0, `rgba(255,140,50,${0.55 * back})`);
@@ -518,15 +529,14 @@ export function createIntroScene(a: IntroAssets): IntroScene {
       g.globalCompositeOperation = "source-over";
     }
 
-    // V et étoile : n'apparaissent qu'à la révélation finale (blason)
-    const crestA = seg(t, BURST_AT + 0.5, BURST_AT + 1.6);
-    if (crestA > 0) {
-      drawEmblem(g, crest, { ...p, spread: 1 }, crestA * 0.6);
-    }
+    // grandes plumes arrière : sombres au réveil, embrasées, puis pourpre et or sur l'emblème final
+    drawEmblem(g, darkBack, p, seg(t, 1.2, 2.6) * (1 - seg(t, IGNITE_AT + 0.4, IGNITE_AT + 1.4)));
+    drawEmblem(g, fireBack, p, seg(t, IGNITE_AT + 0.4, IGNITE_AT + 1.4) * (1 - seg(t, BURST_AT, BURST_AT + 0.4)));
+    drawEmblem(g, crest, p, seg(t, BURST_AT + 0.4, BURST_AT + 1.4) * 0.9);
 
     // l'oiseau : silhouette sombre au réveil, puis embrasement progressif, puis or après l'explosion
     const revealDark = seg(t, 1.2, 2.6);
-    drawEmblem(g, darkPhoenix, p, revealDark * (t < BURST_AT ? 1 : 1 - seg(t, BURST_AT, BURST_AT + 0.3)));
+    drawEmblem(g, darkEagle, p, revealDark * (t < BURST_AT ? 1 : 1 - seg(t, BURST_AT, BURST_AT + 0.3)));
     // liseré lumineux du réveil (contour éclairé par les braises)
     if (t < IGNITE_AT + 0.6) {
       const rim = seg(t, 1.0, 2.2) * (1 - seg(t, IGNITE_AT, IGNITE_AT + 0.6));
@@ -544,9 +554,9 @@ export function createIntroScene(a: IntroAssets): IntroScene {
       const front = easeOut(seg(t, IGNITE_AT, IGNITE_AT + 1.4)) * 720 + 40;
       fl.globalCompositeOperation = "source-over";
       fl.clearRect(0, 0, EMBLEM_PX, EMBLEM_PX);
-      fl.drawImage(firePhoenix, 0, 0);
+      fl.drawImage(fireEagle, 0, 0);
       fl.globalCompositeOperation = "destination-in";
-      const gr = fl.createRadialGradient(520, 520, Math.max(0, front - 120), 520, 520, front + 30);
+      const gr = fl.createRadialGradient(512, 500, Math.max(0, front - 120), 512, 500, front + 30);
       gr.addColorStop(0, "rgba(0,0,0,1)");
       gr.addColorStop(1, "rgba(0,0,0,0)");
       fl.fillStyle = gr;
@@ -556,15 +566,15 @@ export function createIntroScene(a: IntroAssets): IntroScene {
     }
     // emblème doré final
     const goldA = seg(t, BURST_AT + 0.15, BURST_AT + 1.2);
-    drawEmblem(g, goldPhoenix, p, goldA);
+    drawEmblem(g, goldEagle, p, goldA);
 
-    // yeux dorés (le second s'efface quand la silhouette apparaît : profil)
+    // yeux dorés
     const eyeA = seg(t, 0.7, 1.3) * (1 - seg(t, IGNITE_AT + 0.2, IGNITE_AT + 1.2) * 0.65) * (t >= BURST_AT ? 0 : 1);
     if (eyeA > 0) {
       g.globalCompositeOperation = "lighter";
       EYES.forEach(([ex, ey], i) => {
         const wpt = toWorld(p, ex, ey);
-        const a2 = i === 1 ? eyeA * (1 - seg(t, 1.6, 2.6)) : eyeA;
+        const a2 = eyeA;
         const pulse = 0.85 + 0.15 * Math.sin(t * 3.1 + i);
         drawSprite(g, sprHot, wpt.x, wpt.y, 11 * p.scale * 2, a2 * pulse);
         drawSprite(g, sprHot, wpt.x, wpt.y, 6 * p.scale * 2, a2 * pulse);

@@ -47,9 +47,9 @@ export function IntroOverlay({ sound, onDone }: { sound: boolean; onDone: () => 
     finish.current = end;
     void (async () => {
       try {
-        const [phoenix, crest] = await Promise.all([loadImage("assets/intro/phoenix.png"), loadImage("assets/intro/crest.png"), document.fonts.load('900 132px "Unbounded"')]);
+        const [eagle, back] = await Promise.all([loadImage("assets/intro/eagle.png"), loadImage("assets/intro/eagle-back.png"), document.fonts.load('900 132px "Unbounded"')]);
         if (stopped) return;
-        const scene = createIntroScene({ phoenix, crest, title: "RELAUNCH", font: "Unbounded" });
+        const scene = createIntroScene({ eagle, back, title: "RELAUNCH", font: "Unbounded" });
         const c = canvas.current;
         const g = c?.getContext("2d");
         if (!c || !g) return end();
