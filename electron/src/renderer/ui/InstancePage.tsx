@@ -101,7 +101,7 @@ export function InstancePage() {
 }
 
 function ContentTab({ id, mp, ev }: { id: string; mp: boolean; ev: boolean }) {
-  const { toast } = useApp();
+  const { toast, show } = useApp();
   const [list, setList] = useState<ContentList | null>(null);
   const [meta, setMeta] = useState<Record<string, ContentMeta>>({});
   const [q, setQ] = useState("");
@@ -285,7 +285,17 @@ function ContentTab({ id, mp, ev }: { id: string; mp: boolean; ev: boolean }) {
           const m = meta[key(i)];
           const k = key(i);
           return (
-            <div key={k} className={`ic-row${i.disabled ? " off" : ""}`} role="row">
+            <div
+              key={k}
+              className={`ic-row${i.disabled ? " off" : ""}${m?.slug ? " link" : ""}`}
+              role="row"
+              title={m?.slug ? t("Ouvrir la page du projet") : undefined}
+              onClick={(e) => {
+                // clic sur la ligne (hors boutons, case et menu) : page du projet dans ReLaunch
+                if (!m?.slug || (e.target as HTMLElement).closest("button, input, a, select, .menu, [role=menu]")) return;
+                show("addcontent", { page: id, proj: m.slug, dtab: i.kind });
+              }}
+            >
               <span>
                 <input type="checkbox" aria-label={`${t("Sélectionner")} ${name(i)}`} disabled={i.locked} checked={sel.has(k)} onChange={() => setSel((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; })} />
               </span>

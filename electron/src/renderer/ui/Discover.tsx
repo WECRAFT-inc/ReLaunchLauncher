@@ -56,7 +56,17 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
   const { mp, setMp, toast, show, refreshInstances, ui, setUi, inst, byId, openInstance } = useApp();
   const fi = forInst ? (byId(forInst) ?? null) : null;
   const tabs = fi ? TABS.filter(([k]) => k !== "modpack" && !(fi.ev && k === "mod")) : TABS;
-  const [tab, setTab] = useState<ProjectType>(fi ? (fi.ev ? "resourcepack" : "mod") : ((TABS.find((t) => t[0] === ui.dtab)?.[0] ?? "modpack") as ProjectType));
+  // ouvert depuis la liste des mods d'une instance : page de ce projet directement, « Retour » ramène à l'instance
+  const fromInst = useRef<string | null>(fi && ui.proj ? ui.proj : null);
+  const [tab, setTab] = useState<ProjectType>(
+    fi
+      ? fromInst.current && tabs.some(([k]) => k === ui.dtab)
+        ? (ui.dtab as ProjectType)
+        : fi.ev
+          ? "resourcepack"
+          : "mod"
+      : ((TABS.find((t) => t[0] === ui.dtab)?.[0] ?? "modpack") as ProjectType),
+  );
   const [versions, setVersions] = useState<string[] | null>(null);
   const [query, setQuery] = useState(ui.dq || "");
   const [sort, setSort] = useState<string | null>(null);
@@ -67,7 +77,9 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
   const [total, setTotal] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(fromInst.current);
+  /** Filtres Client / Serveur : projet qui tourne (requis ou optionnel) de ce côté. */
+  const [envs, setEnvs] = useState<("client" | "server")[]>([]);
   const [target, setTarget] = useState("");
   const [rows, setRows] = useState<PackRowView[]>([]);
   const [confirm, setConfirm] = useState(false);
@@ -90,7 +102,7 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
 
   // demande venue de « Créer un WePack » (recherche, onglet) : prise une fois puis oubliée
   useEffect(() => {
-    if (ui.dq || ui.dtab) setUi({ dq: "", dtab: "" });
+    if (ui.dq || ui.dtab || ui.proj) setUi({ dq: "", dtab: "", proj: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
@@ -116,7 +128,7 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
     if (tab === "mod" && !mc) return;
     const my = ++seq.current;
     setSearching(true);
-    void window.wecraft.projects.search({ type: tab, query, mc, loader, sort, offset, categories: cat ? [cat] : [] }).then((r) => {
+    void window.wecraft.projects.search({ type: tab, query, mc, loader, sort, offset, categories: cat ? [cat] : [], envs }).then((r) => {
       if (my !== seq.current) return;
       setSearching(false);
       if (!r.ok) return setErr(r.message);
@@ -129,7 +141,7 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
     const t = window.setTimeout(() => search(0), 350);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, query, sort, cat, mc, loader]);
+  }, [tab, query, sort, cat, mc, loader, envs]);
   useEffect(() => {
     void window.wecraft.modpacks.rows(mp.edit?.id ?? null, mp.selected).then(setRows);
   }, [mp.selected, mp.edit]);
@@ -253,7 +265,12 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
           {open ? (
             <ProjectPage
               id={open}
-              onBack={() => setOpen(null)}
+              onBack={() => {
+                if (fi && fromInst.current && open === fromInst.current) {
+                  fromInst.current = null;
+                  openInstance(fi.id, "content");
+                } else setOpen(null);
+              }}
               ctx={
                 fi
                   ? { inPack: false, togglePack: addModToInst, packMc: fi.v, packLoader: fi.l, target: fi.id, setTarget: () => undefined, lockTarget: true, modLabels: ["✓ Ajouté", `+ Ajouter à « ${fi.n} »`], packName: `l'instance « ${fi.n} »` }
@@ -302,6 +319,20 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
                       </option>
                     ))}
                 </select>
+                {tab === "mod" || tab === "modpack" ? (
+                  <span className="chips" role="group" aria-label={t("Côté")}>
+                    {(
+                      [
+                        ["client", "Client", "Mods qui tournent côté joueur (requis ou optionnels)"],
+                        ["server", "Serveur", "Mods qui tournent côté serveur (requis ou optionnels)"],
+                      ] as const
+                    ).map(([k, l, tip]) => (
+                      <button key={k} className="chip" aria-pressed={envs.includes(k) ? "true" : "false"} title={t(tip)} onClick={() => setEnvs((v) => (v.includes(k) ? v.filter((x) => x !== k) : [...v, k]))}>
+                        {t(l)}
+                      </button>
+                    ))}
+                  </span>
+                ) : null}
                 {(tab === "resourcepack" || tab === "shader") && !fi ? (
                   <select aria-label={t("Instance où installer")} value={target} onChange={(e) => setTarget(e.target.value)}>
                     {inst.length ? null : <option value="">{t("Aucune instance")}</option>}

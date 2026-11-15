@@ -97,6 +97,14 @@ test("recherche : valeurs inconnues ignorées, facettes par type", () => {
   assert.equal(projectSearchParams(q2)["index"], "downloads");
 });
 
+test("recherche : filtres Client / Serveur (requis ou optionnel de ce côté), valeurs inconnues ignorées", () => {
+  const q = cleanProjectQuery({ type: "mod", mc: "1.21.1", envs: ["client", "server", "client", "both", 3] })!;
+  assert.deepEqual(q.envs, ["client", "server"]);
+  const f = JSON.parse(String(projectSearchParams(q)["facets"])) as string[][];
+  assert.deepEqual(f.slice(-2), [["client_side:required", "client_side:optional"], ["server_side:required", "server_side:optional"]]);
+  assert.equal(cleanProjectQuery({ type: "mod", envs: "client" })!.envs, undefined);
+});
+
 test("page d'un projet : données vérifiées, images et liens remplacés, rien d'inventé", async () => {
   const media = new MediaStore({ dataDir: "/inexistant", ops: { size: () => null, cropSquare: () => Buffer.alloc(0), shrinkJpeg: () => Buffer.alloc(0) } });
   const links = new LinkStore();

@@ -189,8 +189,9 @@ export const NAVDEF: NavConfig = {
   h: "top",
   v: "left",
   junction: "logo",
-  pinMode: "inline",
-  dock: { side: "bottom", align: "center" },
+  // par défaut : la configuration « Toutes les features » (toutes les sections, épingles dans une barre à droite)
+  pinMode: "dock",
+  dock: { side: "right", align: "end" },
   pins: [],
   items: [
     { id: "wecraft", on: true, bar: "h" },

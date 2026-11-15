@@ -313,7 +313,6 @@ body { margin: 0; padding: 0 !important; overflow: hidden; background: var(--nig
 .icards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .icard2 { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 16px; background: rgba(255,255,255,.05); border: 1px solid var(--line); min-width: 0; }
 .icard2:hover { border-color: color-mix(in srgb, var(--acc) 40%, var(--line)); }
-.icard2[draggable="true"] { cursor: grab; }
 .ic2-cover { all: unset; cursor: pointer; display: block; height: 108px; border-radius: 11px; }
 .ic2-cover:focus-visible { outline: 2px solid var(--acc); }
 .ic2-src { position: absolute; z-index: 1; right: 8px; top: 8px; padding: 2px 8px; border-radius: 999px; background: rgba(0,0,0,.55); font-size: 11px; }
@@ -584,3 +583,37 @@ body.tb-off .app { height: 100vh !important; }
 /* Diffusion : pas de quadrillage « nappe » par-dessus les aperçus */
 .live-sc::after, .live-cover::after { content: none !important; background: none !important; }
 .mus-err { color: #ff8a80 !important; }
+.ic-row.link { cursor: pointer; }
+.ic-row.link:hover { background: rgba(255,255,255,.04); }
+
+/* WeCraft : sélection, rangement des cartes à la souris, infos au survol */
+.wc-tools { margin-top: -4px; }
+.wc-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); }
+.wc-hint { font-size: 12px; margin: 0 0 8px; }
+.wc-bulk { position: sticky; bottom: 14px; z-index: 5; margin-top: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.45); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; background: color-mix(in srgb, var(--acc) 16%, rgba(12,14,20,.92)); border: 1px solid color-mix(in srgb, var(--acc) 55%, var(--line)); backdrop-filter: blur(10px); }
+.wc-all { user-select: none; }
+.wc-all .icard2 { cursor: grab; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, opacity .15s ease; }
+.icard2.sel { border-color: var(--acc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--acc) 55%, transparent); background: color-mix(in srgb, var(--acc) 9%, rgba(255,255,255,.05)); }
+.icard2.dragged { opacity: .35; transform: scale(.97); }
+.icard2.drop-before { box-shadow: -4px 0 0 0 var(--acc); }
+.icard2.drop-after { box-shadow: 4px 0 0 0 var(--acc); }
+.icards.dropon, .igrp.dropon { outline: 2px dashed color-mix(in srgb, var(--acc) 70%, transparent); outline-offset: 4px; border-radius: 16px; }
+.ic2-check { position: absolute; z-index: 2; left: 46px; top: 15px; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; font-weight: 800; color: #fff; background: rgba(0,0,0,.55); border: 1.5px solid rgba(255,255,255,.7); cursor: pointer; opacity: 0; transition: opacity .12s ease; }
+.icard2:hover .ic2-check, .icard2.sel .ic2-check, .ic2-check:focus-visible, .wc-all:has(.icard2.sel) .ic2-check { opacity: 1; }
+.ic2-check[aria-pressed="true"] { background: var(--acc); border-color: var(--acc); color: #111; }
+/* infos (version, loader, RAM, dernier lancement) seulement au survol : la place reste réservée, rien ne saute */
+.icard2 .ic2-info { opacity: 0; transition: opacity .15s ease; }
+.icard2:hover .ic2-info, .icard2:focus-within .ic2-info, .icard2.sel .ic2-info { opacity: 1; }
+@media (hover: none) { .icard2 .ic2-info { opacity: 1; } .ic2-check { opacity: 1; } }
+.wc-ghost { position: fixed; left: 0; top: 0; z-index: 9999; pointer-events: none; opacity: .92; box-shadow: 0 18px 40px rgba(0,0,0,.55); border-color: var(--acc) !important; transition: none !important; }
+.wc-ghost[data-count]::after { content: attr(data-count); position: absolute; right: -8px; top: -8px; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; display: grid; place-items: center; background: var(--acc); color: #111; font-weight: 800; font-size: 13px; }
+body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
+.linkbtn { all: unset; color: var(--acc); cursor: pointer; text-decoration: underline; }
+.linkbtn:focus-visible { outline: 2px solid var(--acc); }
+@media (prefers-reduced-motion: reduce) { .wc-all .icard2, .icard2 .ic2-info, .ic2-check { transition: none; } }
+
+/* Paramètres > Navigation : glisser une ligne (les autres s'écartent en direct) */
+.navlist .navrow:not(:has(.mv:empty)) { cursor: grab; }
+.navlist.sorting, .navlist.sorting * { cursor: grabbing !important; user-select: none; }
+.navrow.drag { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 16%, transparent); box-shadow: 0 10px 24px rgba(0,0,0,.35); transform: scale(1.015); position: relative; z-index: 2; }
+.navrow .grip { padding: 6px 0; }

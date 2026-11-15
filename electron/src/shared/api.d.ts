@@ -320,6 +320,8 @@ export interface ProjectQuery {
   sort: string | null;
   offset: number;
   categories: string[];
+  /** Côté où le projet tourne : « client » et/ou « server ». */
+  envs?: ("client" | "server")[];
 }
 /** Description convertie en blocs sûrs par le processus principal (jamais de HTML). */
 export type MdInline =

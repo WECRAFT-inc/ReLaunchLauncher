@@ -39,6 +39,8 @@ export interface Ui {
   dtab: string;
   /** Page d'une instance : identifiant et onglet. */
   page: string | null;
+  /** « Ajouter du contenu » : projet Modrinth (slug) à ouvrir directement, depuis la liste des mods de l'instance. */
+  proj?: string | null;
   itab: string;
   /** Avantages & Quêtes : event mis en avant (renvoi depuis la fiche d'un event). */
   qEv: string | null;

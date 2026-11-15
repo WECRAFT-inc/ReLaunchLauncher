@@ -1,5 +1,5 @@
 // Pages Accueil, WeCraft, Favoris, Instances épinglées et pages « bientôt ».
-import { useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useApp } from "./ctx";
 import { HomeCarousel } from "./Relink";
 import { Ic } from "./Ic";
@@ -7,7 +7,9 @@ import { HomeAccount } from "./Quests";
 import { Menu, type MenuItem } from "./Menu";
 import { Minis } from "./Bars";
 import { InstIcon } from "./symbols";
-import { ago, bgFmtOf, detail, INACTIVE_ID, isPinned, isRecent, orderInstances, pinCount, SC, type Inst, type InstGroup } from "./model";
+import { ago, bgFmtOf, detail, INACTIVE_ID, isPinned, isRecent, load, orderInstances, pinCount, SC, store, type Inst, type InstGroup } from "./model";
+import { cleanInstView, HIDE_CHOICES, isOld, moveInOrder, rangeBetween, sortByOrder, type InstViewPrefs } from "./instOrder";
+import { useEscapeLayer } from "./keys";
 import { t } from "./i18n";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
@@ -177,28 +179,56 @@ export function instMenu(x: Inst, groups: InstGroup[], moveTo: (gid: string) => 
   ];
 }
 
+/** Valeur d'un `<select>` « Déplacer la sélection vers… » : groupe existant, sans groupe, ou nouveau groupe. */
+const NEW_GROUP = "\u0000new";
+const NO_GROUP = "\u0000none";
+
 export function Wecraft() {
-  const { inst, hidden, ui, setUi, pref, groups, setGroups, nav } = useApp();
+  const { inst, hidden, ui, setUi, pref, groups, setGroups, nav, toggleFav, toast } = useApp();
   const imgs = bgFmtOf(pref) !== "off";
   const recent = inst
     .filter((x) => x.last)
     .sort((a, b) => b.last! - a.last!)
     .slice(0, 5);
   const q = ui.wcQ.trim().toLowerCase();
-  const rows = orderInstances(inst.filter((i) => (ui.wcSrc === "all" || i.s === ui.wcSrc) && i.n.toLowerCase().includes(q)));
+
+  // ordre (auto / rangé à la main) et masquage des instances anciennes, gardés sur ce PC
+  const [view, setView0] = useState<InstViewPrefs>(() => cleanInstView(load("rl-iview", null)));
+  const setView = (fn: (v: InstViewPrefs) => InstViewPrefs) =>
+    setView0((v) => {
+      const n = fn(v);
+      store("rl-iview", n);
+      return n;
+    });
+  const sorted = (l: Inst[]) => (view.sort === "manual" ? sortByOrder(orderInstances(l), view.order) : orderInstances(l));
+  const now = Date.now();
+  const matched = inst.filter((i) => (ui.wcSrc === "all" || i.s === ui.wcSrc) && i.n.toLowerCase().includes(q));
+  const oldOnes = view.hideOld ? matched.filter((x) => isOld(x, view.hideDays, now)) : [];
+  const rows = sorted(view.hideOld ? matched.filter((x) => !isOld(x, view.hideDays, now)) : matched);
+  /** Ordre affiché de TOUTES les instances (masquées comprises) : base des déplacements. */
+  const allFlat = sorted(inst).map((x) => x.id);
+
   const [closed, setClosed] = useState<Set<string>>(() => new Set([INACTIVE_ID]));
   const [newGroup, setNewGroup] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const moveTo = (id: string, gid: string) =>
+  /** Range des instances dans un groupe ("" : sans groupe). */
+  const moveMany = (ids: string[], gid: string) =>
     setGroups((gs) => {
-      const out = gs.map((g) => ({ ...g, ids: g.id === gid ? [...g.ids.filter((x) => x !== id), id] : g.ids.filter((x) => x !== id) }));
-      if (gid === INACTIVE_ID && !out.some((g) => g.id === INACTIVE_ID)) out.push({ id: INACTIVE_ID, name: "Inactives", ids: [id] });
+      const set = new Set(ids);
+      const out = gs.map((g) => ({ ...g, ids: [...g.ids.filter((x) => !set.has(x)), ...(g.id === gid ? ids : [])] }));
+      if (gid === INACTIVE_ID && !out.some((g) => g.id === INACTIVE_ID)) out.push({ id: INACTIVE_ID, name: "Inactives", ids });
       return out;
     });
-  const createGroup = (name: string) => {
+  const moveTo = (id: string, gid: string) => moveMany([id], gid);
+  const createGroup = (name: string, ids: string[] = []) => {
     const n = name.trim().slice(0, 40);
     if (!n) return setNewGroup(null);
-    setGroups((gs) => [...gs.filter((g) => g.id !== INACTIVE_ID), { id: `g${Date.now().toString(36)}`, name: n, ids: [] }, ...gs.filter((g) => g.id === INACTIVE_ID)]);
+    const gid = `g${Date.now().toString(36)}`;
+    setGroups((gs) => {
+      const set = new Set(ids);
+      const rest = gs.map((g) => ({ ...g, ids: g.ids.filter((x) => !set.has(x)) }));
+      return [...rest.filter((g) => g.id !== INACTIVE_ID), { id: gid, name: n, ids }, ...rest.filter((g) => g.id === INACTIVE_ID)];
+    });
     setNewGroup(null);
   };
   const toggleOpen = (gid: string) =>
@@ -209,48 +239,232 @@ export function Wecraft() {
       return n;
     });
 
-  // glisser une carte sur un groupe pour l'y ranger
-  const drag = useRef<string | null>(null);
-  const [over, setOver] = useState<string | null>(null);
-  const dropProps = (gid: string) => ({
-    onDragOver: (e: DragEvent) => {
-      if (!drag.current) return;
-      e.preventDefault();
-      if (over !== gid) setOver(gid);
-    },
-    onDragLeave: () => setOver((o) => (o === gid ? null : o)),
-    onDrop: (e: DragEvent) => {
-      if (!drag.current) return;
-      e.preventDefault();
-      e.stopPropagation();
-      moveTo(drag.current, gid);
-      drag.current = null;
-      setOver(null);
-    },
+  // ---------------------------------------------------------------- sections affichées (ordre visuel)
+  const inGroup = (id: string) => groups.some((g) => g.ids.includes(id));
+  const userGroups = groups.filter((g) => g.id !== INACTIVE_ID);
+  const ina = groups.find((g) => g.id === INACTIVE_ID);
+  const ungrouped = rows.filter((r) => !inGroup(r.id));
+  const sections: { gid: string; name: string; items: Inst[]; fixed?: boolean; hint?: string; bare?: boolean }[] = [];
+  for (const g of userGroups) {
+    const items = rows.filter((r) => g.ids.includes(r.id));
+    if (q && !items.length) continue;
+    sections.push({ gid: g.id, name: g.name, items });
+  }
+  if (userGroups.length || ina) sections.push({ gid: "", name: "Sans groupe", items: ungrouped, fixed: true, hint: "Aucune instance hors des groupes." });
+  else if (ungrouped.length) sections.push({ gid: "", name: "", items: ungrouped, bare: true });
+  if (ina) sections.push({ gid: INACTIVE_ID, name: "Inactives", items: rows.filter((r) => ina.ids.includes(r.id)), fixed: true, hint: "Aucune instance inactive." });
+  /** Cartes visibles, dans l'ordre de l'écran (sélection par plage, Ctrl+A). */
+  const visible = sections.flatMap((s) => (s.bare || !closed.has(s.gid) ? s.items.map((x) => x.id) : []));
+
+  // ---------------------------------------------------------------- sélection
+  const [sel, setSel] = useState<Set<string>>(() => new Set());
+  const anchor = useRef<string | null>(null);
+  const clearSel = () => setSel(new Set());
+  const toggleSel = (id: string) =>
+    setSel((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const selectAll = () => setSel(new Set(visible));
+  useEscapeLayer(sel.size > 0, clearSel);
+  // une instance supprimée ou masquée sort de la sélection
+  const visKey = visible.join("\n");
+  useEffect(() => {
+    const vis = new Set(visKey.split("\n"));
+    setSel((s) => ([...s].every((id) => vis.has(id)) ? s : new Set([...s].filter((id) => vis.has(id)))));
+  }, [visKey]);
+
+  // valeurs courantes pour les écouteurs posés sur la fenêtre pendant un geste
+  const live = useRef({ sel, visible, allFlat });
+  live.current = { sel, visible, allFlat };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tg = e.target as HTMLElement | null;
+      if (tg && (tg.tagName === "INPUT" || tg.tagName === "TEXTAREA" || tg.tagName === "SELECT" || tg.isContentEditable)) return;
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setSel(new Set(live.current.visible));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // ---------------------------------------------------------------- gestes à la souris
+  // - glisser une carte (sans touche) : la ranger ailleurs (toute la sélection si la carte en fait partie) ;
+  // - Maj + appui + glisser : sélectionne toutes les cartes survolées ; Maj+clic : plage depuis la dernière cliquée ;
+  // - Ctrl+clic : ajoute ou retire une carte ; clic sur une carte pendant une sélection : idem.
+  type Gesture =
+    | { kind: "pending"; id: string; x0: number; y0: number; ctrl: boolean; el: HTMLElement; onCover: boolean }
+    | { kind: "drag"; id: string; moving: string[]; ghost: HTMLElement; dx: number; dy: number }
+    | { kind: "paint"; id: string; painted: Set<string>; moved: boolean };
+  const gesture = useRef<Gesture | null>(null);
+  const suppressClick = useRef(false);
+  const [dragIds, setDragIds] = useState<string[]>([]);
+  const [dropAt, setDropAt] = useState<{ id: string | null; gid: string; after: boolean } | null>(null);
+  const dropRef = useRef(dropAt);
+  dropRef.current = dropAt;
+
+  const cardAt = (x: number, y: number) => document.elementFromPoint(x, y)?.closest<HTMLElement>(".icard2[data-id]") ?? null;
+  const commitDrop = (moving: string[], at: { id: string | null; gid: string; after: boolean }) => {
+    const groupOf = (id: string) => groups.find((g) => g.ids.includes(id))?.id ?? "";
+    if (moving.some((id) => groupOf(id) !== at.gid)) moveMany(moving, at.gid);
+    setView((v) => ({ ...v, sort: "manual", order: moveInOrder(live.current.allFlat, moving, at.id, at.after) }));
+  };
+
+  /** Écouteurs posés sur la fenêtre pour le geste en cours (ceux du rendu qui l'a commencé). */
+  const handlers = useRef<{ move: (e: PointerEvent) => void; up: (e: PointerEvent) => void; cancel: () => void } | null>(null);
+  const endGesture = () => {
+    const h = handlers.current;
+    handlers.current = null;
+    if (h) {
+      window.removeEventListener("pointermove", h.move);
+      window.removeEventListener("pointerup", h.up);
+      window.removeEventListener("pointercancel", h.cancel);
+    }
+    document.body.classList.remove("wc-dragging");
+  };
+  function onMove(e: PointerEvent) {
+    const g = gesture.current;
+    if (!g) return;
+    if (g.kind === "paint") {
+      const c = cardAt(e.clientX, e.clientY);
+      const id = c?.dataset["id"];
+      if (id && !g.painted.has(id)) {
+        g.painted.add(id);
+        g.moved = true;
+        setSel((s) => new Set([...s, id]));
+      }
+      return;
+    }
+    if (g.kind === "pending") {
+      if (g.ctrl || Math.hypot(e.clientX - g.x0, e.clientY - g.y0) < 6) return;
+      const { sel: cur, visible: vis } = live.current;
+      const moving = cur.has(g.id) && cur.size > 1 ? vis.filter((id) => cur.has(id)) : [g.id];
+      const r = g.el.getBoundingClientRect();
+      const ghost = g.el.cloneNode(true) as HTMLElement;
+      ghost.classList.add("wc-ghost");
+      ghost.style.width = `${r.width}px`;
+      if (moving.length > 1) ghost.dataset["count"] = String(moving.length);
+      document.body.appendChild(ghost);
+      gesture.current = { kind: "drag", id: g.id, moving, ghost, dx: g.x0 - r.left, dy: g.y0 - r.top };
+      document.body.classList.add("wc-dragging");
+      setDragIds(moving);
+    }
+    const d = gesture.current;
+    if (d?.kind !== "drag") return;
+    d.ghost.style.transform = `translate(${e.clientX - d.dx}px, ${e.clientY - d.dy}px) rotate(2deg)`;
+    const c = cardAt(e.clientX, e.clientY);
+    if (c) {
+      const r = c.getBoundingClientRect();
+      const gid = c.closest<HTMLElement>("[data-gid]")?.dataset["gid"] ?? "";
+      setDropAt({ id: c.dataset["id"]!, gid, after: e.clientX > r.left + r.width / 2 });
+      return;
+    }
+    const sec = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-gid]");
+    setDropAt(sec ? { id: null, gid: sec.dataset["gid"] ?? "", after: true } : null);
+  }
+  function onUp(e: PointerEvent) {
+    const g = gesture.current;
+    gesture.current = null;
+    endGesture();
+    if (!g) return;
+    if (g.kind === "drag") {
+      g.ghost.remove();
+      setDragIds([]);
+      const at = dropRef.current;
+      setDropAt(null);
+      suppressClick.current = true;
+      if (at) commitDrop(g.moving, at);
+      return;
+    }
+    if (g.kind === "paint") {
+      suppressClick.current = true;
+      if (!g.moved) {
+        // Maj+clic sans glisser : plage depuis la dernière carte cliquée
+        const from = anchor.current && live.current.visible.includes(anchor.current) ? anchor.current : g.id;
+        const range = rangeBetween(live.current.visible, from, g.id);
+        setSel((s) => new Set([...s, ...range]));
+      }
+      anchor.current = g.id;
+      return;
+    }
+    // simple clic (pas de glisser)
+    const ctrl = g.ctrl || e.ctrlKey || e.metaKey;
+    if (ctrl || (live.current.sel.size > 0 && g.onCover)) {
+      suppressClick.current = true;
+      toggleSel(g.id);
+      anchor.current = g.id;
+    }
+  }
+  function onCancel() {
+    const g = gesture.current;
+    gesture.current = null;
+    endGesture();
+    if (g?.kind === "drag") g.ghost.remove();
+    setDragIds([]);
+    setDropAt(null);
+  }
+  useEffect(() => () => {
+    // page quittée en plein geste
+    const g = gesture.current;
+    if (g?.kind === "drag") g.ghost.remove();
+    gesture.current = null;
+    endGesture();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || gesture.current) return;
+    const tg = e.target as HTMLElement;
+    const card = tg.closest<HTMLElement>(".icard2[data-id]");
+    if (!card) return;
+    const id = card.dataset["id"]!;
+    const onCover = !!tg.closest(".ic2-cover") || !tg.closest("button, input, select, a, .menu");
+    // Maj : sélection depuis n'importe quel point de la carte (sauf menu et champs)
+    if (e.shiftKey && !tg.closest("input, select, .menu")) {
+      e.preventDefault(); // pas de sélection de texte
+      gesture.current = { kind: "paint", id, painted: new Set([id]), moved: false };
+      setSel((s) => new Set([...s, id]));
+    } else {
+      // sans Maj, les boutons de la carte (Jouer, favori, épingle, réglages, menu, case) gardent leur rôle
+      if (!onCover) return;
+      gesture.current = { kind: "pending", id, x0: e.clientX, y0: e.clientY, ctrl: e.ctrlKey || e.metaKey, el: card, onCover };
+    }
+    handlers.current = { move: onMove, up: onUp, cancel: onCancel };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  };
+  const onClickCapture = (e: ReactMouseEvent) => {
+    if (!suppressClick.current) return;
+    suppressClick.current = false;
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  useEffect(() => {
+    // un clic supprimé qui n'arrive jamais (relâché ailleurs) ne doit pas avaler le suivant
+    if (!suppressClick.current) return;
+    const t0 = window.setTimeout(() => (suppressClick.current = false), 0);
+    return () => window.clearTimeout(t0);
   });
+
+  // ---------------------------------------------------------------- actions sur la sélection
+  const selIds = visible.filter((id) => sel.has(id));
+  const selInst = selIds.map((id) => inst.find((x) => x.id === id)).filter((x): x is Inst => !!x);
+  const allFav = selInst.length > 0 && selInst.every((x) => x.fav);
+  const allInactive = selIds.length > 0 && !!ina && selIds.every((id) => ina.ids.includes(id));
+  const [bulkNew, setBulkNew] = useState<string | null>(null);
 
   const card = (x: Inst) => {
     const inactive = groups.some((g) => g.id === INACTIVE_ID && g.ids.includes(x.id));
+    const isSel = sel.has(x.id);
+    const drop = dropAt && dropAt.id === x.id && !dragIds.includes(x.id) ? (dropAt.after ? " drop-after" : " drop-before") : "";
     return (
-      <div
-        key={x.id}
-        className="icard2"
-        data-a={`inst-${x.id}`}
-        draggable="true"
-        onDragStart={(e) => {
-          drag.current = x.id;
-          try {
-            e.dataTransfer.setData("text/plain", x.n);
-            e.dataTransfer.effectAllowed = "move";
-          } catch {
-            // glisser indisponible
-          }
-        }}
-        onDragEnd={() => {
-          drag.current = null;
-          setOver(null);
-        }}
-      >
+      <div key={x.id} className={`icard2${isSel ? " sel" : ""}${dragIds.includes(x.id) ? " dragged" : ""}${drop}`} data-a={`inst-${x.id}`} data-id={x.id}>
         <button className="cover ic2-cover" style={coverOf(x, imgs)} data-act="openInst" data-id={x.id} aria-label={`${t("Ouvrir la page de l'instance")} ${x.n}`}>
           <InstIcon icon={x.icon} fallback={x.c} name={x.n} size={48} className="on-cover" />
           <span className="src ic2-src" style={{ "--sc": SC[x.s] ?? "var(--acc)" } as Css}>
@@ -260,10 +474,13 @@ export function Wecraft() {
         <button className="star ic2-star" data-act="fav" data-id={x.id} aria-pressed={x.fav ? "true" : "false"} aria-label={t("Favori")} title={t("Favori")}>
           ★
         </button>
+        <button className="ic2-check" aria-pressed={isSel ? "true" : "false"} aria-label={`${t("Sélectionner")} ${x.n}`} title={t("Sélectionner (Ctrl+clic, Maj+clic pour une plage)")} onClick={() => ((anchor.current = x.id), toggleSel(x.id))}>
+          {isSel ? "✓" : ""}
+        </button>
         <div className="ic2-body">
           <b title={x.n}>{x.n}</b>
-          <small>{`${[x.l, x.lv].filter(Boolean).join(" ")} · ${x.v || "?"}${x.r ? ` · ${x.r} Go` : ""}`}</small>
-          <small className="faint">{x.last ? `${t("Lancée")} ${ago(x.last)}` : t("Jamais lancée")}</small>
+          <small className="ic2-info">{`${[x.l, x.lv].filter(Boolean).join(" ")} · ${x.v || "?"}${x.r ? ` · ${x.r} Go` : ""}`}</small>
+          <small className="faint ic2-info">{x.last ? `${t("Lancée")} ${ago(x.last)}` : t("Jamais lancée")}</small>
         </div>
         <div className="ic2-acts">
           <button className="btn sm pri" data-play={x.id}>
@@ -283,10 +500,18 @@ export function Wecraft() {
     );
   };
 
-  const section = (gid: string, name: string, items: Inst[], opts: { fixed?: boolean; hint?: string } = {}) => {
+  const section = (s: (typeof sections)[number]) => {
+    const { gid, name, items } = s;
+    if (s.bare)
+      return (
+        <div key="bare" className={`icards${dropAt && dropAt.gid === "" && dropAt.id === null ? " dropon" : ""}`} data-gid="">
+          {items.map(card)}
+        </div>
+      );
     const open = !closed.has(gid);
+    const nSel = items.filter((x) => sel.has(x.id)).length;
     return (
-      <div key={gid} className={`igrp${over === gid ? " dropon" : ""}`} {...dropProps(gid)} data-a={`igrp-${gid}`}>
+      <div key={gid || "none"} className={`igrp${dropAt && dropAt.gid === gid && dropAt.id === null ? " dropon" : ""}`} data-gid={gid} data-a={`igrp-${gid}`}>
         <div className="igrp-head">
           <button className="ib" aria-expanded={open ? "true" : "false"} aria-label={open ? t("Replier") : t("Déplier")} onClick={() => toggleOpen(gid)}>
             {open ? "▾" : "▸"}
@@ -312,11 +537,28 @@ export function Wecraft() {
               }}
             />
           ) : (
-            <b onDoubleClick={() => !opts.fixed && setRenaming(gid)}>{t(name)}</b>
+            <b onDoubleClick={() => !s.fixed && setRenaming(gid)}>{t(name)}</b>
           )}
-          <small className="faint">{`${items.length}`}</small>
+          <small className="faint">{nSel ? `${nSel}/${items.length}` : `${items.length}`}</small>
+          {items.length && open ? (
+            <button
+              className="btn sm ghost"
+              onClick={() => {
+                const ids = items.map((x) => x.id);
+                const allIn = ids.every((id) => sel.has(id));
+                setSel((cur) => {
+                  const n = new Set(cur);
+                  for (const id of ids) if (allIn) n.delete(id);
+                  else n.add(id);
+                  return n;
+                });
+              }}
+            >
+              {items.every((x) => sel.has(x.id)) ? t("Désélectionner le groupe") : t("Sélectionner le groupe")}
+            </button>
+          ) : null}
           <span style={{ flex: 1 }}></span>
-          {opts.fixed ? null : (
+          {s.fixed ? null : (
             <Menu
               items={[
                 { label: "Renommer", onClick: () => setRenaming(gid) },
@@ -329,18 +571,15 @@ export function Wecraft() {
           items.length ? (
             <div className="icards">{items.map(card)}</div>
           ) : (
-            <div className="igrp-empty faint">{t(opts.hint ?? "Groupe vide : glisse une carte ici, ou utilise le menu ⋯ d'une instance.")}</div>
+            <div className="igrp-empty faint">{t(s.hint ?? "Groupe vide : glisse une carte ici, ou utilise le menu ⋯ d'une instance.")}</div>
           )
         ) : null}
       </div>
     );
   };
 
-  const inGroup = (id: string) => groups.some((g) => g.ids.includes(id));
-  const ungrouped = rows.filter((r) => !inGroup(r.id));
-  const userGroups = groups.filter((g) => g.id !== INACTIVE_ID);
-  const ina = groups.find((g) => g.id === INACTIVE_ID);
   const nPins = pinCount(nav);
+  const hideLabel = HIDE_CHOICES.find(([d]) => d === view.hideDays)?.[1] ?? "1 an";
   return (
     <>
       <div className="vhead">
@@ -432,14 +671,116 @@ export function Wecraft() {
           )}
           <input type="search" id="wcQ" placeholder={t("Rechercher une instance")} aria-label={t("Rechercher une instance")} value={ui.wcQ} onChange={(e) => setUi({ wcQ: e.target.value })} />
         </div>
-        {userGroups.map((g) => {
-          const items = rows.filter((r) => g.ids.includes(r.id));
-          if (q && !items.length) return null;
-          return section(g.id, g.name, items);
-        })}
-        {userGroups.length || ina ? section("", "Sans groupe", ungrouped, { fixed: true, hint: "Aucune instance hors des groupes." }) : ungrouped.length ? <div className="icards">{ungrouped.map(card)}</div> : null}
-        {ina ? section(INACTIVE_ID, "Inactives", rows.filter((r) => ina.ids.includes(r.id)), { fixed: true, hint: "Aucune instance inactive." }) : null}
-        {rows.length ? null : <div className="empty">{inst.length ? t("Aucune instance ne correspond.") : t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}</div>}
+        <div className="toolbar wc-tools">
+          <button className="btn sm" onClick={() => (selIds.length === visible.length && visible.length ? clearSel() : selectAll())} disabled={!visible.length} title={t("Ctrl+A")}>
+            {selIds.length === visible.length && visible.length ? t("Tout désélectionner") : t("Tout sélectionner")}
+          </button>
+          <label className="wc-opt">
+            <span>{t("Ordre")}</span>
+            <select
+              value={view.sort}
+              aria-label={t("Ordre des instances")}
+              onChange={(e) => {
+                const v = e.target.value === "manual" ? "manual" : "auto";
+                // passer en rangement manuel part de l'ordre affiché : rien ne bouge
+                setView((p) => ({ ...p, sort: v, order: v === "manual" && !p.order.length ? orderInstances(inst).map((x) => x.id) : p.order }));
+              }}
+            >
+              <option value="auto">{t("Favoris puis récentes")}</option>
+              <option value="manual">{t("Rangé à la main")}</option>
+            </select>
+          </label>
+          {view.sort === "manual" ? (
+            <button className="btn sm ghost" onClick={() => setView((p) => ({ ...p, sort: "auto", order: [] }))} title={t("Revenir à l'ordre automatique")}>
+              {t("Réinitialiser l'ordre")}
+            </button>
+          ) : null}
+          <span style={{ flex: 1 }}></span>
+          <button className="chip" aria-pressed={view.hideOld ? "true" : "false"} onClick={() => setView((p) => ({ ...p, hideOld: !p.hideOld }))}>
+            {t("Masquer les instances lancées il y a plus de")}
+          </button>
+          <select aria-label={t("Durée")} value={view.hideDays} onChange={(e) => setView((p) => ({ ...p, hideDays: Number(e.target.value), hideOld: true }))}>
+            {HIDE_CHOICES.map(([d, l]) => (
+              <option key={d} value={d}>
+                {t(l)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="faint wc-hint">{t("Glisse une carte pour la ranger (dans un groupe ou entre deux cartes). Ctrl+clic ou la case : sélectionner ; Maj+clic : une plage ; Maj + glisser : toutes les cartes survolées.")}</p>
+        <div className="wc-all" onPointerDown={onPointerDown} onClickCapture={onClickCapture}>
+          {sections.map(section)}
+        </div>
+        {/* barre d'actions SOUS les cartes (collée en bas à l'écran) : elle ne décale jamais les cartes */}
+        {selIds.length ? (
+          <div className="wc-bulk" role="toolbar" aria-label={t("Actions sur la sélection")}>
+            <b>{`${selIds.length} ${selIds.length > 1 ? t("sélectionnées") : t("sélectionnée")}`}</b>
+            {bulkNew !== null ? (
+              <input
+                autoFocus
+                type="text"
+                maxLength={40}
+                placeholder={t("Nom du nouveau groupe")}
+                aria-label={t("Nom du nouveau groupe")}
+                value={bulkNew}
+                onChange={(e) => setBulkNew(e.target.value)}
+                onBlur={() => {
+                  if (bulkNew.trim()) createGroup(bulkNew, selIds);
+                  setBulkNew(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setBulkNew(null);
+                  }
+                }}
+              />
+            ) : (
+              <select
+                aria-label={t("Ranger la sélection dans")}
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === NEW_GROUP) return setBulkNew("");
+                  const gid = v === NO_GROUP ? "" : v;
+                  moveMany(selIds, gid);
+                  toast(gid ? `${selIds.length} instance(s) rangée(s) dans « ${groups.find((g) => g.id === gid)?.name ?? "Inactives"} »` : `${selIds.length} instance(s) sortie(s) de leur groupe`);
+                }}
+              >
+                <option value="" disabled>
+                  {t("Ranger dans…")}
+                </option>
+                {userGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+                <option value={NO_GROUP}>{t("Sans groupe")}</option>
+                <option value={NEW_GROUP}>{t("+ Nouveau groupe…")}</option>
+              </select>
+            )}
+            <button className="btn sm" onClick={() => selInst.filter((x) => x.fav === allFav).forEach((x) => toggleFav(x.id))}>
+              {allFav ? t("Retirer des favoris") : t("Ajouter aux favoris")}
+            </button>
+            <button className="btn sm" onClick={() => moveMany(selIds, allInactive ? "" : INACTIVE_ID)}>
+              {allInactive ? t("Sortir des inactives") : t("Ranger comme inactives")}
+            </button>
+            <span style={{ flex: 1 }}></span>
+            <button className="btn sm ghost" onClick={clearSel} title={t("Échap")}>
+              {t("Désélectionner")}
+            </button>
+          </div>
+        ) : null}
+        {rows.length ? null : <div className="empty">{inst.length ? (oldOnes.length && matched.length === oldOnes.length ? t("Toutes les instances correspondantes sont masquées (lancées il y a longtemps).") : t("Aucune instance ne correspond.")) : t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}</div>}
+        {oldOnes.length ? (
+          <p className="faint" style={{ fontSize: "12.5px" }}>
+            {`${oldOnes.length} ${oldOnes.length > 1 ? t("instances masquées : lancées") : t("instance masquée : lancée")} ${t("il y a plus de")} ${t(hideLabel)}. `}
+            <button className="linkbtn" onClick={() => setView((p) => ({ ...p, hideOld: false }))}>
+              {t("Les afficher")}
+            </button>
+          </p>
+        ) : null}
         {hidden ? <p className="faint" style={{ fontSize: "12.5px" }}>{`${hidden} instance${hidden > 1 ? "s masquées" : " masquée"} (réglage de WeCraft).`}</p> : null}
       </div>
     </>

@@ -1,6 +1,6 @@
 // Page Réglages (port de RENDER.settings, mini, pinMgr… du prototype), même balisage.
 import { MusicSettingsGroup } from "./Music";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { ShaderPrefsView } from "../../shared/api";
 import { useApp } from "./ctx";
 import { BASE_THEMES, cleanRotation, ROT_FADES, ROT_INTERVALS, THEME_COLORS, THEME_NAMES, type BaseTheme } from "./theme";
@@ -264,8 +264,39 @@ function NavTab() {
   const sections = nav.items.filter((x) => x.on && !NAVINFO[x.id]!.sep && x.id !== "spacer").length;
   const orgSum = nav.mode === "single" ? `1 barre · ${FR[nav.single].toLowerCase()}` : `2 barres ${J ? "reliées" : "séparées"} · ${FR[nav.h].toLowerCase()} + ${FR[nav.v].toLowerCase()}`;
 
-  // Glisser une ligne de la liste des sections
-  const from = useRef<number | null>(null);
+  // Glisser une ligne de la liste des sections (souris ou doigt) : les autres lignes s'écartent en direct,
+  // la ligne est posée au relâchement. Réglages reste toujours en dernier.
+  const [drag, setDrag] = useState<{ from: number; to: number } | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const startRowDrag = (e: ReactPointerEvent<HTMLDivElement>, from: number) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest("button, input, select, a")) return;
+    const rows = [...(listRef.current?.querySelectorAll<HTMLElement>(".navrow") ?? [])];
+    // milieu de chaque ligne au départ, par index d'origine
+    const mids = new Map(rows.map((r) => [Number(r.dataset["i"]), r.getBoundingClientRect().top + r.getBoundingClientRect().height / 2]));
+    const last = nav.items.length - 2;
+    const y0 = e.clientY;
+    let started = false;
+    let to = from;
+    const move = (ev: PointerEvent) => {
+      if (!started && Math.abs(ev.clientY - y0) < 4) return;
+      started = true;
+      let k = 0;
+      for (const [j, m] of mids) if (j !== from && m < ev.clientY) k++;
+      to = Math.max(0, Math.min(last, k));
+      setDrag((d) => (d && d.to === to ? d : { from, to }));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      setDrag(null);
+      if (started && to !== from) moveNav(editNav, nav, from, to);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    e.preventDefault();
+  };
   return (
     <>
       <div className="grp">
@@ -350,43 +381,13 @@ function NavTab() {
             {"Choisis ce qui s'affiche et dans quel ordre. Glisse une ligne ou utilise les flèches. Tout ce qui suit « Espace flexible » va au bout de la barre ; Réglages reste toujours en dernier." +
               (nav.mode === "double" ? " Indique sur quelle barre placer chaque section." : "")}
           </p>
-          <div
-            className="navlist"
-            id="navlist"
-            onDragStart={(e) => {
-              const r = (e.target as HTMLElement).closest<HTMLElement>(".navrow");
-              if (!r || !r.draggable) return;
-              from.current = Number(r.dataset["i"]);
-              r.classList.add("drag");
-              try {
-                e.dataTransfer.setData("text/plain", String(from.current));
-                e.dataTransfer.effectAllowed = "move";
-              } catch {
-                // glisser indisponible
-              }
-            }}
-            onDragOver={(e) => {
-              if (from.current !== null) e.preventDefault();
-            }}
-            onDrop={(e) => {
-              const r = (e.target as HTMLElement).closest<HTMLElement>(".navrow");
-              if (from.current === null || !r) return;
-              e.preventDefault();
-              const to = Math.min(Number(r.dataset["i"]), nav.items.length - 2);
-              const f0 = from.current;
-              from.current = null;
-              moveNav(editNav, nav, f0, to);
-            }}
-            onDragEnd={(e) => {
-              from.current = null;
-              (e.currentTarget as HTMLElement).querySelectorAll(".drag").forEach((x) => x.classList.remove("drag"));
-            }}
-          >
-            {nav.items.map((x, i) => {
+          <div className={`navlist${drag ? " sorting" : ""}`} id="navlist" ref={listRef}>
+            {previewOrder(nav.items.length, drag).map((i) => {
+              const x = nav.items[i]!;
               const it = NAVINFO[x.id]!;
               const pin = !!it.pin;
               return (
-                <div key={x.id} className={`navrow${x.on ? "" : " off"}${it.sep ? " sep" : ""}`} {...(pin ? {} : { draggable: "true" as const })} data-i={i} data-a={`navrow-${x.id}`}>
+                <div key={x.id} className={`navrow${x.on ? "" : " off"}${it.sep ? " sep" : ""}${drag?.from === i ? " drag" : ""}`} data-i={i} data-a={`navrow-${x.id}`} onPointerDown={pin ? undefined : (e) => startRowDrag(e, i)} style={pin ? undefined : { touchAction: "none" }}>
                   <span className="grip" aria-hidden="true">
                     {pin ? "" : "⋮⋮"}
                   </span>
@@ -472,6 +473,15 @@ function GapsGroup() {
 }
 
 /** moveNav : déplace une section (Réglages reste en dernier), avec l'animation de glissement. */
+/** Ordre d'affichage des lignes pendant un glisser : la ligne tirée est montrée à sa future place. */
+export function previewOrder(n: number, drag: { from: number; to: number } | null): number[] {
+  const idx = Array.from({ length: n }, (_, i) => i);
+  if (!drag || drag.from === drag.to) return idx;
+  idx.splice(drag.from, 1);
+  idx.splice(drag.to, 0, drag.from);
+  return idx;
+}
+
 export function moveNav(editNav: ReturnType<typeof useApp>["editNav"], nav: NavConfig, from: number, to: number): void {
   if (to < 0 || to > nav.items.length - 2 || from === to) return;
   const id = nav.items[from]!.id;
@@ -522,16 +532,29 @@ export function playFlip(before: Record<string, DOMRect>, movedKey?: string): vo
 export function Settings() {
   const app = useApp();
   const { ui, pref, car, home, appVer, defaultRam } = app;
-  const menu: [string, string, string][] = [
-    ["maj", "Mises à jour", "downloads"],
-    ["apparence", "Apparence", "paint"],
-    ["nav", "Navigation", "nav"],
-    ["accueil", "Accueil", "home"],
-    ["jeu", "Jeu", "game"],
-    ["comportement", "Comportement", "behave"],
-    ["musique", "Musique", "music"],
-    ["logs", "Logs", "news"],
-    ["compte", "Compte ReLink", "relink"],
+  // Menu des paramètres, rangé par thème (chaque entrée nommée : plus de décalage quand on en ajoute une)
+  const menuGroups: [string, [string, string, string][]][] = [
+    [
+      "Affichage",
+      [
+        ["apparence", "Apparence", "paint"],
+        ["nav", "Navigation", "nav"],
+        ["accueil", "Accueil", "home"],
+      ],
+    ],
+    [
+      "Jeu",
+      [["jeu", "Jeu et Minecraft", "game"]],
+    ],
+    [
+      "Launcher",
+      [
+        ["comportement", "Général", "behave"],
+        ["musique", "Musique", "music"],
+      ],
+    ],
+    ["Compte", [["compte", "Compte ReLink", "relink"]]],
+    ["Diagnostic", [["logs", "Logs", "news"]]],
   ];
   const mb = (m: [string, string, string]) => (
     <button key={m[0]} data-settab={m[0]} aria-current={tf(ui.setTab === m[0])}>
@@ -756,7 +779,12 @@ export function Settings() {
           </div>
         </div>
         <ShadersGroup />
-        <SkinModRow />
+        <div className="grp">
+          <h3>{t("Skins en jeu")}</h3>
+          <SkinModRow />
+        </div>
+        <div className="grp">
+          <h3>{t("Java et fichiers")}</h3>
         <div className="setrow">
           <span>
             <b>{t("Java")}</b>
@@ -772,11 +800,14 @@ export function Settings() {
             {t("Ouvrir")}
           </button>
         </div>
+        </div>
       </>
     );
   } else if (ui.setTab === "comportement") {
     body = (
       <>
+        <div className="grp">
+          <h3>{t("Langue et navigation")}</h3>
         <div className="setrow">
           <span>
             <b>{t("Langue")}</b>
@@ -809,6 +840,9 @@ export function Settings() {
             ))}
           </span>
         </div>
+        </div>
+        <div className="grp">
+          <h3>{t("Intégrations")}</h3>
         <div className="setrow">
           <span>
             <b>{t("Statut Discord")}</b>
@@ -816,6 +850,9 @@ export function Settings() {
           </span>
           <button className="toggle" role="switch" aria-checked={tf(app.discordOn)} data-act="discord" aria-label={t("Statut Discord")}></button>
         </div>
+        </div>
+        <div className="grp">
+          <h3>{t("Mises à jour")}</h3>
         <div className="setrow">
           <span>
             <b>{t("Mises à jour")}</b>
@@ -824,6 +861,7 @@ export function Settings() {
           <button className="btn sm" data-settab="maj">
             {t("Ouvrir")}
           </button>
+        </div>
         </div>
       </>
     );
@@ -840,14 +878,12 @@ export function Settings() {
             <small>{`${t("Version installée")} : ${appVer || "?"}`}</small>
           </span>
         </button>
-        <h4>{t("Affichage")}</h4>
-        {menu.slice(1, 4).map(mb)}
-        <h4>{t("Jeu")}</h4>
-        {menu.slice(4, 6).map(mb)}
-        <h4>{t("Diagnostic")}</h4>
-        {mb(menu[6]!)}
-        <h4>{t("Compte")}</h4>
-        {mb(menu[7]!)}
+        {menuGroups.map(([title, entries]) => (
+          <div key={title} className="setnav-grp">
+            <h4>{t(title)}</h4>
+            {entries.map(mb)}
+          </div>
+        ))}
         <span className="ver">{`ReLaunch ${appVer}`}</span>
       </div>
       <div className="setbody">{body}</div>
