@@ -50,6 +50,7 @@ import { InstanceEditor } from "./InstanceEditor";
 import { EventEditor, RelaunchEvents } from "./EventEditor";
 import { Favorites, Home, homeBg, homeList, PinsPage, Soon, SOON, Wecraft } from "./Views";
 import { InstancePage } from "./InstancePage";
+import { LoadingScreen } from "./Loading";
 import { TitleBar } from "./TitleBar";
 import { QuestsPage } from "./Quests";
 import { LivePage, MaintenanceBanner, NewsPage, VersionBanner } from "./Relink";
@@ -121,6 +122,12 @@ export function App() {
   const [inst, setInst] = useState<Inst[]>([]);
   const [hidden, setHidden] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  /** Premier chargement terminé (réussi ou non) : fin de l'écran de chargement. */
+  const [booted, setBooted] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setBooted(true), 15_000); // sécurité : jamais bloqué sur l'écran de chargement
+    return () => window.clearTimeout(id);
+  }, []);
   const [pref, setPref] = useState<Pref>(loadPref);
   const [car, setCar] = useState<Car>(loadCar);
   const [home, setHome] = useState<HomePref>(loadHome);
@@ -409,6 +416,7 @@ export function App() {
         .catch(() => toast("Impossible de lire la liste des instances.", 4000))
         .finally(() => {
           loading.current = null;
+          setBooted(true);
         });
       return loading.current;
     },
@@ -1123,6 +1131,7 @@ export function App() {
   return (
     <Ctx.Provider value={ctx}>
       <TitleBar />
+      <LoadingScreen done={booted} />
       <Notice lines={notice} onClose={() => setNotice([])} />
       <CreateModal
         open={createOpen}
