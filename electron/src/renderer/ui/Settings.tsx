@@ -842,28 +842,6 @@ export function Settings() {
         </div>
         </div>
         <div className="grp">
-          <h3>{t("Démarrage")}</h3>
-          <div className="setrow">
-            <span>
-              <b>{t("Intro cinématique")}</b>
-              <small>{t("Le phénix de ReLaunch au lancement (un clic ou une touche la passe). Jamais jouée si les animations sont réduites.")}</small>
-            </span>
-            <span className="row">
-              <button className="btn sm" onClick={() => window.dispatchEvent(new Event("rl-replay-intro"))}>
-                {t("Revoir")}
-              </button>
-              <button className="toggle" role="switch" aria-checked={tf(pref.intro !== false)} aria-label={t("Intro cinématique")} onClick={() => app.editPref((p) => (p.intro = pref.intro === false))}></button>
-            </span>
-          </div>
-          <div className="setrow">
-            <span>
-              <b>{t("Son de l'intro")}</b>
-              <small>{t("Grondement, souffle des flammes et détonation du titre.")}</small>
-            </span>
-            <button className="toggle" role="switch" aria-checked={tf(pref.introSound !== false)} aria-label={t("Son de l'intro")} disabled={pref.intro === false} onClick={() => app.editPref((p) => (p.introSound = pref.introSound === false))}></button>
-          </div>
-        </div>
-        <div className="grp">
           <h3>{t("Intégrations")}</h3>
         <div className="setrow">
           <span>

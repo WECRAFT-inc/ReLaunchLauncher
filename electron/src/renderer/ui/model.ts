@@ -121,9 +121,6 @@ export interface Pref {
   bgFmt?: BgFmt;
   /** Espacement entre les boutons (px) : barre principale, barre séparée des épingles, barre d'utilitaires. */
   gaps?: { main: number; dock: number; util: number };
-  /** Intro cinématique au démarrage (activée par défaut) et son de l'intro. */
-  intro?: boolean;
-  introSound?: boolean;
   [k: string]: unknown;
 }
 export type BgFmt = "off" | "mini" | "reduced" | "large" | "fill";
