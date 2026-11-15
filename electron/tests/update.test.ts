@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { unlink } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
-import { applyInstaller, cleanupLeftovers, files, markHealthy, readPending, restorePrevious, skippedVersion, startupCheck, type UpdateEnv } from "../src/main/update/pending";
+import { applyInstaller, cleanupLeftovers, files, markHealthy, notApplied, readPending, restorePrevious, skippedVersion, startupCheck, type UpdateEnv } from "../src/main/update/pending";
 import { downloadUpdate, fetchLatestRelease, type ReleaseInfo } from "../src/main/update/release";
 import { checkUpdateSignature, isNewer, UPDATE_PUBLIC_KEY, updateSignedMessage, UpdateRefused, verifyUpdateSignature, versionKey } from "../src/main/update/signature";
 import { JsonStore } from "../src/main/storage/jsonStore";
@@ -308,6 +308,27 @@ test("fichier de suivi modifié ou mal formé : ignoré, jamais de renommage ni 
     assert.equal(readFileSync(path.join(dir, "victime.exe"), "utf8"), "x");
     assert.deepEqual(e.started, []);
     assert.equal(await startupCheck(env(dir, { packaged: false })), null, "lancé depuis les sources : rien");
+  } finally {
+    cleanup();
+  }
+});
+
+test("installeur qui n'a rien remplacé : détecté au redémarrage de l'ancienne version, mise à jour reproposée", async () => {
+  const { dir, cleanup } = tempDir("e5-notapplied");
+  try {
+    const e1 = env(dir, { version: "2.0.25-rc1", publicKey: KEYS.pub });
+    mkdirSync(files(e1).updates, { recursive: true });
+    const next = path.join(files(e1).updates, "ReLaunch-Setup-2.0.25-rc2.exe");
+    keep(next, "2.0.25-rc2", "2.0.25-rc2");
+    await applyInstaller(e1, next, "2.0.25-rc2");
+    // la nouvelle version n'est pas celle qui redémarre : rien pour elle
+    assert.equal(await notApplied(env(dir, { version: "2.0.25-rc2", publicKey: KEYS.pub })), null);
+    // c'est encore rc1 qui démarre
+    const again = env(dir, { version: "2.0.25-rc1", publicKey: KEYS.pub });
+    assert.equal(await notApplied(again), "2.0.25-rc2");
+    assert.equal(existsSync(files(again).pending), false);
+    assert.equal(await notApplied(again), null, "signalé une seule fois");
+    assert.match(readFileSync(files(again).log, "utf8"), /n'a pas été appliquée/);
   } finally {
     cleanup();
   }

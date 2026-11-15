@@ -44,7 +44,8 @@ import { LaunchService } from "./launch/launch";
 import { fileLogger } from "./launch/log";
 import { closeOfficialLauncher, nodeRunner, openOfficialLauncher } from "./launch/officialLauncher";
 import { defaultInstanceName, profileNameFor } from "./launch/profiles";
-import { cleanupLeftovers, markHealthy, restorePrevious, startupCheck, type UpdateEnv } from "./update/pending";
+import { cleanupLeftovers, markHealthy, notApplied, restorePrevious, startupCheck, updateLog, type UpdateEnv } from "./update/pending";
+import { startInstaller } from "./update/launchInstaller";
 import { UpdateService } from "./update/service";
 import { fetchReleaseProof } from "./update/release";
 import { configFile, legacyDataDirs, minecraftDir, wecraftDataDir, type PathEnv } from "./paths";
@@ -275,9 +276,33 @@ async function start(): Promise<void> {
     platform: process.platform,
     packaged: app.isPackaged,
     store,
-    start: (file, args) => nodeRunner.start(file, args),
+    // installeur : lancement direct, sinon PowerShell Start-Process, sinon le shell Windows (spawn EPERM sur certains PC)
+    start: (file, args) =>
+      startInstaller(file, args, {
+        spawnDetached: (f, a) => nodeRunner.start(f, a),
+        powershell: async (a) => (await nodeRunner.run(path.win32.join(process.env["SystemRoot"] ?? process.env["windir"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), a)).code ?? -1,
+        shellOpen: async (f) => {
+          const err = await shell.openPath(f);
+          if (err) throw new Error(err);
+        },
+        log: (l) => void (updateEnv && updateLog(updateEnv, l)),
+      }).then(() => undefined),
     releaseProof: (v) => fetchReleaseProof(v),
   };
+  // mise à jour lancée la dernière fois mais pas appliquée (c'est encore cette version qui démarre) : on le dit
+  const missed = await notApplied(updateEnv);
+  if (missed)
+    void app.whenReady().then(() =>
+      dialog.showMessageBox({
+        type: "warning",
+        title: "ReLaunch",
+        message: `La mise à jour vers v${missed} ne s'est pas installée : c'est toujours v${app.getVersion()} qui a démarré.`,
+        detail:
+          "L'installeur a sans doute été bloqué ou interrompu, souvent par un antivirus. Relance la mise à jour depuis Réglages > Mises à jour. " +
+          "Si ça recommence, ajoute ReLaunch et le dossier %APPDATA%\\.wecraft\\updates aux exceptions de ton antivirus. Le détail est dans Réglages > Logs (Mises à jour).",
+        noLink: true,
+      }),
+    );
   const failed = await startupCheck(updateEnv);
   if (failed) {
     const answer = await dialog.showMessageBox({

@@ -324,6 +324,25 @@ export async function restorePrevious(e: UpdateEnv, r: { data: PendingData; kind
  * apply_update (ReLaunch → ReLaunch) : note la mise à jour en attente puis lance l'installeur vérifié en mode
  * silencieux ; l'appelant quitte ensuite ReLaunch (l'installeur remplace les fichiers et relance l'appli).
  */
+/**
+ * Au démarrage : une mise à jour lancée depuis CETTE version (from) vers une autre (to) est toujours en attente,
+ * alors que c'est encore cette version qui démarre → l'installeur n'a pas remplacé ReLaunch (bloqué par
+ * l'antivirus, fermé, échoué). Renvoie la version visée (le suivi est retiré : la mise à jour sera reproposée).
+ */
+export async function notApplied(e: UpdateEnv): Promise<string | null> {
+  if (!e.packaged) return null;
+  try {
+    const raw = await e.store.read(files(e).pending);
+    if (!raw || raw["kind"] !== "electron" || raw["from"] !== e.version || typeof raw["to"] !== "string" || raw["to"] === e.version) return null;
+    if (typeof raw["exe"] !== "string" || !same(e, raw["exe"], e.execPath)) return null;
+    await unlink(files(e).pending).catch(() => undefined);
+    await updateLog(e, `la mise à jour vers v${raw["to"]} n'a pas été appliquée : v${e.version} a redémarré (installeur bloqué ou interrompu)`);
+    return raw["to"];
+  } catch {
+    return null;
+  }
+}
+
 export async function applyInstaller(e: UpdateEnv, installer: string, to: string): Promise<void> {
   if (!isKeptInstaller(e, installer) || path.basename(installer).toLowerCase() !== `relaunch-setup-${to}.exe`.toLowerCase()) throw new Error("Installeur inattendu : mise à jour annulée.");
   if (!(await verifiedInstaller(e, installer))) throw new Error("Installeur non vérifié (empreinte ou signature) : mise à jour annulée.");
