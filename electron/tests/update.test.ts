@@ -351,7 +351,7 @@ test("ReLaunch → ReLaunch : installeur lancé en silencieux, retour arrière a
     assert.deepEqual(e1.started, []);
     keep(next, "2.1.0", "2.1.0");
     await applyInstaller(e1, next, "2.1.0");
-    assert.deepEqual(e1.started, [`${next} /S --force-run`]);
+    assert.deepEqual(e1.started, [`${next} /S /reinstall --force-run`]);
 
     // nouvelle version : 2 démarrages ratés → l'installeur 2.0.0 est relancé
     const e2 = env(dir, { version: "2.1.0", publicKey: KEYS.pub });
@@ -360,7 +360,7 @@ test("ReLaunch → ReLaunch : installeur lancé en silencieux, retour arrière a
     const failed = await startupCheck(e2);
     assert.ok(failed && failed.kind === "electron");
     await restorePrevious(e2, failed);
-    assert.deepEqual(e2.started, [`${cur} /S --force-run`]);
+    assert.deepEqual(e2.started, [`${cur} /S /reinstall --force-run`]);
     assert.equal(await skippedVersion(e2), "2.1.0");
     assert.equal(existsSync(files(e2).pending), false);
 
@@ -426,7 +426,7 @@ test("service : version abandonnée non reproposée au démarrage, message d'err
     assert.equal(svc.status().phase, "restart");
     assert.equal(svc.handedOff, true);
     assert.equal(quit, 1);
-    assert.deepEqual(e.started, [`${path.join(files(e).updates, "ReLaunch-Setup-2.1.0.exe")} /S --force-run`]);
+    assert.deepEqual(e.started, [`${path.join(files(e).updates, "ReLaunch-Setup-2.1.0.exe")} /S /reinstall --force-run`]);
 
     const off = new UpdateService({ env: env(dir), fetchLatest: async () => { throw new HttpError("u", 404); }, quit: () => undefined });
     assert.deepEqual(await off.check(false), { state: "none", current: "2.0.0", latest: null }, "silencieux au démarrage");

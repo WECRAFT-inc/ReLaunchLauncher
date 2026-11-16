@@ -311,7 +311,7 @@ export async function restorePrevious(e: UpdateEnv, r: { data: PendingData; kind
   await unlink(files(e).pending).catch(() => undefined);
   await e.store.writeAtomic(files(e).skip, JSON.stringify({ version: data.to })).catch(() => false);
   try {
-    await e.start(data.old, ["/S", "--force-run"]);
+    await e.start(data.old, ["/S", "/reinstall", "--force-run"]);
   } catch (err) {
     await e.store.writeAtomic(files(e).pending, JSON.stringify(data)).catch(() => false);
     await unlink(files(e).skip).catch(() => undefined);
@@ -350,5 +350,5 @@ export async function applyInstaller(e: UpdateEnv, installer: string, to: string
   const old = (await verifiedInstaller(e, current)) ? current : "";
   await e.store.writeAtomic(files(e).pending, JSON.stringify({ exe: e.execPath, old, from: e.version, to, starts: 0, kind: "electron" }));
   await updateLog(e, `mise à jour installée : v${e.version} -> v${to}${old ? ` (installeur de v${e.version} gardé pour un retour arrière)` : " (pas d'installeur de la version actuelle : retour arrière impossible)"}`);
-  await e.start(installer, ["/S", "--force-run"]);
+  await e.start(installer, ["/S", "/reinstall", "--force-run"]);
 }

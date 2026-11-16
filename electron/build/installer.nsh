@@ -4,6 +4,7 @@
 ; (mise à jour signée Ed25519). Les raccourcis et épingles existants pointent donc vers l'installeur.
 ; Pour qu'ils restent utilisables, l'installeur ne réinstalle pas une version déjà présente :
 ; si la même version (ou une plus récente) est installée pour cet utilisateur, il la lance et s'arrête.
+; Les mises à jour lancées par ReLaunch passent /reinstall : elles s'installent toujours (rc, retour arrière).
 ; Une version plus ancienne est mise à jour normalement. Les réglages (%APPDATA%\.wecraft) ne sont
 ; jamais touchés, ni ici ni par la désinstallation (deleteAppDataOnUninstall: false).
 
@@ -30,12 +31,20 @@
     Goto wecraft_install
   ${EndIf}
 
-  ; 0 = mêmes versions, 1 = installée plus récente, 2 = installée plus ancienne
+  ; Exactement la même version : simple lancement.
+  ${If} $R2 == "${VERSION}"
+    Goto wecraft_present
+  ${EndIf}
+  ; VersionCompare ne lit que les nombres : « 2.0.27-rc1 » et « 2.0.27-rc5 » lui semblent égaux (0).
+  ; Seule une version installée plus récente sur les nombres (1) évite l'installation ; toute autre version
+  ; différente (plus ancienne, ou même numéro avec un autre suffixe -rcN) est installée.
+  ; 0 = mêmes nombres, 1 = installée plus récente, 2 = installée plus ancienne
   ${VersionCompare} "$R2" "${VERSION}" $R4
-  ${If} $R4 == 2
+  ${If} $R4 != 1
     Goto wecraft_install
   ${EndIf}
 
+  wecraft_present:
   ; Déjà installée (même version ou plus récente) : simple lancement, aucune écriture.
   ${IfNot} ${Silent}
     Exec '"$R3\${APP_EXECUTABLE_FILENAME}"'
