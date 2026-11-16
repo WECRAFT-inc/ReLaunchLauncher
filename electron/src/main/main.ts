@@ -1,6 +1,7 @@
 // Processus principal de ReLaunch (Electron). Seul processus autorisé à toucher au disque, au réseau
 // et aux autres programmes. Lot E1 : réglages lus et écrits avec les mêmes garde-fous que la version
 // Python (copie des fichiers invalides, écriture atomique, jamais d'écriture dans un fichier illisible).
+import * as electronApi from "electron";
 import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, nativeImage, protocol, safeStorage, session, shell } from "electron";
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { readFile, stat } from "node:fs/promises";
@@ -563,9 +564,17 @@ function registerIpc(): void {
     const img = nativeImage.createFromDataURL(png);
     if (img.isEmpty()) return false;
     void text; // l'image seule : écrire un texte en plus remplacerait l'image dans le presse-papiers
-    // les types d'Electron de ce projet confondent « clipboard » avec celui du navigateur (sans writeImage) :
-    // la méthode existe bien dans le processus principal d'Electron
-    (clipboard as unknown as { writeImage(i: typeof img): void }).writeImage(img);
+    // Electron 44 : presse-papiers aligné sur l'API du navigateur (write([ClipboardItem]), asynchrone).
+    // Accès souple pour fonctionner aussi avec une version d'Electron antérieure (writeImage).
+    const api = electronApi as unknown as { ClipboardItem?: new (items: Record<string, Blob | string>) => unknown };
+    const cb = clipboard as unknown as { write: (items: unknown) => unknown; writeImage?: (i: typeof img) => void };
+    try {
+      if (api.ClipboardItem) await cb.write([new api.ClipboardItem({ "image/png": new Blob([new Uint8Array(img.toPNG())], { type: "image/png" }) })]);
+      else if (cb.writeImage) cb.writeImage(img);
+      else return false;
+    } catch {
+      return false;
+    }
     return true;
   });
   handle(CHANNELS.logsCopy, async (text) => {
