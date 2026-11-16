@@ -70,6 +70,10 @@ const ACC_REFRESH = "account:refresh";
 const ACC_SKIN_UP = "account:skin-upload";
 const ACC_SKIN_RM = "account:skin-remove";
 const ACC_SKIN_IMG = "account:skin-image";
+const ACC_HEAD = "account:head";
+const ACC_STREAK_SHARE = "account:streak-share";
+const STATS_GET = "stats:get";
+const SHARE_COPY = "share:copy";
 const ACC_BUY = "account:buy-skin";
 const SKINMOD_GET = "skins:get-skin-mod";
 const SKINMOD_SET = "skins:set-skin-mod";
@@ -217,6 +221,10 @@ joinServer: (id: string) =>
     uploadMinecraftSkin: (model: "classic" | "slim") => ipcRenderer.invoke(ACC_SKIN_UP, model === "slim" ? "slim" : "classic"),
     removeMinecraftSkin: () => ipcRenderer.invoke(ACC_SKIN_RM),
     minecraftSkinImage: () => ipcRenderer.invoke(ACC_SKIN_IMG),
+    headSkin: () => ipcRenderer.invoke(ACC_HEAD),
+    streakShare: (share: boolean) => ipcRenderer.invoke(ACC_STREAK_SHARE, share === true),
+    playStats: () => ipcRenderer.invoke(STATS_GET),
+    shareImage: (png: string, text: string) => ipcRenderer.invoke(SHARE_COPY, String(png), String(text)),
     buySkin: (relinkId: string) => ipcRenderer.invoke(ACC_BUY, relinkId),
     skinMod: () => ipcRenderer.invoke(SKINMOD_GET),
     setSkinMod: (on: boolean) => ipcRenderer.invoke(SKINMOD_SET, on === true),

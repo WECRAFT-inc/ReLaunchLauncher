@@ -1028,7 +1028,10 @@ function MicrosoftGroup({ verified, linkedName, relink = true }: { verified: boo
         if (st.error) toast(st.error);
         void window.wecraft.account.state().then(setAccount, () => undefined);
       })
-      .finally(() => setBusy(false));
+      .finally(() => {
+        setBusy(false);
+        window.dispatchEvent(new Event("rl-head-refresh")); // tête du joueur : skin du compte Microsoft
+      });
   };
   const flip = () => {
     if (official === null) return;

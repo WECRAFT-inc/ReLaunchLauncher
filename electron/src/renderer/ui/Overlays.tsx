@@ -230,7 +230,15 @@ function FriendsPanel() {
       <div className={`fr-row ${f.status}`} key={f.id}>
         <span className={`fr-st ${f.status}`} role="img" aria-label={t(FRIEND_LABEL[f.status])} title={t(FRIEND_LABEL[f.status])}></span>
         <span className="fr-who">
-          <b>{f.pseudo}</b>
+          <b>
+            {f.pseudo}
+            {f.streak && f.streak.current > 0 ? (
+              <span className={`fr-streak${f.streak.validatedToday ? " on" : ""}`} title={`${t("Série de jours de jeu")} : ${f.streak.current}${f.streak.validatedToday ? ` · ${t("validée aujourd'hui")}` : ""}`}>
+                <Ic n="flame" />
+                {f.streak.current}
+              </span>
+            ) : null}
+          </b>
           <small className="faint">{g ? `${t(FRIEND_LABEL[f.status])} · ${sub}` : sub}</small>
           {f.music && f.status !== "offline" ? <small className="faint fr-music" title={f.music.app}>{`♪ ${t("Écoute")} ${f.music.title}${f.music.artist ? ` · ${f.music.artist}` : ""}`}</small> : null}
         </span>

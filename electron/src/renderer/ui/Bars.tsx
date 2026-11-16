@@ -8,6 +8,7 @@ import { LOGO } from "./icons";
 import { barSize, dockSide, NAVINFO, pinCount, profPlace, SKINS, type Inst, type NavConfig, type Pin, type Side, type Skin } from "./model";
 import { t } from "./i18n";
 import { coverVars, IconFace, InstIcon } from "./symbols";
+import { RealHead, usePlayerHead } from "./SkinHead";
 
 type Css = CSSProperties & Record<`--${string}`, string>;
 type Piece = { kind: "sep" | "spacer" | "el"; key: string; node: ReactNode };
@@ -18,6 +19,12 @@ const keyClick = (e: KeyboardEvent<HTMLElement>) => {
     e.currentTarget.click();
   }
 };
+
+/** Tête du joueur : vrai skin (compte lié ou skin envoyé) si disponible, sinon la tête dessinée. */
+export function PlayerHead({ skin, size }: { skin: Skin; size: number }) {
+  const faces = usePlayerHead();
+  return faces ? <RealHead faces={faces} size={size} /> : <Head skin={skin} size={size} />;
+}
 
 export function Head({ skin, size }: { skin: Skin; size: number }) {
   const st: Css = { "--s": `${size}px`, "--sk": skin.sk, "--hair": skin.hair, "--eye": skin.eye };
@@ -139,7 +146,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
       t("Accueil"),
       <img src={LOGO} alt="" />,
     );
-  const prof = () => goBtn("nb prof", "relink", "nav-profile", t("Compte ReLink"), <Head skin={SKINS[ui.skin] ?? SKINS[0]!} size={Math.round(BS.b * 0.48)} />);
+  const prof = () => goBtn("nb prof", "relink", "nav-profile", t("Compte ReLink"), <PlayerHead skin={SKINS[ui.skin] ?? SKINS[0]!} size={Math.round(BS.b * 0.48)} />);
   const sepEl = (o: "v" | "h") => <span key={k("s")} className={o === "v" ? "sepv" : "seph"}></span>;
 
   const pinItem = (id: string): ReactNode => {

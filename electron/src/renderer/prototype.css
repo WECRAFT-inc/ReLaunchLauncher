@@ -209,6 +209,10 @@ button{font:inherit;color:inherit}
 .head3d .b{transform:rotateY(180deg) translateZ(calc(var(--s)/2));background:var(--hair);filter:brightness(.6)}
 .head3d .t{transform:rotateX(90deg) translateZ(calc(var(--s)/2));background:var(--hair);filter:brightness(1.18)}
 .head3d .u{transform:rotateX(-90deg) translateZ(calc(var(--s)/2));background:var(--sk);filter:brightness(.45)}
+/* vraie tête (faces découpées dans le skin du joueur) */
+.head3d.real i{background-size:100% 100%;background-repeat:no-repeat;image-rendering:pixelated}
+.head3d.real .f{filter:none}
+.head3d.real .f::before,.head3d.real .f::after{display:none}
 .nb.prof::after{content:"";position:absolute;right:1px;bottom:1px;width:9px;height:9px;border-radius:50%;background:var(--ok);border:2px solid #0b0d13}
 .nb.rec{background:linear-gradient(135deg,var(--c1),var(--c2));font-family:var(--f-display);font-size:calc(var(--nb,40px) * .3);font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6)}
 .nb.rec:hover{filter:brightness(1.15)}

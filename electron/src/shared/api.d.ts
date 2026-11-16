@@ -287,7 +287,8 @@ export interface ModpackQuery {
   loader: string;
   offset?: number;
   categories?: string[];
-  envs?: string[];
+  /** Côté : client seul, serveur seul, ou client et serveur. */
+  side?: "client" | "server" | "both";
   sort?: string | null;
 }
 
@@ -320,8 +321,8 @@ export interface ProjectQuery {
   sort: string | null;
   offset: number;
   categories: string[];
-  /** Côté où le projet tourne : « client » et/ou « server ». */
-  envs?: ("client" | "server")[];
+  /** Côté : client seul, serveur seul, ou client et serveur. */
+  side?: "client" | "server" | "both";
 }
 /** Description convertie en blocs sûrs par le processus principal (jamais de HTML). */
 export type MdInline =
@@ -494,6 +495,14 @@ cardImage(bid: string): Promise<string | null>;
     setSkinMod(on: boolean): Promise<boolean>;
     /** Image du skin Minecraft actuel (data:), ou null. */
     minecraftSkinImage(): Promise<string | null>;
+    /** Skin à afficher pour la tête du joueur : skin envoyé, sinon celui du compte Minecraft lié (data:), ou null. */
+    headSkin(): Promise<string | null>;
+    /** Montrer ou non sa série de jours de jeu à ses amis. */
+    streakShare(share: boolean): Promise<{ ok: boolean; message?: string }>;
+    /** Statistiques de jeu (gardées sur ce PC). */
+    playStats(): Promise<PlayStatsView>;
+    /** Copie une image PNG (data:) et un texte dans le presse-papiers. */
+    shareImage(png: string, text: string): Promise<boolean>;
     /** Achète un skin du launcher avec des Éclats. */
     buySkin(relinkId: string): Promise<AccountResult>;
     /** Débloque un skin avec un code (event, succès, partenaire…). */
@@ -821,6 +830,8 @@ export interface Friend extends FriendBrief {
   joinable: boolean;
   /** Chaîne Twitch que l'ami a renseignée (absente sinon). */
   channel?: string;
+  /** Série de jours de jeu (si l'ami la partage). */
+  streak?: { current: number; validatedToday: boolean };
   /** L'ami est en direct sur sa chaîne Twitch (confirmé par Twitch). */
   live?: boolean;
 }
@@ -898,7 +909,46 @@ export interface QuestsState {
   error: string | null;
   quests: Quest[];
   /** Série de jours de jeu (streak) ; null si indisponible. */
-  streak: { current: number; longest: number; lastValidDate: string | null; days: number; dailyReward: number; milestones: { day: number; bonus: number }[] } | null;
+  streak: Streak | null;
+}
+export interface Streak {
+  current: number;
+  longest: number;
+  lastValidDate: string | null;
+  days: number;
+  /** Récompense du jour (ou du prochain jour validé). */
+  dailyReward: number;
+  milestones: { day: number; bonus: number }[];
+  // champs du module « série » du Worker (absents avec un ancien Worker)
+  /** validated : jour validé · pending : à valider aujourd'hui · frozen : des gels couvrent les jours manqués · broken : série perdue. */
+  status?: "none" | "validated" | "pending" | "frozen" | "broken";
+  validatedToday?: boolean;
+  todaySeconds?: number;
+  requiredSeconds?: number;
+  freezes?: number;
+  freezeMax?: number;
+  freezeEvery?: number;
+  missedDays?: number;
+  nextMilestone?: { day: number; bonus: number } | null;
+  /** Série visible des amis. */
+  share?: boolean;
+}
+/** Statistiques de jeu gardées sur ce PC (rien n'est envoyé). */
+export interface PlayStatsView {
+  totalSeconds: number;
+  launches: number;
+  sessions: number;
+  longestSeconds: number;
+  daysPlayed: number;
+  /** Instances distinctes lancées. */
+  instances: number;
+  top: { name: string; mc: string; seconds: number; launches: number; last: number }[];
+  friends: { id: string; name: string; seconds: number }[];
+  /** 14 derniers jours (du plus ancien au plus récent), en secondes. */
+  last14: { day: string; seconds: number }[];
+  since: number | null;
+  /** Une partie est en cours. */
+  playing: boolean;
 }
 export type AccountResult = { ok: true; state: AccountState; message?: string } | { ok: false; message: string; canceled?: boolean };
 

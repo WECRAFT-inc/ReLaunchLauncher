@@ -633,3 +633,46 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 @keyframes boot-breathe { 0%, 100% { opacity: .75; transform: scale(.97); } 50% { opacity: 1; transform: scale(1.03); } }
 @keyframes boot-dot { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .boot-ring { animation-duration: 3s; } .boot-mark img, .boot-glow, .boot-dots i { animation: none; } }
+
+/* ── Série de jours de jeu (carte enrichie) ── */
+.qstreak .qico.big.lit { color: #ff8a2a; filter: drop-shadow(0 0 8px rgba(255,138,42,.55)); }
+.qstreak.st-broken .qico.big { opacity: .5; }
+.qstreak .st-msg { color: var(--ink); }
+.st-bar { display: block; height: 7px; margin: 8px 0 4px; border-radius: 99px; background: rgba(0,0,0,.35); overflow: hidden; max-width: 420px; }
+.st-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ffb347, #ff6a1f); transition: width .4s; }
+.st-freeze { display: flex; align-items: center; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.st-freeze > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: rgba(0,0,0,.28); border: 1px solid var(--line); color: var(--ink-soft); opacity: .45; }
+.st-freeze > span.on { color: #7fd3ff; opacity: 1; border-color: color-mix(in srgb, #7fd3ff 45%, var(--line)); }
+.st-freeze > span svg { width: 14px; height: 14px; }
+.st-freeze small { margin-left: 4px; }
+.qmiles > span.next { border-style: dashed; border-color: color-mix(in srgb, #ff8a2a 55%, var(--line)); }
+.st-act { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+.st-act .btn svg { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
+.st-share { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer; }
+.fr-streak { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink-soft); vertical-align: 1px; }
+.fr-streak svg { width: 12px; height: 12px; }
+.fr-streak.on { color: #ff8a2a; }
+
+/* ── Profil : tête, statistiques de jeu ── */
+.pf-head { align-items: center; gap: 18px; justify-content: flex-start; }
+.pf-head > div { flex: 1; min-width: 0; }
+.pf-av { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 22px; background: radial-gradient(circle at 50% 40%, rgba(255,255,255,.09), rgba(0,0,0,.25)); border: 1px solid var(--line); perspective: 400px; flex: none; }
+.sect h3 svg { width: 16px; height: 16px; vertical-align: -2px; }
+.pstats { display: grid; gap: 16px; }
+.ps-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.ps-tiles > span { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.045); border: 1px solid var(--line); }
+.ps-tiles b { font-size: 20px; }
+.ps-tiles small { color: var(--ink-soft); font-size: 12px; }
+.ps-days { display: grid; grid-template-columns: repeat(14, 1fr); gap: 6px; align-items: end; height: 120px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.035); border: 1px solid var(--line); }
+.ps-days > span { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; min-width: 0; }
+.ps-days i { display: block; width: 100%; max-width: 26px; border-radius: 6px 6px 3px 3px; background: linear-gradient(180deg, var(--acc), color-mix(in srgb, var(--acc) 45%, #000)); }
+.ps-days small { font-size: 9.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; max-width: 100%; }
+.ps-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.ps-cols h4 { margin: 0 0 8px; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.ps-row { display: grid; grid-template-columns: 22px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.ps-rk { font-weight: 800; color: var(--ink-soft); text-align: center; }
+.ps-nm { display: flex; flex-direction: column; min-width: 0; }
+.ps-nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-bar { display: block; height: 4px; margin-top: 4px; border-radius: 99px; background: rgba(0,0,0,.3); overflow: hidden; }
+.ps-bar i { display: block; height: 100%; background: var(--acc); border-radius: inherit; }
+.ps-v { font-weight: 700; font-variant-numeric: tabular-nums; }

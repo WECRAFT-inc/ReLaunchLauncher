@@ -7,7 +7,7 @@ import type { ProjectHit, ProjectSearch, ProjectType, ProjectVersion, ProjectVie
 import type { LinkStore } from "../links";
 import type { MediaStore } from "../media/media";
 import { mdToBlocks } from "./markdown";
-import { explainModrinthError, MP_SORTS, type Fetch } from "./modrinth";
+import { cleanSide, explainModrinthError, MP_SORTS, sideFacets, type Fetch, type Side } from "./modrinth";
 
 export const PROJECT_TYPES: readonly ProjectType[] = ["modpack", "mod", "resourcepack", "shader"];
 const PID = /^[A-Za-z0-9]{1,64}$/;
@@ -38,8 +38,8 @@ export interface ProjectQuery {
   sort: string | null;
   offset: number;
   categories: string[];
-  /** Côté où le projet tourne : « client » et/ou « server » (requis ou optionnel de ce côté). */
-  envs?: ("client" | "server")[];
+  /** Côté : client seul, serveur seul, ou client et serveur. */
+  side?: Side;
 }
 
 /** Demande de recherche vérifiée (toute valeur inconnue est ignorée, jamais transmise à Modrinth). */
@@ -52,8 +52,8 @@ export function cleanProjectQuery(q: unknown): ProjectQuery | null {
   const sort = typeof o["sort"] === "string" && Object.values(MP_SORTS).includes(o["sort"]) ? o["sort"] : null;
   const offset = typeof o["offset"] === "number" && Number.isInteger(o["offset"]) && o["offset"] >= 0 && o["offset"] <= 10_000 ? o["offset"] : 0;
   const categories = strList(o["categories"], 5, 40).filter((c) => /^[a-z0-9-]{1,40}$/.test(c));
-  const envs = Array.isArray(o["envs"]) ? [...new Set((o["envs"] as unknown[]).filter((e): e is "client" | "server" => e === "client" || e === "server"))] : [];
-  return { type, query: str(o["query"], 200), mc, loader, sort, offset, categories, ...(envs.length ? { envs } : {}) };
+  const side = cleanSide(o["side"]);
+  return { type, query: str(o["query"], 200), mc, loader, sort, offset, categories, ...(side ? { side } : {}) };
 }
 
 export function projectSearchParams(q: ProjectQuery, limit = 20): Record<string, string | number> {
@@ -61,7 +61,7 @@ export function projectSearchParams(q: ProjectQuery, limit = 20): Record<string,
   if (q.mc) facets.push([`versions:${q.mc}`]);
   if (q.loader) facets.push(LOADER_KEYS[q.loader]!.map((l) => `categories:${l}`));
   for (const c of q.categories) facets.push([`categories:${c}`]);
-  for (const e of q.envs ?? []) facets.push([`${e}_side:required`, `${e}_side:optional`]);
+  facets.push(...sideFacets(q.side ?? null));
   return { query: q.query, facets: JSON.stringify(facets), limit, offset: q.offset, index: q.sort || (q.query ? "relevance" : "downloads") };
 }
 

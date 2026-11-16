@@ -7,6 +7,7 @@ import type { MicrosoftState, QuestsState } from "../../shared/api";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { t } from "./i18n";
+import { StreakCard } from "./Profile";
 
 const SEEN_KEY = "relaunch-quests-seen";
 const readSeen = (): Set<string> => {
@@ -210,25 +211,7 @@ export function QuestsPage() {
           <div className="sect">
             <h3>{t("Série de jours")}</h3>
             {s ? (
-              <div className="qstreak">
-                <span className="qico big" aria-hidden="true">
-                  <Ic n="flame" />
-                </span>
-                <span className="qtxt">
-                  <b>{`${s.current} ${s.current > 1 ? t("jours d'affilée") : t("jour d'affilée")}`}</b>
-                  <small>{`${t("Record")} : ${s.longest} · ${s.dailyReward ? `+${s.dailyReward} ${t("éclats par jour validé")}` : ""}`}</small>
-                  {s.milestones.length ? (
-                    <span className="qmiles" aria-label={t("Paliers")}>
-                      {s.milestones.map((m) => (
-                        <span key={m.day} className={s.current >= m.day ? "on" : ""} title={`${t("Jour")} ${m.day} : +${m.bonus} ${t("éclats")}`}>
-                          <b>{m.day}</b>
-                          <small>{`+${m.bonus}`}</small>
-                        </span>
-                      ))}
-                    </span>
-                  ) : null}
-                </span>
-              </div>
+              <StreakCard s={s} name={account?.user?.minecraftName ?? account?.user?.pseudo ?? ""} onChanged={reload} />
             ) : (
               <div className="empty">{t("Série de jours indisponible pour le moment.")}</div>
             )}

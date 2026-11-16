@@ -92,7 +92,7 @@ test("noms : fichiers de mods et dossiers d'instances, comme la version Python",
   assert.equal(safeModFilename(null), false);
   assert.deepEqual([shortCount(999), shortCount(1500), shortCount(2_340_000)], ["999", "2k", "2.3M"]);
   assert.equal(searchParams("", "1.20.1", "Quilt")["facets"], JSON.stringify([["project_type:mod"], ["versions:1.20.1"], ["categories:quilt", "categories:fabric"]]));
-  assert.equal(searchParams("jei", "1.20.1", "Fabric", 0, 20, ["magic"], ["client"], null)["index"], "relevance");
+  assert.equal(searchParams("jei", "1.20.1", "Fabric", 0, 20, ["magic"], "client", null)["index"], "relevance");
 });
 
 const CASES: { name: string; loader: string; roots: { project_id: string; title: string }[] }[] = [
@@ -324,9 +324,9 @@ test("service : recherche vérifiée, création et modification suivies, refus c
       },
     });
     assert.deepEqual(await svc.mcVersions(), ["1.21.4", "1.20.1"]);
-    const s = await svc.search({ query: "sod", mc: "1.20.1", loader: "Fabric", categories: ["optimization", "<script>"], envs: ["client", "x"], sort: "downloads" });
+    const s = await svc.search({ query: "sod", mc: "1.20.1", loader: "Fabric", categories: ["optimization", "<script>"], side: "x", sort: "downloads" });
     assert.ok(s.ok && s.hits.length === 1 && s.hits[0]!.id === "sodium", "identifiant douteux ignoré");
-    assert.equal(JSON.parse(String((calls[0]!.params as Record<string, unknown>)["facets"])).length, 5, "catégorie et environnement inconnus ignorés");
+    assert.equal(JSON.parse(String((calls[0]!.params as Record<string, unknown>)["facets"])).length, 4, "catégorie et côté inconnus ignorés");
     assert.deepEqual(await svc.search({ mc: "../x", loader: "Fabric" }), { ok: false, message: "Version de Minecraft ou loader invalide." });
 
     assert.deepEqual(await svc.create({ name: "", mc: "1.20.1", loader: "Fabric", roots: [] }), { ok: false, reason: "invalid" });

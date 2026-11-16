@@ -49,11 +49,29 @@ export function explainModrinthError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Facettes de recherche (toutes les catégories obligatoires ; envs : « client » et/ou « server »). */
-export function searchParams(query: string, mc: string, loader: string, offset = 0, limit = 20, categories: string[] = [], envs: string[] = [], sort: string | null = null): Params {
+export type Side = "client" | "server" | "both";
+export const SIDES: readonly Side[] = ["client", "server", "both"];
+/** Côté vérifié (toute autre valeur : aucun filtre). */
+export function cleanSide(v: unknown): Side | null {
+  return typeof v === "string" && (SIDES as readonly string[]).includes(v) ? (v as Side) : null;
+}
+/**
+ * Facettes Modrinth d'un côté, exclusives :
+ * client seul = tourne chez le joueur et pas sur le serveur ; serveur seul = l'inverse ; les deux = tourne des deux côtés.
+ */
+export function sideFacets(side: Side | null): string[][] {
+  const runs = (e: "client" | "server") => [`${e}_side:required`, `${e}_side:optional`];
+  if (side === "client") return [runs("client"), ["server_side:unsupported"]];
+  if (side === "server") return [runs("server"), ["client_side:unsupported"]];
+  if (side === "both") return [runs("client"), runs("server")];
+  return [];
+}
+
+/** Facettes de recherche (toutes les catégories obligatoires ; side : client seul, serveur seul ou les deux). */
+export function searchParams(query: string, mc: string, loader: string, offset = 0, limit = 20, categories: string[] = [], side: Side | null = null, sort: string | null = null): Params {
   const facets: string[][] = [["project_type:mod"], [`versions:${mc}`], (MODRINTH_LOADERS[loader] ?? []).map((l) => `categories:${l}`)];
   for (const c of categories) facets.push([`categories:${c}`]);
-  for (const e of envs) facets.push([`${e}_side:required`, `${e}_side:optional`]);
+  facets.push(...sideFacets(side));
   return { query, facets: JSON.stringify(facets), limit, offset, index: sort || (query ? "relevance" : "downloads") };
 }
 

@@ -53,6 +53,7 @@ import { InstancePage } from "./InstancePage";
 import { LoadingScreen } from "./Loading";
 import { TitleBar } from "./TitleBar";
 import { QuestsPage } from "./Quests";
+import { ProfilePage } from "./Profile";
 import { LivePage, MaintenanceBanner, NewsPage, VersionBanner } from "./Relink";
 import { SkinLayers, useActiveSkin, useSkinMotion, useSkinVars } from "./Skin";
 import type { MpDraft } from "./ctx";
@@ -1331,6 +1332,7 @@ function AddContent() {
 }
 
 function ViewBody({ v }: { v: View }) {
+  const { ui } = useApp();
   if (v === "home") return <Home />;
   if (v === "instance") return <InstancePage />;
   if (v === "pins") return <PinsPage />;
@@ -1343,6 +1345,7 @@ function ViewBody({ v }: { v: View }) {
   if (v === "news") return <NewsPage />;
   if (v === "live") return <LivePage />;
   if (v === "quests") return <QuestsPage />;
+  if (v === "relink" && ui.rlTab !== "shop") return <ProfilePage />;
   const s = SOON[v]!;
   return <Soon title={s.title} sub={s.sub} text={s.text} />;
 }

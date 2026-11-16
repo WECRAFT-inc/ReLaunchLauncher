@@ -31,6 +31,8 @@ import { AccountError, RelinkAccount } from "./relink/account";
 import { MicrosoftAccount } from "./auth/microsoft";
 import { isOfflineName, offlineLockedUntil, offlineSession, offlineUuid, parseServerAddress } from "./auth/offline";
 import { FriendsPresence, type PresenceGame } from "./relink/friendsPresence";
+import { SkinHeads } from "./relink/heads";
+import { PlayStats, type StatGame } from "./stats/playStats";
 import { readInstalledPack } from "./modpacks/relaunchPack";
 import { fetchBytes } from "./net/download";
 import { LinkStore } from "./links";
@@ -126,6 +128,10 @@ function applyMusicShortcuts(sc: import("../shared/api").MusicShortcuts): (keyof
 }
 /** Partie préparée par instance (dossier de jeu) : ce que les amis verront une fois le jeu démarré. */
 const gameCtx = new Map<string, PresenceGame>();
+/** Instance préparée (dossier de jeu) : pour les statistiques de jeu locales. */
+const statCtx = new Map<string, StatGame>();
+let playStats: PlayStats | null = null;
+const heads = new SkinHeads();
 const gameKey = (dir: string): string => (process.platform === "win32" ? path.resolve(dir).toLowerCase() : path.resolve(dir));
 /** « Rejoindre un ami » : instance à lancer et serveur où le jeu se connecte (valable 2 minutes, une seule fois). */
 let pendingJoin: { instanceId: string; address: string | null; until: number } | null = null;
@@ -410,8 +416,14 @@ async function start(): Promise<void> {
       const info = gameCtx.get(gameKey(t.gameDir)) ?? { kind: "instance" as const, id: null, name: `Minecraft ${t.mc}`, mc: t.mc };
       gameCtx.delete(gameKey(t.gameDir));
       friendsPresence?.gameStarted(info, t.gameDir);
+      const sg = statCtx.get(gameKey(t.gameDir)) ?? { key: gameKey(t.gameDir), name: info.kind === "instance" ? `Minecraft ${t.mc}` : info.name, mc: t.mc, group: info.id ? `${info.kind}:${info.id}` : null };
+      statCtx.delete(gameKey(t.gameDir));
+      void playStats?.start(gameKey(t.gameDir), sg);
     },
-    onGameExit: (t) => friendsPresence?.gameStopped(t.gameDir),
+    onGameExit: (t) => {
+      friendsPresence?.gameStopped(t.gameDir);
+      void playStats?.stop(gameKey(t.gameDir));
+    },
     close: (o) => closeOfficialLauncher(o, { platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
     open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog, shellOpen: shellOpenTarget }),
   });
@@ -447,6 +459,25 @@ async function start(): Promise<void> {
     gameActivity: async (dir) => (await stat(path.join(dir, "logs", "latest.log"))).mtimeMs,
   });
   friendsPresence.start();
+  // statistiques de jeu (locales) et série de jours de jeu (ReLink) : une fois par minute pendant une partie
+  playStats = new PlayStats({ dataDir: wecraftDataDir(env) });
+  let statTicks = 0;
+  setInterval(() => {
+    void (async () => {
+      if (!playStats) return;
+      const groups = playStats.groups();
+      const playing = (await playStats.view()).playing;
+      await playStats.tick();
+      if (!playing || !account || !(await account.state()).loggedIn) return;
+      await account.playTick().catch(() => undefined);
+      // amis dans la même partie (même event ou modpack ReLink) : toutes les 2 minutes
+      if (groups.length && ++statTicks % 2 === 0) {
+        const r = await account.friends().catch(() => null);
+        const mates = (r?.friends ?? []).filter((f) => f.game?.id && groups.includes(`${f.game.kind}:${f.game.id}`)).map((f) => ({ id: f.id, name: f.pseudo }));
+        await playStats.coplay(mates, 120);
+      }
+    })().catch(() => undefined);
+  }, 60_000).unref?.();
   let quitting = false;
   app.on("before-quit", (e) => {
     if (quitting || !friendsPresence) return;
@@ -525,6 +556,14 @@ function registerIpc(): void {
     const dir = path.join(wecraftDataDir(pathEnv()), "logs"); // dossier fixe, jamais fourni par l'interface
     await mkdir(dir, { recursive: true });
     return (await shell.openPath(dir)) === "";
+  });
+  // partage (série de jeu…) : image PNG générée par l'interface + texte, copiés ensemble dans le presse-papiers
+  handle(CHANNELS.shareCopy, async (png, text) => {
+    if (typeof png !== "string" || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(png) || png.length > 4_000_000) return false;
+    const img = nativeImage.createFromDataURL(png);
+    if (img.isEmpty()) return false;
+    clipboard.write({ image: img, text: typeof text === "string" ? text.slice(0, 500) : "" });
+    return true;
   });
   handle(CHANNELS.logsCopy, async (text) => {
     if (typeof text !== "string" || text.length > 2_000_000) return false;
@@ -953,6 +992,27 @@ handle(CHANNELS.relinkOpenChannel, async (channel) => {
     }
   });
   handle(CHANNELS.accountSkinImage, async () => (account ? account.minecraftSkinImage() : null));
+  // tête du joueur : skin envoyé à ReLink, sinon skin public du compte Minecraft lié (Microsoft connecté ou compte vérifié)
+  handle(CHANNELS.accountHead, async () => {
+    const own = account ? await account.minecraftSkinImage().catch(() => null) : null;
+    if (own) return own;
+    const ms = microsoft ? await microsoft.state().catch(() => null) : null;
+    const st = account ? await account.state().catch(() => null) : null;
+    const uuid = ms?.connected && ms.profile ? ms.profile.id : st?.user?.minecraftVerified ? st.user.minecraftUuid : null;
+    return uuid ? heads.forUuid(uuid) : null;
+  });
+  handle(CHANNELS.accountStreakShare, async (share) => {
+    if (!account || typeof share !== "boolean") return { ok: false, message: "Indisponible." };
+    try {
+      await account.streakShare(share);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: e instanceof AccountError ? e.message : "Réglage non enregistré." };
+    }
+  });
+  handle(CHANNELS.statsGet, async () =>
+    playStats ? playStats.view() : { totalSeconds: 0, launches: 0, sessions: 0, longestSeconds: 0, daysPlayed: 0, instances: 0, top: [], friends: [], last14: [], since: null, playing: false },
+  );
   handle(CHANNELS.skinModGet, async () => (settings ? settings.skinMod() : true));
   handle(CHANNELS.skinModSet, async (on) => (settings && typeof on === "boolean" ? settings.setSkinMod(on) : false));
   handle(CHANNELS.accountBuySkin, async (relinkId) => {
@@ -1301,6 +1361,7 @@ handle(CHANNELS.relinkOpenChannel, async (channel) => {
       const safeId = (v: string | null | undefined): string | null => (typeof v === "string" && /^[\w.-]{1,64}$/.test(v) ? v : null);
       const info: PresenceGame = evId && safeId(evId) ? { kind: "event", id: evId, name: ev?.name ?? rp?.plan.name ?? "Event", mc: mcv } : safeId(rp?.plan.id) ? { kind: "pack", id: rp!.plan.id, name: rp!.plan.name, mc: mcv } : { kind: "instance", id: null, name: `Minecraft ${mcv}`.trim(), mc: mcv };
       gameCtx.set(gameKey(inst.path), info);
+      statCtx.set(gameKey(inst.path), { key: gameKey(inst.path), name: inst.display || info.name, mc: mcv, group: info.id ? `${info.kind}:${info.id}` : null });
     }
     const started = launcher.start(
       {

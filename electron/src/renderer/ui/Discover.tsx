@@ -79,7 +79,7 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState<string | null>(fromInst.current);
   /** Filtres Client / Serveur : projet qui tourne (requis ou optionnel) de ce côté. */
-  const [envs, setEnvs] = useState<("client" | "server")[]>([]);
+  const [side, setSide] = useState<"" | "client" | "server" | "both">("");
   const [target, setTarget] = useState("");
   const [rows, setRows] = useState<PackRowView[]>([]);
   const [confirm, setConfirm] = useState(false);
@@ -128,7 +128,7 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
     if (tab === "mod" && !mc) return;
     const my = ++seq.current;
     setSearching(true);
-    void window.wecraft.projects.search({ type: tab, query, mc, loader, sort, offset, categories: cat ? [cat] : [], envs }).then((r) => {
+    void window.wecraft.projects.search({ type: tab, query, mc, loader, sort, offset, categories: cat ? [cat] : [], ...(side ? { side } : {}) }).then((r) => {
       if (my !== seq.current) return;
       setSearching(false);
       if (!r.ok) return setErr(r.message);
@@ -141,7 +141,7 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
     const t = window.setTimeout(() => search(0), 350);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, query, sort, cat, mc, loader, envs]);
+  }, [tab, query, sort, cat, mc, loader, side]);
   useEffect(() => {
     void window.wecraft.modpacks.rows(mp.edit?.id ?? null, mp.selected).then(setRows);
   }, [mp.selected, mp.edit]);
@@ -320,14 +320,15 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
                     ))}
                 </select>
                 {tab === "mod" || tab === "modpack" ? (
-                  <span className="chips" role="group" aria-label={t("Côté")}>
+                  <span className="chips" role="radiogroup" aria-label={t("Côté")}>
                     {(
                       [
-                        ["client", "Client", "Mods qui tournent côté joueur (requis ou optionnels)"],
-                        ["server", "Serveur", "Mods qui tournent côté serveur (requis ou optionnels)"],
+                        ["client", "Client seul", "Tourne chez le joueur, rien à installer sur le serveur"],
+                        ["server", "Serveur seul", "Tourne sur le serveur, rien à installer chez le joueur"],
+                        ["both", "Client et serveur", "Tourne des deux côtés"],
                       ] as const
                     ).map(([k, l, tip]) => (
-                      <button key={k} className="chip" aria-pressed={envs.includes(k) ? "true" : "false"} title={t(tip)} onClick={() => setEnvs((v) => (v.includes(k) ? v.filter((x) => x !== k) : [...v, k]))}>
+                      <button key={k} className="chip" role="radio" aria-checked={side === k ? "true" : "false"} aria-pressed={side === k ? "true" : "false"} title={t(tip)} onClick={() => setSide((v) => (v === k ? "" : k))}>
                         {t(l)}
                       </button>
                     ))}

@@ -97,12 +97,13 @@ test("recherche : valeurs inconnues ignorées, facettes par type", () => {
   assert.equal(projectSearchParams(q2)["index"], "downloads");
 });
 
-test("recherche : filtres Client / Serveur (requis ou optionnel de ce côté), valeurs inconnues ignorées", () => {
-  const q = cleanProjectQuery({ type: "mod", mc: "1.21.1", envs: ["client", "server", "client", "both", 3] })!;
-  assert.deepEqual(q.envs, ["client", "server"]);
-  const f = JSON.parse(String(projectSearchParams(q)["facets"])) as string[][];
-  assert.deepEqual(f.slice(-2), [["client_side:required", "client_side:optional"], ["server_side:required", "server_side:optional"]]);
-  assert.equal(cleanProjectQuery({ type: "mod", envs: "client" })!.envs, undefined);
+test("recherche : côté exclusif (client seul, serveur seul, les deux), valeur inconnue ignorée", () => {
+  const f = (side: unknown) => (JSON.parse(String(projectSearchParams(cleanProjectQuery({ type: "mod", mc: "1.21.1", side })!)["facets"])) as string[][]).slice(2);
+  assert.deepEqual(f("client"), [["client_side:required", "client_side:optional"], ["server_side:unsupported"]]);
+  assert.deepEqual(f("server"), [["server_side:required", "server_side:optional"], ["client_side:unsupported"]]);
+  assert.deepEqual(f("both"), [["client_side:required", "client_side:optional"], ["server_side:required", "server_side:optional"]]);
+  assert.deepEqual(f("drop"), []);
+  assert.equal(cleanProjectQuery({ type: "mod", side: ["client"] })!.side, undefined);
 });
 
 test("page d'un projet : données vérifiées, images et liens remplacés, rien d'inventé", async () => {

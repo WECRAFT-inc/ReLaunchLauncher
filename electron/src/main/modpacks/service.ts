@@ -16,6 +16,7 @@ import { CONTENT_DIRS, planContent } from "./projects";
 import { readEventManifest } from "../events/eventLock";
 import {
   applyModpackEdit,
+  cleanSide,
   resolveModpack,
   buildModpack,
   explainModrinthError,
@@ -131,11 +132,11 @@ export class ModpackService {
     const query = typeof o["query"] === "string" ? o["query"].slice(0, 200) : "";
     const offset = typeof o["offset"] === "number" && Number.isInteger(o["offset"]) && o["offset"] >= 0 && o["offset"] <= 10_000 ? o["offset"] : 0;
     const cats = Array.isArray(o["categories"]) ? (o["categories"] as unknown[]).filter((c): c is string => typeof c === "string" && (MP_CATEGORIES as readonly string[]).includes(c)) : [];
-    const envs = Array.isArray(o["envs"]) ? (o["envs"] as unknown[]).filter((e): e is string => e === "client" || e === "server") : [];
+    const side = cleanSide(o["side"]);
     const sort = typeof o["sort"] === "string" && Object.values(MP_SORTS).includes(o["sort"]) ? o["sort"] : null;
     if (!isMc(o["mc"]) || !isLoader(o["loader"])) return { ok: false, message: "Version de Minecraft ou loader invalide." };
     try {
-      const d = (await this.fetch("/search", searchParams(query, o["mc"], o["loader"], offset, 20, cats, envs, sort))) as Record<string, unknown>;
+      const d = (await this.fetch("/search", searchParams(query, o["mc"], o["loader"], offset, 20, cats, side, sort))) as Record<string, unknown>;
       const hits = (Array.isArray(d["hits"]) ? d["hits"] : []) as Record<string, unknown>[];
       return {
         ok: true,

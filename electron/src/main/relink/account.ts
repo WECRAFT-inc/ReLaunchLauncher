@@ -70,6 +70,8 @@ export interface RawFriend extends FriendBrief {
   music: { title: string; artist: string; app: string } | null;
   /** Chaîne Twitch renseignée par l'ami (vide si aucune). */
   channel?: string;
+  /** Série de jours de jeu (si l'ami la partage). */
+  streak?: { current: number; validatedToday: boolean };
   lastSeen: number | null;
 }
 
@@ -275,7 +277,9 @@ export class RelinkAccount {
       const music = status !== "offline" && typeof mu["title"] === "string" && str(mu["title"], 100) ? { title: str(mu["title"], 100), artist: str(mu["artist"], 100), app: str(mu["app"], 40) } : null;
       const seen = typeof o["lastSeen"] === "string" ? Date.parse(o["lastSeen"]) : NaN;
       const chRaw = str(o["channel"] ?? o["ch"], 40);
-      friends.push({ ...b, ...(/^[A-Za-z0-9_]{1,40}$/.test(chRaw) ? { channel: chRaw } : {}), minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
+      const sk = obj(o["streak"]);
+      const skN = typeof sk["current"] === "number" && Number.isFinite(sk["current"]) ? Math.max(0, Math.min(10000, Math.floor(sk["current"]))) : 0;
+      friends.push({ ...b, ...(/^[A-Za-z0-9_]{1,40}$/.test(chRaw) ? { channel: chRaw } : {}), ...(skN > 0 ? { streak: { current: skN, validatedToday: sk["validatedToday"] === true } } : {}), minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
     }
     return { friends, incoming: list(r["incoming"]).map(brief).filter((x): x is FriendBrief => !!x), outgoing: list(r["outgoing"]).map(brief).filter((x): x is FriendBrief => !!x) };
   }
@@ -291,6 +295,16 @@ export class RelinkAccount {
 
   async friendRemove(id: string): Promise<void> {
     await this.call("DELETE", `/launcher/friends/${id}`, { auth: true }); // retire un ami, refuse une demande reçue ou annule une demande envoyée
+  }
+
+  /** Signal « en jeu » (une fois par minute) : fait avancer la série de jours de jeu. */
+  async playTick(): Promise<void> {
+    await this.call("POST", "/launcher/me/playtick", { auth: true, timeout: 8000 });
+  }
+
+  /** Montrer ou non sa série de jours de jeu à ses amis. */
+  async streakShare(share: boolean): Promise<void> {
+    await this.call("PUT", "/launcher/me/streak", { auth: true, json: { share } });
   }
 
   /** Signal de présence (voir friendsPresence.ts). */
@@ -487,9 +501,10 @@ export class RelinkAccount {
             current: num(s["current"], 10000),
             longest: num(s["longest"], 10000),
             lastValidDate: typeof s["lastValidDate"] === "string" ? str(s["lastValidDate"], 40) : null,
-            days: num(s["days"], 365),
+            days: num(s["days"], 10000),
             dailyReward: num(s["dailyReward"], 1e6),
-            milestones: (Array.isArray(s["milestones"]) ? (s["milestones"] as unknown[]) : []).slice(0, 50).map((m) => ({ day: num(obj(m)["day"], 365), bonus: num(obj(m)["bonus"], 1e6) })),
+            milestones: (Array.isArray(s["milestones"]) ? (s["milestones"] as unknown[]) : []).slice(0, 50).map((m) => ({ day: num(obj(m)["day"], 10000), bonus: num(obj(m)["bonus"], 1e6) })),
+            ...streakExtra(s, num),
           }
         : null;
       if (r["reward"]) await this.refresh().catch(() => undefined); // récompense versée à l'instant : solde d'Éclats à jour
@@ -504,6 +519,26 @@ export class RelinkAccount {
     await this.load();
     return !!this.saved?.me?.launcherSkins.includes(skinId);
   }
+}
+
+/** Champs de la série ajoutés par le module « série » du Worker (absents avec un ancien Worker). */
+function streakExtra(s: Obj, num: (v: unknown, max?: number) => number): Partial<NonNullable<QuestsState["streak"]>> {
+  if (typeof s["status"] !== "string") return {};
+  const st = s["status"];
+  const status = st === "validated" || st === "pending" || st === "frozen" || st === "broken" ? st : "none";
+  const nm = obj(s["nextMilestone"]);
+  return {
+    status,
+    validatedToday: s["validatedToday"] === true,
+    todaySeconds: num(s["todaySeconds"], 86400),
+    requiredSeconds: num(s["requiredSeconds"], 86400) || 900,
+    freezes: num(s["freezes"], 20),
+    freezeMax: num(s["freezeMax"], 20),
+    freezeEvery: num(s["freezeEvery"], 365),
+    missedDays: num(s["missedDays"], 10000),
+    nextMilestone: s["nextMilestone"] ? { day: num(nm["day"], 10000), bonus: num(nm["bonus"], 1e6) } : null,
+    share: s["share"] !== false,
+  };
 }
 
 /** PNG 64 × 64 (ou ancien format 64 × 32), 64 Ko maximum. null = valide, sinon le message d'erreur. */
