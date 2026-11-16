@@ -563,7 +563,9 @@ function registerIpc(): void {
     const img = nativeImage.createFromDataURL(png);
     if (img.isEmpty()) return false;
     void text; // l'image seule : écrire un texte en plus remplacerait l'image dans le presse-papiers
-    clipboard.writeImage(img);
+    // les types d'Electron de ce projet confondent « clipboard » avec celui du navigateur (sans writeImage) :
+    // la méthode existe bien dans le processus principal d'Electron
+    (clipboard as unknown as { writeImage(i: typeof img): void }).writeImage(img);
     return true;
   });
   handle(CHANNELS.logsCopy, async (text) => {
