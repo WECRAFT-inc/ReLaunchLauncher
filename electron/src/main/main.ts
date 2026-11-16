@@ -557,12 +557,13 @@ function registerIpc(): void {
     await mkdir(dir, { recursive: true });
     return (await shell.openPath(dir)) === "";
   });
-  // partage (série de jeu…) : image PNG générée par l'interface + texte, copiés ensemble dans le presse-papiers
+  // partage (série de jeu…) : image PNG générée par l'interface, copiée dans le presse-papiers
   handle(CHANNELS.shareCopy, async (png, text) => {
     if (typeof png !== "string" || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(png) || png.length > 4_000_000) return false;
     const img = nativeImage.createFromDataURL(png);
     if (img.isEmpty()) return false;
-    clipboard.write({ image: img, text: typeof text === "string" ? text.slice(0, 500) : "" });
+    void text; // l'image seule : écrire un texte en plus remplacerait l'image dans le presse-papiers
+    clipboard.writeImage(img);
     return true;
   });
   handle(CHANNELS.logsCopy, async (text) => {
