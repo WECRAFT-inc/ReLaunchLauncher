@@ -45,4 +45,4 @@ Règles (modifiables en haut du module, objet `RL_STREAK`) :
 - Page **Profil** (bouton tête en haut à droite) : vraie tête du joueur, série, statistiques de jeu.
 - **Partager ma série** : copie une image (et un texte) dans le presse-papiers, à coller sur Discord.
 - Case **Visible par mes amis** ; 🔥N à côté du pseudo des amis dans la liste.
-- Statistiques de jeu : comptées sur le PC uniquement (`play-stats.json`), rien n'est envoyé.
+- Statistiques de jeu : comptées sur le PC uniquement (`play-stats.dat`, chiffré par Windows : illisible, et toute retouche est détectée et remet les stats à zéro), rien n'est envoyé.

@@ -1,16 +1,34 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { localDay, PlayStats } from "../src/main/stats/playStats";
 import { cleanUuid, SkinHeads, skinUrlFromProfile } from "../src/main/relink/heads";
 
+// chiffrement authentifié, comme safeStorage (AES-GCM) : toute retouche fait échouer le déchiffrement
+const KEY = randomBytes(32);
+const secrets = {
+  isEncryptionAvailable: () => true,
+  encryptString: (t: string) => {
+    const iv = randomBytes(12);
+    const c = createCipheriv("aes-256-gcm", KEY, iv);
+    const body = Buffer.concat([c.update(t, "utf8"), c.final()]);
+    return Buffer.concat([iv, c.getAuthTag(), body]);
+  },
+  decryptString: (b: Buffer) => {
+    const d = createDecipheriv("aes-256-gcm", KEY, b.subarray(0, 12));
+    d.setAuthTag(b.subarray(12, 28));
+    return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString("utf8");
+  },
+};
+
 test("stats de jeu : temps cumulé, lancements, top instances, amis, plafond de veille, persistance", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "rl-stats-"));
   try {
     let now = new Date(2026, 10, 10, 20, 0, 0).getTime();
-    const s = new PlayStats({ dataDir: dir, now: () => now });
+    const s = new PlayStats({ dataDir: dir, now: () => now, secrets });
     await s.start("A", { key: "a", name: "Créa", mc: "1.21.1", group: "pack:p1" });
     for (let i = 0; i < 30; i++) {
       now += 60_000;
@@ -41,18 +59,39 @@ test("stats de jeu : temps cumulé, lancements, top instances, amis, plafond de 
     assert.equal(v.last14[13]!.day, localDay(now));
     assert.equal(v.playing, false);
     // relu depuis le disque
-    const s2 = new PlayStats({ dataDir: dir, now: () => now });
+    const s2 = new PlayStats({ dataDir: dir, now: () => now, secrets });
     assert.equal((await s2.view()).totalSeconds, v.totalSeconds);
-    assert.ok(JSON.parse(await readFile(path.join(dir, "play-stats.json"), "utf8")).inst.a);
+    const file = path.join(dir, "play-stats.dat");
+    const raw = await readFile(file);
+    assert.ok(!raw.includes(Buffer.from("Créa")), "fichier chiffré, illisible");
+    // retouche à la main : détectée, fichier mis de côté, stats remises à zéro
+    raw[raw.length - 3] = raw[raw.length - 3]! ^ 0xff;
+    await writeFile(file, raw);
+    const s3 = new PlayStats({ dataDir: dir, now: () => now, secrets });
+    assert.equal((await s3.view()).totalSeconds, 0);
+    assert.ok((await readFile(`${file}.modifie`)).length > 0);
+    // fichier remplacé par du JSON en clair : refusé aussi
+    await writeFile(file, JSON.stringify({ total: 999999999 }));
+    assert.equal((await new PlayStats({ dataDir: dir, now: () => now, secrets }).view()).totalSeconds, 0);
+    // ancienne version en clair : ignorée et supprimée
+    await writeFile(path.join(dir, "play-stats.json"), JSON.stringify({ total: 999999999 }));
+    await new PlayStats({ dataDir: dir, now: () => now, secrets }).view();
+    await assert.rejects(readFile(path.join(dir, "play-stats.json")));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test("stats de jeu : fichier abîmé ignoré sans planter", async () => {
-  const fs = { readFile: async () => "{pas du json", writeFile: async () => undefined, rename: async () => undefined, mkdir: async () => undefined };
-  const s = new PlayStats({ dataDir: "/x", fs });
+  const writes: Buffer[] = [];
+  const fs = { readFile: async () => "{pas du json", writeFile: async (_f: string, b: Buffer) => void writes.push(b), rename: async () => undefined, mkdir: async () => undefined, rm: async () => undefined };
+  const s = new PlayStats({ dataDir: "/x", fs, secrets });
   assert.equal((await s.view()).launches, 0);
+  // chiffrement indisponible : rien n'est jamais écrit en clair
+  const off = new PlayStats({ dataDir: "/x", fs, secrets: { ...secrets, isEncryptionAvailable: () => false } });
+  await off.start("A", { key: "a", name: "A", mc: "1.21", group: null });
+  assert.equal((await off.view()).launches, 1);
+  assert.equal(writes.length, 0);
 });
 
 function skinPng(): Buffer {

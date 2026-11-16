@@ -460,7 +460,7 @@ async function start(): Promise<void> {
   });
   friendsPresence.start();
   // statistiques de jeu (locales) et série de jours de jeu (ReLink) : une fois par minute pendant une partie
-  playStats = new PlayStats({ dataDir: wecraftDataDir(env) });
+  playStats = new PlayStats({ dataDir: wecraftDataDir(env), secrets: safeStorage });
   let statTicks = 0;
   setInterval(() => {
     void (async () => {

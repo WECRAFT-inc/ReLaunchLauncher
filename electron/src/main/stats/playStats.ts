@@ -1,14 +1,19 @@
 /**
- * Statistiques de jeu, gardées sur ce PC uniquement (play-stats.json dans le dossier de données) :
+ * Statistiques de jeu, gardées sur ce PC uniquement (play-stats.dat dans le dossier de données) :
  * temps de jeu cumulé, lancements, instances les plus jouées, jours joués, plus longue session,
  * amis avec qui on a le plus joué (même event ou même modpack ReLink au même moment).
  *
  * Le temps est compté par tranches (tick toutes les minutes environ, plafonnées) : un PC mis en veille
  * pendant une partie ne gonfle pas les chiffres.
+ *
+ * Le fichier est chiffré et authentifié par le système (safeStorage : DPAPI + AES-GCM sous Windows) : il est
+ * illisible et toute modification à la main le rend invalide. Un fichier modifié est mis de côté
+ * (play-stats.dat.modifie) et les stats repartent de zéro : retoucher le fichier fait perdre ses stats.
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PlayStatsView } from "../../shared/api";
+import type { SecretBox } from "../relink/account";
 
 export interface StatGame {
   /** Instance locale (identifiant stable). */
@@ -34,8 +39,13 @@ interface Data {
 export interface PlayStatsDeps {
   dataDir: string;
   now?: () => number;
-  fs?: { readFile: (f: string) => Promise<Buffer | string>; writeFile: (f: string, d: string) => Promise<void>; rename: (a: string, b: string) => Promise<void>; mkdir: (d: string) => Promise<unknown> };
+  /** Chiffrement du système (safeStorage). Indisponible : les stats restent en mémoire, jamais écrites en clair. */
+  secrets: SecretBox;
+  fs?: { readFile: (f: string) => Promise<Buffer | string>; writeFile: (f: string, d: Buffer) => Promise<void>; rename: (a: string, b: string) => Promise<void>; mkdir: (d: string) => Promise<unknown>; rm?: (f: string) => Promise<void> };
 }
+
+/** En-tête du fichier : format reconnu avant d'essayer de le déchiffrer. */
+const MAGIC = Buffer.from("RLSTAT1\n", "latin1");
 
 /** Plus grande tranche comptée entre deux ticks (au-delà : veille, PC figé…). */
 const MAX_SLICE = 3 * 60;
@@ -87,7 +97,7 @@ export class PlayStats {
   private saving: Promise<void> = Promise.resolve();
 
   constructor(private readonly d: PlayStatsDeps) {
-    this.file = path.join(d.dataDir, "play-stats.json");
+    this.file = path.join(d.dataDir, "play-stats.dat");
   }
 
   private now(): number {
@@ -98,12 +108,25 @@ export class PlayStats {
     if (this.data) return this.data;
     if (!this.loading) {
       this.loading = (async () => {
+        const read = this.d.fs?.readFile ?? readFile;
+        let raw: Buffer | null = null;
         try {
-          const raw = await (this.d.fs?.readFile ?? readFile)(this.file);
-          this.data = clean(JSON.parse(String(raw)));
+          raw = Buffer.from(await read(this.file));
         } catch {
-          this.data = empty();
+          raw = null; // pas encore de stats
         }
+        this.data = empty();
+        if (raw && this.d.secrets.isEncryptionAvailable()) {
+          try {
+            if (!raw.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("format");
+            this.data = clean(JSON.parse(this.d.secrets.decryptString(raw.subarray(MAGIC.length))));
+          } catch {
+            // fichier retouché ou abîmé : mis de côté, on repart de zéro
+            await (this.d.fs?.rename ?? rename)(this.file, `${this.file}.modifie`).catch(() => undefined);
+          }
+        }
+        // ancienne version en clair (play-stats.json) : supprimée, jamais relue (elle a pu être modifiée)
+        await (this.d.fs?.rm ?? ((f: string) => rm(f, { force: true })))(path.join(this.d.dataDir, "play-stats.json")).catch(() => undefined);
         return this.data;
       })();
     }
@@ -237,8 +260,14 @@ export class PlayStats {
     // jours trop anciens oubliés (le total, lui, reste)
     const keys = Object.keys(d.days).sort();
     for (const k of keys.slice(0, Math.max(0, keys.length - KEEP_DAYS))) delete d.days[k];
-    const body = JSON.stringify(d);
-    const fs = { writeFile: this.d.fs?.writeFile ?? ((f: string, s: string) => writeFile(f, s, "utf8")), rename: this.d.fs?.rename ?? rename, mkdir: this.d.fs?.mkdir ?? ((p: string) => mkdir(p, { recursive: true })) };
+    if (!this.d.secrets.isEncryptionAvailable()) return this.saving; // jamais en clair
+    let body: Buffer;
+    try {
+      body = Buffer.concat([MAGIC, this.d.secrets.encryptString(JSON.stringify(d))]);
+    } catch {
+      return this.saving;
+    }
+    const fs = { writeFile: this.d.fs?.writeFile ?? ((f: string, b: Buffer) => writeFile(f, b)), rename: this.d.fs?.rename ?? rename, mkdir: this.d.fs?.mkdir ?? ((p: string) => mkdir(p, { recursive: true })) };
     this.saving = this.saving
       .then(async () => {
         await fs.mkdir(path.dirname(this.file));
