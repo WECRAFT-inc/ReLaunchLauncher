@@ -1198,24 +1198,34 @@ function Shell({
   if (p.tip) lastTip.current = p.tip.text;
   // le bloc flottant (cloche, téléchargements, profil) recouvre le haut à droite de la page :
   // on réserve sa largeur aux en-têtes de page pour que leurs boutons restent visibles.
+  // La place réservée est mesurée sur chaque en-tête (pas sur la fenêtre) : une page moins large que la fenêtre
+  // n'est réduite que de ce qui passe vraiment sous le bloc.
   useLayoutEffect(() => {
     const main = mainRef.current;
-    const pf = rootRef.current?.querySelector<HTMLElement>(".pfloat");
     if (!main) return;
-    if (!pf) {
-      main.style.removeProperty("--pf-reserve");
-      return;
-    }
+    const pf = rootRef.current?.querySelector<HTMLElement>(".pfloat") ?? null;
+    const heads = () => [...main.querySelectorAll<HTMLElement>(":scope > .view > .vhead:first-child, :scope > .rl-maint:first-child, .ipage > .ipage-head:first-child")];
     const upd = () => {
-      const m = main.getBoundingClientRect();
-      const r = pf.getBoundingClientRect();
-      const over = r.left < m.right && r.right > m.left && r.top < m.top + 80;
-      main.style.setProperty("--pf-reserve", over ? `${Math.ceil(m.right - r.left + 10)}px` : "0px");
+      const r = pf?.getBoundingClientRect();
+      for (const h of heads()) {
+        // page d'instance : en-tête décalé sous le bloc (le réduire écraserait le titre et les boutons) ;
+        // autres pages : place réservée à droite. La marge intérieure ne change pas le cadre : mesure stable.
+        const top = h.classList.contains("ipage-head");
+        const b = h.getBoundingClientRect();
+        const over = r && r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top;
+        const need = !over ? 0 : top ? Math.ceil(r.bottom - b.top + 12) : Math.ceil(b.right - r.left + 10);
+        const v = need > 0 ? `${need}px` : "";
+        if (top) {
+          if (h.style.paddingTop !== v) h.style.paddingTop = v;
+        } else if (h.style.paddingRight !== v) h.style.paddingRight = v;
+      }
     };
     upd();
+    if (!pf) return;
     const ro = new ResizeObserver(upd);
     ro.observe(pf);
     ro.observe(main);
+    for (const h of heads()) ro.observe(h);
     return () => ro.disconnect();
   });
   const cls = [

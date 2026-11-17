@@ -680,10 +680,12 @@ export function LivePage() {
     <>
       <div className="vhead">
         <div>
-          <h2>{t("Diffusion Partenaires")}</h2>
+          <div className="vtitle-row">
+            <h2>{t("Diffusion Partenaires")}</h2>
+            <span className={`online${liveCount ? "" : " none"}`}>{`${liveCount} ${t("live(s) en cours")}`}</span>
+          </div>
           <div className="sub">{t("Les partenaires en direct sur nos events et ailleurs")}</div>
         </div>
-        <span className="online">{`${liveCount} ${t("live(s) en cours")}`}</span>
       </div>
       <RelinkStatus st={relink} what={t("Les partenaires")} />
       <div className="tabs" id="liveTabs">
