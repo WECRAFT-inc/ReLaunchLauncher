@@ -5,16 +5,25 @@
  * de jours et à la présence « en jeu ».
  *
  * Rien n'est lancé ni modifié : lecture seule de la liste des processus (PowerShell, commande fixe), toutes les
- * 20 s, et seulement tant qu'une partie est attendue ou en cours.
+ * 20 s, seulement tant qu'une partie est attendue. Une fois la partie repérée, on retient son numéro de processus
+ * et on vérifie seulement qu'il existe encore (sans PowerShell) : relire la liste pendant une partie chargée
+ * (processeur et disque à fond) pouvait revenir vide et faire croire la partie fermée.
  */
+
+export interface JavaProc {
+  pid: number;
+  cmd: string;
+}
 
 export interface WatchTarget {
   gameDir: string;
 }
 
 export interface GameWatchDeps<T extends WatchTarget> {
-  /** Lignes de commande des processus Java en cours (null : lecture impossible). */
-  list: () => Promise<string[] | null>;
+  /** Processus Java en cours avec leur ligne de commande (null : lecture impossible). */
+  list: () => Promise<JavaProc[] | null>;
+  /** Le processus existe-t-il encore ? (par défaut : signal 0, sans effet sur le processus) */
+  alive?: (pid: number) => boolean;
   onStart: (t: T) => void;
   onExit: (t: T) => void;
   now?: () => number;
@@ -26,17 +35,28 @@ export interface GameWatchDeps<T extends WatchTarget> {
   timers?: { set: (f: () => void, ms: number) => unknown; clear: (h: unknown) => void };
 }
 
-/** Script PowerShell (fixe) : lignes de commande des processus Java, en base64 UTF-8 (chemins accentués intacts). */
+/** Script PowerShell (fixe) : « numéro:ligne de commande en base64 UTF-8 » des processus Java (chemins accentués intacts). */
 export const JAVA_PROCS_SCRIPT =
   "Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'javaw.exe','java.exe' } | " +
-  "ForEach-Object { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$_.CommandLine)) }";
+  "ForEach-Object { [string]$_.ProcessId + ':' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$_.CommandLine)) }";
 
-export function decodeProcs(stdout: string): string[] {
-  return stdout
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => /^[A-Za-z0-9+/=]+$/.test(l))
-    .map((l) => Buffer.from(l, "base64").toString("utf8"));
+export function decodeProcs(stdout: string): JavaProc[] {
+  const out: JavaProc[] = [];
+  for (const l of stdout.split(/\r?\n/)) {
+    const m = /^(\d{1,10}):([A-Za-z0-9+/=]*)$/.exec(l.trim());
+    if (m) out.push({ pid: Number(m[1]), cmd: Buffer.from(m[2]!, "base64").toString("utf8") });
+  }
+  return out;
+}
+
+/** Signal 0 : ne fait rien au processus, échoue seulement s'il n'existe plus (EPERM = il existe). */
+export function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as { code?: string }).code === "EPERM";
+  }
 }
 
 const norm = (s: string) => s.replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
@@ -52,7 +72,7 @@ export function runsIn(cmd: string, gameDir: string): boolean {
 
 export class OfficialGameWatch<T extends WatchTarget> {
   private readonly waiting = new Map<string, { t: T; until: number }>();
-  private readonly running = new Map<string, { t: T; missed: number }>();
+  private readonly running = new Map<string, { t: T; pid: number; missed: number }>();
   private timer: unknown = null;
   private busy = false;
 
@@ -84,30 +104,32 @@ export class OfficialGameWatch<T extends WatchTarget> {
     if (this.busy || (!this.waiting.size && !this.running.size)) return;
     this.busy = true;
     try {
-      const procs = await this.d.list().catch(() => null);
-      const at = this.now();
-      if (procs) {
+      const alive = this.d.alive ?? pidAlive;
+      // parties en cours : on regarde seulement si leur processus existe encore
+      for (const [k, r] of [...this.running]) {
+        if (alive(r.pid)) r.missed = 0;
+        else if (++r.missed >= 2) {
+          this.running.delete(k);
+          this.d.log?.(`Partie fermée (launcher officiel) : ${r.t.gameDir}`);
+          this.d.onExit(r.t);
+        }
+      }
+      if (this.waiting.size) {
+        const procs = await this.d.list().catch(() => null);
+        const at = this.now();
         for (const [k, w] of [...this.waiting]) {
-          if (procs.some((c) => runsIn(c, w.t.gameDir))) {
+          const p = procs?.find((c) => runsIn(c.cmd, w.t.gameDir));
+          if (p) {
             this.waiting.delete(k);
-            this.running.set(k, { t: w.t, missed: 0 });
-            this.d.log?.(`Partie détectée (launcher officiel) : ${w.t.gameDir}`);
+            this.running.set(k, { t: w.t, pid: p.pid, missed: 0 });
+            this.d.log?.(`Partie détectée (launcher officiel, processus ${p.pid}) : ${w.t.gameDir}`);
             this.d.onStart(w.t);
           } else if (at > w.until) {
             this.waiting.delete(k);
             this.d.log?.(`Aucune partie détectée après le lancement par le launcher officiel : ${w.t.gameDir}`);
           }
         }
-        for (const [k, r] of [...this.running]) {
-          if (procs.some((c) => runsIn(c, r.t.gameDir))) r.missed = 0;
-          else if (++r.missed >= 2) {
-            // deux passages sans le processus : partie fermée (un seul raté peut être une lecture ratée)
-            this.running.delete(k);
-            this.d.log?.(`Partie fermée (launcher officiel) : ${r.t.gameDir}`);
-            this.d.onExit(r.t);
-          }
-        }
-      } else for (const [k, w] of [...this.waiting]) if (at > w.until) this.waiting.delete(k);
+      }
     } finally {
       this.busy = false;
       if (this.waiting.size || this.running.size) this.schedule(this.d.pollMs ?? 20_000);
