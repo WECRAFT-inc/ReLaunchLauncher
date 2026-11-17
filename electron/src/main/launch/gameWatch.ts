@@ -35,18 +35,29 @@ export interface GameWatchDeps<T extends WatchTarget> {
   timers?: { set: (f: () => void, ms: number) => unknown; clear: (h: unknown) => void };
 }
 
-/** Script PowerShell (fixe) : « numéro:ligne de commande en base64 UTF-8 » des processus Java (chemins accentués intacts). */
+/**
+ * Script PowerShell (fixe) : « @@numéro:ligne de commande en base64 UTF-8 » pour chaque processus Java
+ * (chemins accentués intacts). La ligne de commande d'un jeu moddé fait des milliers de caractères et PowerShell
+ * coupe les longues lignes quand sa sortie va dans un tuyau : chaque entrée commence donc par « @@ » et le
+ * décodage ignore tous les retours à la ligne.
+ */
 export const JAVA_PROCS_SCRIPT =
   "Get-CimInstance Win32_Process | Where-Object { $_.Name -in 'javaw.exe','java.exe' } | " +
-  "ForEach-Object { [string]$_.ProcessId + ':' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$_.CommandLine)) }";
+  "ForEach-Object { '@@' + [string]$_.ProcessId + ':' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([string]$_.CommandLine)) }";
 
 export function decodeProcs(stdout: string): JavaProc[] {
   const out: JavaProc[] = [];
-  for (const l of stdout.split(/\r?\n/)) {
-    const m = /^(\d{1,10}):([A-Za-z0-9+/=]*)$/.exec(l.trim());
+  for (const rec of stdout.replace(/\s+/g, "").split("@@")) {
+    const m = /^(\d{1,10}):([A-Za-z0-9+/=]*)$/.exec(rec);
     if (m) out.push({ pid: Number(m[1]), cmd: Buffer.from(m[2]!, "base64").toString("utf8") });
   }
   return out;
+}
+
+/** Dossier de jeu d'une ligne de commande Java (pour le journal), ou null. */
+export function gameDirOf(cmd: string): string | null {
+  const m = /--gameDir\s+(?:"([^"]+)"|(\S+))/i.exec(cmd);
+  return m ? (m[1] ?? m[2] ?? null) : null;
 }
 
 /** Signal 0 : ne fait rien au processus, échoue seulement s'il n'existe plus (EPERM = il existe). */
@@ -71,10 +82,11 @@ export function runsIn(cmd: string, gameDir: string): boolean {
 }
 
 export class OfficialGameWatch<T extends WatchTarget> {
-  private readonly waiting = new Map<string, { t: T; until: number }>();
+  private readonly waiting = new Map<string, { t: T; until: number; seen?: string }>();
   private readonly running = new Map<string, { t: T; pid: number; missed: number }>();
   private timer: unknown = null;
   private busy = false;
+  private lastErr = "";
 
   constructor(private readonly d: GameWatchDeps<T>) {}
 
@@ -115,7 +127,13 @@ export class OfficialGameWatch<T extends WatchTarget> {
         }
       }
       if (this.waiting.size) {
-        const procs = await this.d.list().catch(() => null);
+        const procs = await this.d.list().catch((e: unknown) => {
+          const msg = `Liste des processus Java illisible : ${e instanceof Error ? e.message : String(e)}`;
+          if (msg !== this.lastErr) this.d.log?.(msg); // une fois, pas toutes les 20 s
+          this.lastErr = msg;
+          return null;
+        });
+        if (procs) this.lastErr = "";
         const at = this.now();
         for (const [k, w] of [...this.waiting]) {
           const p = procs?.find((c) => runsIn(c.cmd, w.t.gameDir));
@@ -124,7 +142,15 @@ export class OfficialGameWatch<T extends WatchTarget> {
             this.running.set(k, { t: w.t, pid: p.pid, missed: 0 });
             this.d.log?.(`Partie détectée (launcher officiel, processus ${p.pid}) : ${w.t.gameDir}`);
             this.d.onStart(w.t);
-          } else if (at > w.until) {
+          } else if (procs) {
+            // journal (une fois par changement) : ce que ReLaunch voit pendant qu'il attend la partie
+            const seen = procs.length ? procs.map((c) => `${c.pid} → ${gameDirOf(c.cmd) ?? "sans --gameDir"}`).join(" ; ") : "aucun";
+            if (seen !== w.seen) {
+              w.seen = seen;
+              this.d.log?.(`En attente de la partie (${w.t.gameDir}) ; processus Java : ${seen}`);
+            }
+          }
+          if (!p && at > w.until) {
             this.waiting.delete(k);
             this.d.log?.(`Aucune partie détectée après le lancement par le launcher officiel : ${w.t.gameDir}`);
           }

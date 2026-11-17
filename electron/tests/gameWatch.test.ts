@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decodeProcs, OfficialGameWatch, runsIn } from "../src/main/launch/gameWatch";
+import { decodeProcs, gameDirOf, OfficialGameWatch, runsIn } from "../src/main/launch/gameWatch";
 
 const DIR = "C:\\Users\\Élodie\\AppData\\Roaming\\.wecraft\\instances\\Créa";
 const CMD = `"C:\\Program Files\\Java\\javaw.exe" -Xmx4G net.minecraft.client.main.Main --username Rexi --gameDir "${DIR}" --assetsDir x`;
@@ -14,8 +14,13 @@ test("partie : « --gameDir » reconnu (guillemets, barres, majuscules), autre d
 });
 
 test("partie : sortie PowerShell en base64 UTF-8 (accents intacts)", () => {
-  const out = `4242:${Buffer.from(CMD, "utf8").toString("base64")}\r\n\r\nWARNING: texte\r\n`;
-  assert.deepEqual(decodeProcs(out), [{ pid: 4242, cmd: CMD }]);
+  const b64 = Buffer.from(CMD, "utf8").toString("base64");
+  const out = `@@4242:${b64}\r\n@@7:\r\n`;
+  assert.deepEqual(decodeProcs(out), [{ pid: 4242, cmd: CMD }, { pid: 7, cmd: "" }]);
+  // ligne coupée par PowerShell (sortie dans un tuyau) : recollée
+  const cut = `@@4242:${b64.slice(0, 50)}\r\n${b64.slice(50, 77)}\r\n${b64.slice(77)}\r\n`;
+  assert.deepEqual(decodeProcs(cut), [{ pid: 4242, cmd: CMD }]);
+  assert.equal(gameDirOf(CMD), DIR);
 });
 
 test("partie lancée par le launcher officiel : démarrage, puis suivi par numéro de processus jusqu'à la fermeture", async () => {

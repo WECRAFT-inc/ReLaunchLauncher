@@ -420,7 +420,8 @@ async function start(): Promise<void> {
   const officialWatch = new OfficialGameWatch<LaunchTarget>({
     list: async () => {
       const r = await nodeRunner.run(psExe, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", JAVA_PROCS_SCRIPT]);
-      return r.code === 0 ? decodeProcs(r.stdout) : null;
+      if (r.code !== 0) throw new Error(`PowerShell a renvoyé le code ${r.code}`);
+      return decodeProcs(r.stdout);
     },
     onStart: gameStarted,
     onExit: gameExited,
