@@ -681,3 +681,10 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .vtitle-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .vtitle-row .online { padding: 4px 11px; border-radius: 99px; background: rgba(255,255,255,.06); border: 1px solid var(--line); }
 .vtitle-row .online.none::before { background: var(--ink-faint, #888); box-shadow: none; }
+
+/* déplacement des groupes (poignée ⠿) */
+.igrp-grip { cursor: grab; color: var(--ink-faint, #888); font-size: 16px; padding: 2px 4px; border-radius: 6px; user-select: none; line-height: 1; }
+.igrp-grip:hover { color: var(--ink); background: rgba(255,255,255,.06); }
+.igrp.grp-moving { opacity: .45; }
+.igrp.grp-before { box-shadow: 0 -3px 0 0 var(--acc); }
+.igrp.grp-after { box-shadow: 0 3px 0 0 var(--acc); }

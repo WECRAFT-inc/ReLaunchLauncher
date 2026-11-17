@@ -6,7 +6,7 @@ export interface InstViewPrefs {
   sort: "auto" | "manual";
   /** Ordre manuel (identifiants). Une instance absente de la liste se place après les autres. */
   order: string[];
-  /** Masquer les instances lancées il y a plus de `hideDays` jours (jamais lancée = jamais masquée). */
+  /** Masquer les instances pas lancées depuis plus de `hideDays` jours, et celles jamais lancées. */
   hideOld: boolean;
   hideDays: number;
 }
@@ -56,9 +56,26 @@ export function moveInOrder(flat: string[], moving: string[], target: string | n
   return [...rest.slice(0, i), ...block, ...rest.slice(i)];
 }
 
-/** Lancée il y a plus de `days` jours (une instance jamais lancée n'est jamais « ancienne »). */
+/** Pas lancée depuis plus de `days` jours, ou jamais lancée. */
 export function isOld(x: { last?: number }, days: number, now = Date.now()): boolean {
-  return typeof x.last === "number" && x.last > 0 && now - x.last > days * 86_400_000;
+  return !(typeof x.last === "number" && x.last > 0) || now - x.last > days * 86_400_000;
+}
+
+/** Nouvel ordre des groupes : `moving` placé avant ou après `target` (les autres gardent leur ordre). */
+export function moveGroup<T extends { id: string }>(groups: T[], moving: string, target: string, after = false): T[] {
+  const g = groups.find((x) => x.id === moving);
+  if (!g || moving === target) return groups;
+  const rest = groups.filter((x) => x.id !== moving);
+  let i = rest.findIndex((x) => x.id === target);
+  if (i < 0) return groups;
+  if (after) i += 1;
+  return [...rest.slice(0, i), g, ...rest.slice(i)];
+}
+
+/** Groupes repliés (gardés sur ce PC) : identifiants valides seulement. */
+export function cleanClosed(v: unknown, fallback: string[]): Set<string> {
+  if (!Array.isArray(v)) return new Set(fallback);
+  return new Set((v as unknown[]).filter((x): x is string => typeof x === "string" && x.length <= 100).slice(0, 500));
 }
 
 /** Identifiants entre `a` et `b` inclus, dans l'ordre affiché (Maj+clic). */

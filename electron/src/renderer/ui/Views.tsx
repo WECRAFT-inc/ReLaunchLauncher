@@ -8,7 +8,7 @@ import { Menu, type MenuItem } from "./Menu";
 import { Minis } from "./Bars";
 import { InstIcon } from "./symbols";
 import { ago, bgFmtOf, detail, INACTIVE_ID, isPinned, isRecent, load, orderInstances, pinCount, SC, store, type Inst, type InstGroup } from "./model";
-import { cleanInstView, HIDE_CHOICES, isOld, moveInOrder, rangeBetween, sortByOrder, type InstViewPrefs } from "./instOrder";
+import { cleanClosed, cleanInstView, HIDE_CHOICES, isOld, moveGroup, moveInOrder, rangeBetween, sortByOrder, type InstViewPrefs } from "./instOrder";
 import { useEscapeLayer } from "./keys";
 import { t } from "./i18n";
 
@@ -208,7 +208,29 @@ export function Wecraft() {
   /** Ordre affiché de TOUTES les instances (masquées comprises) : base des déplacements. */
   const allFlat = sorted(inst).map((x) => x.id);
 
-  const [closed, setClosed] = useState<Set<string>>(() => new Set([INACTIVE_ID]));
+  // groupes repliés : gardés sur ce PC
+  const [closed, setClosed0] = useState<Set<string>>(() => cleanClosed(load("rl-igrp-closed", null), [INACTIVE_ID]));
+  const setClosed = (fn: (c: Set<string>) => Set<string>) =>
+    setClosed0((c) => {
+      const n = fn(c);
+      store("rl-igrp-closed", [...n]);
+      return n;
+    });
+  // déplacement d'un groupe (poignée ⠿ de son en-tête)
+  const [grpDrag, setGrpDrag] = useState<string | null>(null);
+  const [grpOver, setGrpOver] = useState<{ gid: string; after: boolean } | null>(null);
+  const dropGroup = (target: string, after: boolean) => {
+    if (grpDrag && target !== grpDrag) setGroups((gs) => moveGroup(gs, grpDrag, target, after));
+    setGrpDrag(null);
+    setGrpOver(null);
+  };
+  const shiftGroup = (gid: string, dir: -1 | 1) => {
+    const ug = groups.filter((g) => g.id !== INACTIVE_ID);
+    const i = ug.findIndex((g) => g.id === gid);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ug.length) return;
+    setGroups((gs) => moveGroup(gs, gid, ug[j]!.id, dir > 0));
+  };
   const [newGroup, setNewGroup] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   /** Range des instances dans un groupe ("" : sans groupe). */
@@ -510,9 +532,48 @@ export function Wecraft() {
       );
     const open = !closed.has(gid);
     const nSel = items.filter((x) => sel.has(x.id)).length;
+    const movable = !s.fixed;
+    const ug = userGroups.map((g) => g.id);
+    const gOver = grpOver && grpOver.gid === gid ? (grpOver.after ? " grp-after" : " grp-before") : "";
     return (
-      <div key={gid || "none"} className={`igrp${dropAt && dropAt.gid === gid && dropAt.id === null ? " dropon" : ""}`} data-gid={gid} data-a={`igrp-${gid}`}>
+      <div
+        key={gid || "none"}
+        className={`igrp${dropAt && dropAt.gid === gid && dropAt.id === null ? " dropon" : ""}${grpDrag === gid ? " grp-moving" : ""}${gOver}`}
+        data-gid={gid}
+        data-a={`igrp-${gid}`}
+        onDragOver={(e) => {
+          if (!grpDrag || !movable) return;
+          e.preventDefault();
+          const r = e.currentTarget.getBoundingClientRect();
+          const after = e.clientY > r.top + r.height / 2;
+          if (!grpOver || grpOver.gid !== gid || grpOver.after !== after) setGrpOver({ gid, after });
+        }}
+        onDrop={(e) => {
+          if (!grpDrag || !movable) return;
+          e.preventDefault();
+          dropGroup(gid, grpOver?.gid === gid ? grpOver.after : false);
+        }}
+      >
         <div className="igrp-head">
+          {movable ? (
+            <span
+              className="igrp-grip"
+              draggable
+              title={t("Glisser pour déplacer le groupe")}
+              aria-hidden="true"
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", gid);
+                setGrpDrag(gid);
+              }}
+              onDragEnd={() => {
+                setGrpDrag(null);
+                setGrpOver(null);
+              }}
+            >
+              ⠿
+            </span>
+          ) : null}
           <button className="ib" aria-expanded={open ? "true" : "false"} aria-label={open ? t("Replier") : t("Déplier")} onClick={() => toggleOpen(gid)}>
             {open ? "▾" : "▸"}
           </button>
@@ -562,6 +623,8 @@ export function Wecraft() {
             <Menu
               items={[
                 { label: "Renommer", onClick: () => setRenaming(gid) },
+                { label: "Monter le groupe", onClick: () => shiftGroup(gid, -1), hidden: ug.indexOf(gid) <= 0 },
+                { label: "Descendre le groupe", onClick: () => shiftGroup(gid, 1), hidden: ug.indexOf(gid) >= ug.length - 1 },
                 { label: "Supprimer le groupe (les instances restent)", onClick: () => setGroups((gs) => gs.filter((x) => x.id !== gid)), danger: true },
               ]}
             />
@@ -697,7 +760,7 @@ export function Wecraft() {
           ) : null}
           <span style={{ flex: 1 }}></span>
           <button className="chip" aria-pressed={view.hideOld ? "true" : "false"} onClick={() => setView((p) => ({ ...p, hideOld: !p.hideOld }))}>
-            {t("Masquer les instances lancées il y a plus de")}
+            {t("Masquer les instances pas lancées depuis")}
           </button>
           <select aria-label={t("Durée")} value={view.hideDays} onChange={(e) => setView((p) => ({ ...p, hideDays: Number(e.target.value), hideOld: true }))}>
             {HIDE_CHOICES.map(([d, l]) => (
@@ -772,10 +835,10 @@ export function Wecraft() {
             </button>
           </div>
         ) : null}
-        {rows.length ? null : <div className="empty">{inst.length ? (oldOnes.length && matched.length === oldOnes.length ? t("Toutes les instances correspondantes sont masquées (lancées il y a longtemps).") : t("Aucune instance ne correspond.")) : t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}</div>}
+        {rows.length ? null : <div className="empty">{inst.length ? (oldOnes.length && matched.length === oldOnes.length ? t("Toutes les instances correspondantes sont masquées (jamais lancées ou pas lancées depuis longtemps).") : t("Aucune instance ne correspond.")) : t("Aucune instance trouvée sur ce PC (WeCraft, CurseForge, Modrinth, Prism).")}</div>}
         {oldOnes.length ? (
           <p className="faint" style={{ fontSize: "12.5px" }}>
-            {`${oldOnes.length} ${oldOnes.length > 1 ? t("instances masquées : lancées") : t("instance masquée : lancée")} ${t("il y a plus de")} ${t(hideLabel)}. `}
+            {`${oldOnes.length} ${oldOnes.length > 1 ? t("instances masquées : jamais lancées ou pas depuis") : t("instance masquée : jamais lancée ou pas depuis")} ${t(hideLabel)}. `}
             <button className="linkbtn" onClick={() => setView((p) => ({ ...p, hideOld: false }))}>
               {t("Les afficher")}
             </button>
