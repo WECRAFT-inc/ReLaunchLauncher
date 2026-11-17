@@ -49,7 +49,7 @@ export function cleanRoots(v: unknown): Root[] | null {
     if (!isPid(o["project_id"]) || typeof o["title"] !== "string") return null;
     if (seen.has(o["project_id"])) continue;
     seen.add(o["project_id"]);
-    out.push({ project_id: o["project_id"], title: o["title"].slice(0, 200) });
+    out.push({ project_id: o["project_id"], title: o["title"].slice(0, 200), ...(isPid(o["version_id"]) ? { version_id: o["version_id"] } : {}) });
   }
   return out;
 }

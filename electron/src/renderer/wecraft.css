@@ -688,3 +688,8 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .igrp.grp-moving { opacity: .45; }
 .igrp.grp-before { box-shadow: 0 -3px 0 0 var(--acc); }
 .igrp.grp-after { box-shadow: 0 3px 0 0 var(--acc); }
+
+/* contenu déjà présent dans l'instance / le modpack */
+.btn.present { background: color-mix(in srgb, var(--ok, #3ddc84) 14%, transparent); border-color: color-mix(in srgb, var(--ok, #3ddc84) 45%, var(--line)); color: var(--ink); }
+.btn.present:disabled { opacity: 1; cursor: default; }
+.pj-has { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; font-weight: 800; color: var(--ok, #3ddc84); background: color-mix(in srgb, var(--ok, #3ddc84) 14%, transparent); border: 1px solid color-mix(in srgb, var(--ok, #3ddc84) 45%, var(--line)); }

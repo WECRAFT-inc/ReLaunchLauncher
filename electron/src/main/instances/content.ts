@@ -279,7 +279,7 @@ export async function contentDetails(gameDir: string, items: ContentItem[], fetc
     const hit = cache.hashes[h];
     const pr = hit?.pid ? cache.projects[hit.pid] : undefined;
     if (!hit?.pid || !pr) continue;
-    out[key] = { title: pr.title, slug: pr.slug, icon: pr.icon ? remote(pr.icon) : null, author: pr.author, version: hit.version };
+    out[key] = { title: pr.title, slug: pr.slug, icon: pr.icon ? remote(pr.icon) : null, author: pr.author, version: hit.version, projectId: hit.pid };
   }
   return out;
 }

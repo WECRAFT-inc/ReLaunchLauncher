@@ -102,6 +102,8 @@ export interface ContentMeta {
   icon: string | null;
   author: string;
   version: string;
+  /** Projet Modrinth du fichier. */
+  projectId?: string;
 }
 export type ContentResult = { ok: true; file?: string } | { ok: false; message: string };
 export interface WorldView {
@@ -243,6 +245,8 @@ export interface ContentExtra {
 export interface ModpackRoot {
   project_id: string;
   title: string;
+  /** Version précise (ajout à une instance) ; sinon la plus récente compatible. */
+  version_id?: string;
 }
 export interface ModpackHit {
   id: string;

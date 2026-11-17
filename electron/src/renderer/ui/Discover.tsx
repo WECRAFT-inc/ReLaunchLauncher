@@ -5,7 +5,7 @@
 // Chaque résultat ouvre sa page (description, versions, galerie, compatibilité). Images servies par ReLaunch,
 // avec une image de remplacement si elles manquent.
 import { useEffect, useRef, useState } from "react";
-import type { ContentList, ModpackJob, ModpackRoot, PackRowView, ProjectHit, ProjectType } from "../../shared/api";
+import type { ContentList, ContentMeta, ModpackJob, ModpackRoot, PackRowView, ProjectHit, ProjectType, ProjectVersion } from "../../shared/api";
 import { useApp, type MpDraft } from "./ctx";
 import { Ic } from "./Ic";
 import { JobView, useJob } from "./Import";
@@ -92,11 +92,45 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
   });
   const quick = useJob((s) => {
     if (s.phase === "termine") {
-      refreshInstances();
-      setInfoKey((k) => k + 1);
+      const rep = replaceAfter.current;
+      replaceAfter.current = null;
+      void (async () => {
+        // version remplacée : l'ancienne n'est retirée que si la nouvelle est bien arrivée
+        if (rep && fi) {
+          const l = await window.wecraft.content.list(fi.id).catch(() => null);
+          const there = !!l?.items.some((i) => i.kind === "mod" && i.file.replace(/\.disabled$/i, "").toLowerCase() === rep.file.toLowerCase());
+          if (there) for (const f of rep.old) if (f.toLowerCase() !== rep.file.toLowerCase()) await window.wecraft.content.remove(fi.id, "mod", f).catch(() => undefined);
+        }
+        refreshInstances();
+        setInfoKey((k) => k + 1);
+      })();
     }
   });
   const [infoKey, setInfoKey] = useState(0);
+  // Ajouter du contenu : ce qui est déjà dans l'instance (fichiers reconnus par Modrinth, mods du WePack)
+  const [present, setPresent] = useState<{ files: Record<string, ContentMeta>; ids: Set<string> } | null>(null);
+  useEffect(() => {
+    if (!fi) return setPresent(null);
+    let alive = true;
+    void Promise.all([window.wecraft.content.details(fi.id).catch(() => ({}) as Record<string, ContentMeta>), fi.mp ? window.wecraft.modpacks.editInfo(fi.id).catch(() => null) : Promise.resolve(null)]).then(([files, info]) => {
+      if (!alive) return;
+      const ids = new Set<string>((info?.selected ?? []).map((m) => m.project_id));
+      for (const m of Object.values(files)) if (m.projectId) ids.add(m.projectId);
+      setPresent({ files, ids });
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fi?.id, infoKey]);
+  const isPresent = (pid: string) => !!present?.ids.has(pid);
+  /** Une version précise d'un mod (avec ses dépendances) ; les fichiers de l'ancienne version partent à la corbeille une fois la nouvelle en place. */
+  const replaceAfter = useRef<{ file: string; old: string[] } | null>(null);
+  const addModVersion = (p: { id: string; title: string }, v: ProjectVersion, old: string[]) => {
+    if (!fi || fi.mp || fi.ev) return;
+    replaceAfter.current = v.file && old.length ? { file: v.file.name, old } : null;
+    void window.wecraft.modpacks.addMods(fi.id, [{ project_id: p.id, title: p.title, version_id: v.id }]).then((r) => (r.ok ? quick.follow(r.job) : toast(START_ERRORS[r.reason] ?? "Ajout impossible : version ou loader de l'instance inconnu.")));
+  };
   const editing = !fi && !!mp.edit;
   const busy = packJob.job?.phase === "en-cours" || quick.job?.phase === "en-cours";
 
@@ -273,7 +307,20 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
               }}
               ctx={
                 fi
-                  ? { inPack: false, togglePack: addModToInst, packMc: fi.v, packLoader: fi.l, target: fi.id, setTarget: () => undefined, lockTarget: true, modLabels: ["✓ Ajouté", `+ Ajouter à « ${fi.n} »`], packName: `l'instance « ${fi.n} »` }
+                  ? {
+                      inPack: isPresent(open),
+                      togglePack: addModToInst,
+                      packMc: fi.v,
+                      packLoader: fi.l,
+                      target: fi.id,
+                      setTarget: () => undefined,
+                      lockTarget: true,
+                      modLabels: [`✓ Déjà dans « ${fi.n} »`, `+ Ajouter à « ${fi.n} »`],
+                      packName: `l'instance « ${fi.n} »`,
+                      present: present?.files ?? {},
+                      instName: fi.n,
+                      ...(fi.mp || fi.ev ? {} : { addVersion: addModVersion }),
+                    }
                   : { inPack: selectedIds.has(open), togglePack, packMc: mp.mc, packLoader: mp.loader, target, setTarget, extraIn: extraIds.has(open), toggleExtra }
               }
             />
@@ -378,13 +425,21 @@ export function Discover({ forInst }: { forInst?: string } = {}) {
                         </span>
                       </span>
                       <span className="proj2-side">
-                        {fi ? (
+                        {fi && isPresent(h.id) ? (
+                          <button className="btn sm present" disabled title={`${t("Déjà présent dans")} « ${fi.n} »`}>
+                            {t("✓ Déjà présent")}
+                          </button>
+                        ) : fi ? (
                           <button className="btn sm pri" onClick={() => (tab === "mod" ? addModToInst(h) : quickInstall(h))} disabled={busy}>
                             {t("+ Ajouter")}
                           </button>
+                        ) : tab === "mod" && editing && !on && rows.some((r) => r.kind === "dep" && r.id === h.id) ? (
+                          <button className="btn sm present" disabled title={t("Déjà dans le modpack comme dépendance d'un autre mod")}>
+                            {t("✓ Dans le modpack")}
+                          </button>
                         ) : tab === "mod" ? (
-                          <button className={`btn sm${on ? "" : " pri"}`} aria-pressed={on ? "true" : "false"} onClick={() => togglePack(h)} disabled={busy}>
-                            {on ? "✓ Ajouté" : "+ Ajouter"}
+                          <button className={`btn sm${on ? " present" : " pri"}`} aria-pressed={on ? "true" : "false"} onClick={() => togglePack(h)} disabled={busy} title={on ? (editing ? t("Déjà dans le modpack : cliquer pour le retirer") : t("Cliquer pour le retirer")) : undefined}>
+                            {on ? (editing ? t("✓ Dans le modpack") : "✓ Ajouté") : "+ Ajouter"}
                           </button>
                         ) : tab === "modpack" ? (
                           <button className="btn sm pri" onClick={() => quickInstall(h)} disabled={busy}>
@@ -605,7 +660,7 @@ function InstInfoPanel({ id, refresh, job }: { id: string; refresh: number; job:
           </>
         ) : null}
       </dl>
-      {x.ev ? <small className="faint">{t("Événement : les mods sont imposés, seuls les packs de ressources et les shaders s'ajoutent.")}</small> : x.mp ? <small className="faint">{t("WePack : un mod ajouté ici entre dans le modpack, avec ses dépendances.")}</small> : <small className="faint">{t("Les dépendances obligatoires d'un mod sont ajoutées avec lui ; un fichier déjà présent n'est jamais remplacé.")}</small>}
+      {x.ev ? <small className="faint">{t("Événement : les mods sont imposés, seuls les packs de ressources et les shaders s'ajoutent.")}</small> : x.mp ? <small className="faint">{t("WePack : un mod ajouté ici entre dans le modpack, avec ses dépendances.")}</small> : <small className="faint">{t("Les dépendances obligatoires d'un mod sont ajoutées avec lui. Une autre version d'un mod présent s'installe depuis l'onglet Versions de sa page (l'ancienne part à la corbeille).")}</small>}
       <JobView job={job} />
       <span className="row" style={{ gap: "8px" }}>
         <button className="btn sm" data-act="openInst" data-id={x.id}>

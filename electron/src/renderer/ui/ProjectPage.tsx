@@ -2,7 +2,7 @@
 // galerie, compatibilité, licence, liens, dates, état d'installation et actions possibles selon le type.
 // Tout vient de l'API Modrinth via le processus principal ; un champ absent n'est jamais inventé.
 import { useEffect, useMemo, useState } from "react";
-import type { ProjectType, ProjectVersion, ProjectView } from "../../shared/api";
+import type { ContentMeta, ProjectType, ProjectVersion, ProjectView } from "../../shared/api";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { JobView, useJob } from "./Import";
@@ -75,6 +75,11 @@ export interface ProjectContext {
   /** Parcourir : pack de ressources ou shader ajouté au nouveau WePack en préparation. */
   extraIn?: boolean;
   toggleExtra?: (p: { id: string; title: string }) => void;
+  /** Ajouter du contenu : fichiers de l'instance reconnus par Modrinth (clé « type/fichier »). */
+  present?: Record<string, ContentMeta>;
+  instName?: string;
+  /** Installer une version précise d'un mod dans l'instance (en remplaçant `old`, fichiers de l'ancienne version). */
+  addVersion?: (p: { id: string; title: string }, v: ProjectVersion, old: string[]) => void;
 }
 
 export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => void; ctx: ProjectContext }) {
@@ -165,6 +170,11 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
     }
   };
   const best = versions?.find((v) => v.channel === "release") ?? versions?.[0] ?? null;
+  // Ajouter du contenu : fichiers de CE mod déjà dans l'instance (une ou plusieurs versions)
+  const mine = p && ctx.present ? Object.entries(ctx.present).filter(([k, m]) => k.startsWith("mod/") && (m.projectId ? m.projectId === p.id : !!p.slug && m.slug === p.slug)) : [];
+  const mineFiles = mine.map(([k]) => k.slice(4));
+  const plain = (f: string) => f.replace(/\.disabled$/i, "").toLowerCase();
+  const hasModVersion = (v: ProjectVersion) => (!!v.file && mineFiles.some((f) => plain(f) === v.file!.name.toLowerCase())) || mine.some(([, m]) => !!m.version && m.version === v.number);
 
   if (err)
     return (
@@ -188,8 +198,8 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
   const action = () => {
     if (type === "mod")
       return (
-        <button className={`btn${ctx.inPack ? "" : " pri"}`} disabled={!!compat && !ctx.inPack} onClick={() => ctx.togglePack({ id: p.id, title: p.title })}>
-          {ctx.inPack ? (ctx.modLabels?.[0] ?? "✓ Dans Mon modpack") : (ctx.modLabels?.[1] ?? "+ Ajouter à Mon modpack")}
+        <button className={`btn${ctx.inPack ? " present" : " pri"}`} disabled={(!!compat && !ctx.inPack) || (ctx.lockTarget && (ctx.inPack || mine.length > 0))} onClick={() => ctx.togglePack({ id: p.id, title: p.title })}>
+          {ctx.inPack || (ctx.lockTarget && mine.length) ? (ctx.modLabels?.[0] ?? "✓ Dans Mon modpack") : (ctx.modLabels?.[1] ?? "+ Ajouter à Mon modpack")}
         </button>
       );
     if (type === "modpack")
@@ -314,10 +324,26 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
                       <small className="muted">{`${v.number} · ${v.loaders.map((l) => LOADER_NAME[l] ?? l).join(", ") || "—"} · Minecraft ${mcSummary(v.mcVersions)}`}</small>
                       <small className="faint">{`${frDate(v.published)} · ${shortCount(v.downloads)} téléchargements${v.dependencies ? ` · ${v.dependencies} dépendance${v.dependencies > 1 ? "s" : ""} requise${v.dependencies > 1 ? "s" : ""}` : ""}${v.file ? ` · ${v.file.name}` : ""}`}</small>
                     </span>
-                    {type === "modpack" || type === "resourcepack" || type === "shader" ? (
-                      <button className="btn sm" disabled={has || (type !== "modpack" && !ctx.target) || job?.phase === "en-cours"} onClick={() => installVersion(v)}>
-                        {has ? "✓ Installé" : "Installer"}
-                      </button>
+                    {type === "mod" && ctx.present ? (
+                      hasModVersion(v) ? (
+                        <span className="pj-has" title={`${t("Cette version est déjà dans")} « ${ctx.instName ?? ""} »`} aria-label={t("Déjà présente")}>
+                          ✓
+                        </span>
+                      ) : ctx.addVersion ? (
+                        <button className="btn sm" disabled={job?.phase === "en-cours"} onClick={() => ctx.addVersion!({ id: p.id, title: p.title }, v, mineFiles)} title={mineFiles.length ? t("Installe cette version à la place de celle présente (l'ancienne part à la corbeille)") : t("Installe cette version et ses dépendances obligatoires")}>
+                          {mineFiles.length ? t("Remplacer par celle-ci") : t("Installer")}
+                        </button>
+                      ) : null
+                    ) : type === "modpack" || type === "resourcepack" || type === "shader" ? (
+                      has ? (
+                        <span className="pj-has" title={t("Déjà installée")} aria-label={t("Déjà installée")}>
+                          ✓
+                        </span>
+                      ) : (
+                        <button className="btn sm" disabled={(type !== "modpack" && !ctx.target) || job?.phase === "en-cours"} onClick={() => installVersion(v)}>
+                          {t("Installer")}
+                        </button>
+                      )
                     ) : null}
                   </div>
                 );

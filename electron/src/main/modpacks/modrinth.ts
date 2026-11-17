@@ -100,6 +100,8 @@ export function safeModFilename(name: unknown): boolean {
 export interface Root {
   project_id: string;
   title: string;
+  /** Version précise voulue (sinon : la plus récente compatible). Doit appartenir au projet. */
+  version_id?: string;
 }
 export interface PlanItem {
   project_id: string;
@@ -126,6 +128,7 @@ const asArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 export async function resolveModpack(mc: string, loader: string, roots: Root[], fetch: Fetch): Promise<{ plan: PlanItem[]; warnings: string[] }> {
   const loaders = MODRINTH_LOADERS[loader] ?? [];
   const titles = new Map<string, string>(roots.map((r) => [r.project_id, r.title]));
+  const pinned = new Map<string, string>(roots.filter((r) => r.version_id).map((r) => [r.project_id, r.version_id!]));
   const chosen = new Map<string, Omit<PlanItem, "title" | "required_by"> | null>();
   const warnings: string[] = [];
   const incompatible: [string, string][] = [];
@@ -134,6 +137,12 @@ export async function resolveModpack(mc: string, loader: string, roots: Root[], 
   const t = (pid: string) => titles.get(pid) ?? pid;
 
   const pick = async (pid: string): Promise<Obj | null> => {
+    const vid = pinned.get(pid);
+    if (vid) {
+      // version choisie par le joueur : elle doit bien appartenir à ce projet
+      const v = asObj(await fetch(`/version/${vid}`));
+      return v["project_id"] === pid ? v : null;
+    }
     const versions = asArr(await fetch(`/project/${pid}/version`, { loaders: JSON.stringify(loaders), game_versions: JSON.stringify([mc]) })).map(asObj);
     for (const kind of ["release", "beta", "alpha"]) {
       const found = versions.filter((v) => v["version_type"] === kind);

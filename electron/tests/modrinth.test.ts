@@ -367,3 +367,16 @@ test("service : recherche vérifiée, création et modification suivies, refus c
     cleanup();
   }
 });
+
+test("version précise : celle choisie (dépendances comprises), refusée si elle est d'un autre projet", async () => {
+  const world: Record<string, unknown> = {
+    ...WORLD,
+    "/version/s0": { id: "s0", project_id: "sodium", version_type: "release", version_number: "0.4", files: [file("sodium-0.4.jar")], dependencies: [{ project_id: "api", dependency_type: "required" }] },
+    "/version/autre": { id: "autre", project_id: "create", version_type: "release", files: [file("create.jar")], dependencies: [] },
+  };
+  const r = await resolveModpack("1.20.1", "Fabric", [{ project_id: "sodium", title: "Sodium", version_id: "s0" }], fetchFrom(world));
+  assert.equal(r.plan.find((i) => i.project_id === "sodium")?.filename, "sodium-0.4.jar");
+  assert.ok(r.plan.some((i) => i.project_id === "api" && i.dependency));
+  const bad = await resolveModpack("1.20.1", "Fabric", [{ project_id: "sodium", title: "Sodium", version_id: "autre" }], fetchFrom(world));
+  assert.ok(!bad.plan.some((i) => i.project_id === "sodium"));
+});
