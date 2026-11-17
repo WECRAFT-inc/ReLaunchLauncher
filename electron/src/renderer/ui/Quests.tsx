@@ -48,7 +48,7 @@ export function useQuests(on = true): { q: QuestsState | null; reload: () => voi
         if (fresh.length) {
           fresh.forEach((x) => seen.add(`${uid}:${x.id}`));
           writeSeen(seen);
-          toast(fresh.map((x) => `+${x.reward} ${t("Éclats")} · ${t("quête terminée")} : ${x.title}`).join(" — "));
+          toast(fresh.map((x) => `+${x.reward} ${t("Éclats")} · ${t("quête terminée")} : ${x.title}`).join(" · "));
         }
       },
       () => undefined,

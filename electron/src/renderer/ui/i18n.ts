@@ -115,6 +115,7 @@ const EN: Record<string, string> = {
   "Ouvrir sur Twitch": "Open on Twitch",
   "Pas de chaîne Twitch renseignée : lecteur indisponible.": "No Twitch channel set: player unavailable.",
   "Connecte-toi à ReLink pour voir tes amis qui diffusent.": "Sign in to ReLink to see which friends are streaming.",
+  "Connecte-toi à ReLink": "Sign in to ReLink",
   "Aucun ami en direct pour l'instant.": "No friends live right now.",
   "Aucun de tes amis n'a renseigné sa chaîne Twitch.": "None of your friends has set a Twitch channel.",
   "Aucun live pour l'instant.": "No streams right now.",

@@ -52,18 +52,15 @@ export function Inlines({ c }: { c: MdInline[] }): ReactNode {
         return <Img key={i} src={n.src} alt={n.alt} />;
       case "a":
         return n.token ? (
-          <a
+          <button
+            type="button"
             key={i}
-            href="#"
             className="md-a"
             title={t("Ouvrir dans le navigateur")}
-            onClick={(e) => {
-              e.preventDefault();
-              void window.wecraft.projects.openLink(n.token!);
-            }}
+            onClick={() => void window.wecraft.projects.openLink(n.token!)}
           >
             <Inlines c={n.c} />
-          </a>
+          </button>
         ) : (
           <span key={i}>
             <Inlines c={n.c} />

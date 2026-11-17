@@ -382,9 +382,9 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
               <dd>
                 {p.license ? (
                   p.license.token ? (
-                    <a href="#" className="md-a" onClick={(e) => (e.preventDefault(), void window.wecraft.projects.openLink(p.license!.token!))}>
+                    <button type="button" className="md-a" onClick={() => void window.wecraft.projects.openLink(p.license!.token!)}>
                       {p.license.name || p.license.id}
-                    </a>
+                    </button>
                   ) : (
                     p.license.name || p.license.id
                   )
@@ -415,7 +415,7 @@ export function ProjectPage({ id, onBack, ctx }: { id: string; onBack: () => voi
         <div className="overlay lightbox" onClick={() => setShot(null)}>
           <div className="pj-light" role="dialog" aria-modal="true" aria-label={p.gallery[shot]!.title ?? "Image"}>
             <img src={p.gallery[shot]!.url} alt={p.gallery[shot]!.title ?? ""} />
-            {p.gallery[shot]!.title || p.gallery[shot]!.description ? <p>{[p.gallery[shot]!.title, p.gallery[shot]!.description].filter(Boolean).join(" — ")}</p> : null}
+            {p.gallery[shot]!.title || p.gallery[shot]!.description ? <p>{[p.gallery[shot]!.title, p.gallery[shot]!.description].filter(Boolean).join(" : ")}</p> : null}
           </div>
         </div>
       ) : null}

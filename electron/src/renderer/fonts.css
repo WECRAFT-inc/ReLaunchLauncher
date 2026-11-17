@@ -1,8 +1,7 @@
-/* Polices locales (aucune requête réseau). Le prototype utilisait Manrope via Google Fonts :
-   Inter, déjà fournie avec WeCraft, la remplace. Licences : assets/fonts/OFL-*.txt */
+/* Polices locales (aucune requête réseau). Licences : assets/fonts/OFL-*.txt
+   Texte courant : Manrope. Ses fichiers ne sont pas encore fournis : ajouter Manrope-Regular/SemiBold/Bold.ttf
+   dans assets/fonts puis trois @font-face « Manrope » ici. En attendant, --f-body retombe sur Segoe UI (Windows).
+   Inter n'est plus chargée ici (elle se faisait passer pour Manrope). */
 @font-face { font-family: "Unbounded"; src: url("assets/fonts/Unbounded-Bold.ttf") format("truetype"); font-weight: 500 700; }
 @font-face { font-family: "Unbounded"; src: url("assets/fonts/Unbounded-ExtraBold.ttf") format("truetype"); font-weight: 800 900; }
-@font-face { font-family: "Manrope"; src: url("assets/fonts/Inter-Regular.otf") format("opentype"); font-weight: 400 500; }
-@font-face { font-family: "Manrope"; src: url("assets/fonts/Inter-SemiBold.otf") format("opentype"); font-weight: 600; }
-@font-face { font-family: "Manrope"; src: url("assets/fonts/Inter-Bold.otf") format("opentype"); font-weight: 700 800; }
 @font-face { font-family: "JetBrains Mono"; src: url("assets/fonts/JetBrainsMono-Regular.ttf") format("truetype"); font-weight: 400 500; }

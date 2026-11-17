@@ -1385,7 +1385,7 @@ function SkinsGroup() {
                 <span className="pv"></span>
                 <b>{c.name}</b>
                 <small>{[c.desc, c.versions.liquidGlass || c.versions.mat ? [c.versions.liquidGlass ? "Liquid Glass" : "", c.versions.mat ? "Mat" : ""].filter(Boolean).join(" + ") : ""].filter(Boolean).join(" · ")}</small>
-                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${account && !account.loggedIn ? ` — ${t("connecte-toi à ReLink")}` : c.unlock.shop > 0 ? "" : ` — ${t("avec un code ou offert par l'équipe")}`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
+                <small className="faint">{l.length ? `${t("À débloquer")} : ${l.join(", ")}${account && !account.loggedIn ? `. ${t("Connecte-toi à ReLink")}` : c.unlock.shop > 0 ? "" : ` (${t("avec un code ou offert par l'équipe")})`}` : !c.file ? t("Fichier du skin pas encore publié") : t("Gratuit")}</small>
                 <span className="row">
                   {l.length && c.unlock.shop > 0 && account?.loggedIn ? (
                     <button className="btn sm pri" disabled={!!busy || eclats < c.unlock.shop} title={eclats < c.unlock.shop ? `${t("Il te manque")} ${c.unlock.shop - eclats} ${t("éclats")}` : ""} onClick={() => buy(c)}>
