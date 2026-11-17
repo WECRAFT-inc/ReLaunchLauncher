@@ -43,9 +43,10 @@ import { knownShaderPacks } from "./launch/shaders";
 import { MediaStore, type ImageOps } from "./media/media";
 import { ModpackService } from "./modpacks/service";
 import { DiscordPresence, discordClientId } from "./discord/presence";
-import { LaunchService } from "./launch/launch";
+import { LaunchService, type LaunchTarget } from "./launch/launch";
 import { fileLogger } from "./launch/log";
 import { closeOfficialLauncher, nodeRunner, openOfficialLauncher } from "./launch/officialLauncher";
+import { decodeProcs, JAVA_PROCS_SCRIPT, OfficialGameWatch } from "./launch/gameWatch";
 import { defaultInstanceName, profileNameFor } from "./launch/profiles";
 import { cleanupLeftovers, markHealthy, notApplied, restorePrevious, startupCheck, updateLog, type UpdateEnv } from "./update/pending";
 import { startInstaller } from "./update/launchInstaller";
@@ -402,6 +403,29 @@ async function start(): Promise<void> {
     },
   });
   const launchLog = fileLogger(path.join(wecraftDataDir(env), "logs", "lancement.log"));
+  // partie démarrée / fermée (lancement direct, ou repérée quand elle passe par le launcher officiel)
+  const gameStarted = (t: LaunchTarget) => {
+    const info = gameCtx.get(gameKey(t.gameDir)) ?? { kind: "instance" as const, id: null, name: `Minecraft ${t.mc}`, mc: t.mc };
+    gameCtx.delete(gameKey(t.gameDir));
+    friendsPresence?.gameStarted(info, t.gameDir);
+    const sg = statCtx.get(gameKey(t.gameDir)) ?? { key: gameKey(t.gameDir), name: info.kind === "instance" ? `Minecraft ${t.mc}` : info.name, mc: t.mc, group: info.id ? `${info.kind}:${info.id}` : null };
+    statCtx.delete(gameKey(t.gameDir));
+    void playStats?.start(gameKey(t.gameDir), sg);
+  };
+  const gameExited = (t: LaunchTarget) => {
+    friendsPresence?.gameStopped(t.gameDir);
+    void playStats?.stop(gameKey(t.gameDir));
+  };
+  const psExe = path.win32.join(process.env["SystemRoot"] ?? process.env["windir"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const officialWatch = new OfficialGameWatch<LaunchTarget>({
+    list: async () => {
+      const r = await nodeRunner.run(psExe, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", JAVA_PROCS_SCRIPT]);
+      return r.code === 0 ? decodeProcs(r.stdout) : null;
+    },
+    onStart: gameStarted,
+    onExit: gameExited,
+    log: launchLog,
+  });
   launcher = new LaunchService({
     mcDir: minecraftDir(env),
     profile: {
@@ -413,17 +437,11 @@ async function start(): Promise<void> {
     log: launchLog,
     shaders: () => (settings ? settings.shaders() : Promise.resolve({ on: false, primary: null, secondary: null })),
     onOpened: (t) => void presence?.launching(t.profileName.replace(/^WECRAFT - /, ""), t.mc, t.loader),
-    onGameStart: (t) => {
-      const info = gameCtx.get(gameKey(t.gameDir)) ?? { kind: "instance" as const, id: null, name: `Minecraft ${t.mc}`, mc: t.mc };
-      gameCtx.delete(gameKey(t.gameDir));
-      friendsPresence?.gameStarted(info, t.gameDir);
-      const sg = statCtx.get(gameKey(t.gameDir)) ?? { key: gameKey(t.gameDir), name: info.kind === "instance" ? `Minecraft ${t.mc}` : info.name, mc: t.mc, group: info.id ? `${info.kind}:${info.id}` : null };
-      statCtx.delete(gameKey(t.gameDir));
-      void playStats?.start(gameKey(t.gameDir), sg);
-    },
-    onGameExit: (t) => {
-      friendsPresence?.gameStopped(t.gameDir);
-      void playStats?.stop(gameKey(t.gameDir));
+    onGameStart: (t) => gameStarted(t),
+    onGameExit: (t) => gameExited(t),
+    // lancement par le launcher officiel : la partie est repérée dans la liste des processus
+    onOfficialReady: (t) => {
+      if (process.platform === "win32") officialWatch.watch(t);
     },
     close: (o) => closeOfficialLauncher(o, { platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog }),
     open: () => openOfficialLauncher({ platform: process.platform, env: process.env, runner: nodeRunner, log: launchLog, shellOpen: shellOpenTarget }),

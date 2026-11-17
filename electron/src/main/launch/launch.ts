@@ -67,6 +67,8 @@ export interface LaunchDeps {
   onGameStart?: (t: LaunchTarget) => void;
   /** Jeu fermé. */
   onGameExit?: (t: LaunchTarget) => void;
+  /** Profil prêt dans le launcher officiel : la partie démarrera quand le joueur cliquera sur « Jouer ». */
+  onOfficialReady?: (t: LaunchTarget) => void;
   /** Shaders préférés (Réglages > Jeu) appliqués à l'instance avant l'ouverture. */
   shaders?: () => Promise<ShaderPrefs>;
 }
@@ -211,6 +213,7 @@ export class LaunchService {
     s.message = "Ouverture du launcher officiel...";
     s.opened = await (d.open ?? (() => openOfficialLauncher()))();
     if (s.opened) d.onOpened?.(t);
+    d.onOfficialReady?.(t); // même s'il n'a pas pu être ouvert : le joueur peut l'ouvrir lui-même
     this.deps.log?.(s.opened ? "Terminé : launcher officiel ouvert." : "Terminé : launcher officiel NON ouvert.");
     s.phase = "termine";
     s.message = s.opened
