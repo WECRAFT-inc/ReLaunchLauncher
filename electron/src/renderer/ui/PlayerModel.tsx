@@ -1,7 +1,7 @@
 /**
  * Joueur Minecraft en 3D (CSS), texturé avec son skin : tête, corps, bras, jambes, plus les calques extérieurs
  * (chapeau, veste, manches, pantalon). Chaque membre est un pavé dont les 6 faces sont découpées dans le skin.
- * Bras fins (« slim ») reconnus d'après le skin. Glisser pour le faire tourner.
+ * Bras fins (« slim ») reconnus d'après le skin. Fixe, de trois quarts ; glisser pour le faire tourner.
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 
@@ -161,7 +161,7 @@ function Cuboid({ w, h, d, s, faces, inflate = 0 }: { w: number; h: number; d: n
   );
 }
 
-/** Joueur en 3D, qui tourne doucement ; glisser pour le faire pivoter. */
+/** Joueur en 3D, fixe de trois quarts ; glisser pour le faire pivoter. */
 export function PlayerModel({ skin, model, height }: { skin: string; model?: "classic" | "slim"; height: number }) {
   const [parts, setParts] = useState<PlayerParts | null>(null);
   const [yaw, setYaw] = useState(-28);
@@ -188,7 +188,7 @@ export function PlayerModel({ skin, model, height }: { skin: string; model?: "cl
   return (
     <div className="pm-stage" style={{ width: 16 * s * 1.6, height: height * 1.08 }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} title="Glisser pour tourner" aria-hidden="true">
       <div className="pm-turn" style={{ transform: `rotateX(-6deg) rotateY(${yaw}deg)` }}>
-        <div className={`pm-model${drag.current ? "" : " idle"}`} style={{ width: 16 * s, height: 32 * s }}>
+        <div className="pm-model" style={{ width: 16 * s, height: 32 * s }}>
           {parts.parts.map((p) => (
             <span key={p.key} className={`pm-part pm-${p.key}`} style={{ left: p.x * s, top: p.y * s, width: p.w * s, height: p.h * s }}>
               <Cuboid w={p.w} h={p.h} d={p.d} s={s} faces={p.base} />

@@ -748,8 +748,6 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .pm-stage:active { cursor: grabbing; }
 .pm-turn, .pm-model, .pm-part, .pm-cub { transform-style: preserve-3d; }
 .pm-model { position: relative; }
-.pm-model.idle { animation: pmSway 7s ease-in-out infinite; }
-@keyframes pmSway { 0%, 100% { transform: rotateY(-12deg); } 50% { transform: rotateY(12deg); } }
 .pm-part, .pm-cub { position: absolute; }
 .pm-cub i { position: absolute; background-size: 100% 100%; background-repeat: no-repeat; image-rendering: pixelated; backface-visibility: hidden; }
 .pm-cub i:nth-child(3), .pm-cub i:nth-child(4) { filter: brightness(.82); }
@@ -758,7 +756,7 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .pm-rarm, .pm-larm { transform-origin: 50% 10%; animation: pmArm 3.4s ease-in-out infinite; }
 .pm-larm { animation-direction: reverse; }
 @keyframes pmArm { 0%, 100% { transform: rotateX(6deg); } 50% { transform: rotateX(-6deg); } }
-@media (prefers-reduced-motion: reduce) { .pm-model.idle, .pm-rarm, .pm-larm { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .pm-rarm, .pm-larm { animation: none; } }
 /* le hero du profil prend toute la largeur : le joueur est centré sous le bloc flottant */
 .app.pf .view > .pf-hero:first-child, .app.pf.staffon .view > .pf-hero:first-child { margin-right: 0; }
 .pf-back { margin: 0 0 8px -10px; }
