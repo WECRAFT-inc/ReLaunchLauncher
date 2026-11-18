@@ -2,7 +2,7 @@
 // events, partenaires, notifications, maintenance et politique de version. Rien n'est inventé : sans
 // réponse du service, la page le dit (et garde le dernier état connu, signalé comme ancien).
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
-import type { Friend, FriendsState, OfficialInstalled, RelinkModpack, RelinkNews, RelinkPartner, RelinkState } from "../../shared/api";
+import type { Friend, FriendsState, OfficialInstalled, RelinkModpack, RelinkNews, RelinkPartner, RelinkState, WeliveVideoView } from "../../shared/api";
 import { JobView, useJob } from "./Import";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
@@ -622,6 +622,64 @@ function LivePlayer({ s, playing, onPlay, onStop }: { s: Stream; playing: boolea
   );
 }
 
+/** Vidéos WeLive publiées depuis le site (titre, créateur, catégorie, durée), filtrables par catégorie. */
+function WeliveVideos() {
+  const [v, setV] = useState<{ items: WeliveVideoView[]; error: string | null } | null>(null);
+  const [cat, setCat] = useState("");
+  const [thumbs, setThumbs] = useState<Record<number, string>>({});
+  useEffect(() => {
+    let alive = true;
+    void window.wecraft.relink.videos().then(
+      (r) => {
+        if (!alive) return;
+        setV(r);
+        for (const x of r.items)
+          if (x.thumb)
+            void window.wecraft.relink.videoImage(x.i).then((img) => {
+              if (alive && img) setThumbs((m) => ({ ...m, [x.i]: img }));
+            });
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!v || (!v.items.length && !v.error)) return null;
+  const cats = [...new Set(v.items.map((x) => x.cat).filter(Boolean))];
+  const shown = v.items.filter((x) => !cat || x.cat === cat);
+  return (
+    <div className="sect welive">
+      <h3>{t("WeLive · vidéos recommandées")}</h3>
+      {cats.length > 1 ? (
+        <div className="tabs">
+          {["", ...cats].map((c) => (
+            <button key={c || "all"} className="chip" aria-pressed={cat === c ? "true" : "false"} onClick={() => setCat(c)}>
+              {c || t("Tout")}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {v.items.length ? (
+        <div className="lgrid">
+          {shown.map((x) => (
+            <button key={x.i} className="lcard wl-card" onClick={() => void window.wecraft.relink.openVideo(x.i)} title={`${t("Ouvrir sur")} ${x.site}`} data-a={`welive-${x.i}`}>
+              <span className="th" style={thumbs[x.i] ? { backgroundImage: `url("${thumbs[x.i]}")` } : coverOf(`wl-${x.title}`)}>
+                {x.dur ? <span className="viewers">{x.dur}</span> : null}
+                <span className="tag">{x.site}</span>
+              </span>
+              <b>{x.title}</b>
+              <small>{[x.by, x.cat].filter(Boolean).join(" · ")}</small>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="empty">{v.error ?? ""}</div>
+      )}
+    </div>
+  );
+}
+
 export function LivePage() {
   const { relink } = useApp();
   const [filter, setFilter] = useState<LiveFilter>("all");
@@ -681,10 +739,10 @@ export function LivePage() {
       <div className="vhead">
         <div>
           <div className="vtitle-row">
-            <h2>{t("Diffusion Partenaires")}</h2>
+            <h2>WeLive</h2>
             <span className={`online${liveCount ? "" : " none"}`}>{`${liveCount} ${t("live(s) en cours")}`}</span>
           </div>
-          <div className="sub">{t("Les partenaires en direct sur nos events et ailleurs")}</div>
+          <div className="sub">{t("Les partenaires en direct et les vidéos Minecraft recommandées")}</div>
         </div>
       </div>
       <RelinkStatus st={relink} what={t("Les partenaires")} />
@@ -737,6 +795,7 @@ export function LivePage() {
           </div>
         </div>
       ) : null}
+      <WeliveVideos />
       {offline.length ? (
         <div className="sect">
           <h3>{t("Hors ligne")}</h3>

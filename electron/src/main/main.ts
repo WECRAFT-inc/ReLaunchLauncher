@@ -705,6 +705,20 @@ handle(CHANNELS.relinkNotifications, async () =>
     : { items: [], error: "Indisponible." }
 );
 
+// WeLive : vidéos publiées depuis le site (titre, créateur, catégorie, durée) ; lien et miniature restent ici
+handle(CHANNELS.weliveVideos, async (force) => {
+  if (!relink) return { items: [], error: "Indisponible." };
+  const r = await relink.videos(force === true);
+  return { items: r.items.map((v, i) => ({ i, title: v.title, by: v.by, cat: v.cat, dur: v.dur, site: v.yt ? "YouTube" : /twitch/.test(v.url) ? "Twitch" : "YouTube", thumb: !!v.yt })), error: r.error };
+});
+handle(CHANNELS.weliveImage, async (i) => (relink && Number.isInteger(i) && (i as number) >= 0 && (i as number) < 60 ? relink.videoImage(i as number) : null));
+handle(CHANNELS.weliveOpen, async (i) => {
+  const url = relink && Number.isInteger(i) ? relink.videoLink(i as number) : null;
+  if (!url) return false;
+  await shell.openExternal(url);
+  return true;
+});
+
 handle(CHANNELS.relinkCardImage, async (bannerId) => {
   if (!relink || typeof bannerId !== "string") {
     return null;

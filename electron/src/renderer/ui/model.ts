@@ -221,8 +221,8 @@ export interface NavInfo {
 export const NAVINFO: Record<string, NavInfo> = {
   wecraft: { l: "WeCraft", d: "Launcher et instances", view: "wecraft" },
   relaunch: { l: "ReLaunch", d: "Events et serveurs", view: "relaunch" },
-  // WeLive : ouvre la Diffusion Partenaires (lives des partenaires)
-  welive: { l: "WeLive", d: "Diffusion Partenaires : lives des partenaires", view: "live" },
+  // WeLive (ex-« Diffusion Partenaires ») : lives des partenaires et vidéos recommandées
+  welive: { l: "WeLive", d: "Lives des partenaires et vidéos", view: "live" },
   discover: { l: "Découvrir du contenu MC", d: "Modpacks, mods, shaders…", view: "discover" },
   create: { l: "Créer un WePack", d: "Nouvelle instance", act: "create" },
   favorites: { l: "Favoris", d: "Instances favorites", view: "favorites" },

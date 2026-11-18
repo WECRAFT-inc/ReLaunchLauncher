@@ -131,7 +131,7 @@ export function useBarsModel(): { node: ReactNode; grid: [string, string, string
   );
   const utils = (): ReactNode[] => [
     drawerBtn("news", t("Nouveautés et notifications"), "bell"),
-    <button key={k("live")} className="nb" data-go="live" data-a="nav-live" data-tip={`${t("Diffusion Partenaires")} · ${livesNow} ${t("live(s) en cours")}`} aria-label={t("Diffusion Partenaires")} {...(current("live") ? { "aria-current": "page" as const } : {})}>
+    <button key={k("live")} className="nb" data-go="live" data-a="nav-live" data-tip={`WeLive · ${livesNow} ${t("live(s) en cours")}`} aria-label="WeLive" {...(current("live") ? { "aria-current": "page" as const } : {})}>
       <Ic n="live" />
     </button>,
     drawerBtn("downloads", "Download Manager", "downloads"),

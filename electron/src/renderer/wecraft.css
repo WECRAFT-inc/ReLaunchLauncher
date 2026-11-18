@@ -575,7 +575,7 @@ body.tb-off .app { height: 100vh !important; }
 .mus-key.rec { border-color: var(--acc); }
 .fr-music { color: var(--acc) !important; }
 
-/* ---- Diffusion Partenaires : lecteur intégré et vignettes (disposition du prototype) ---- */
+/* ---- WeLive (ex-Diffusion Partenaires) : lecteur intégré et vignettes (disposition du prototype) ---- */
 .live-sc { background: linear-gradient(135deg, var(--c1), var(--c2)); background-size: cover; background-position: center; }
 .live-slot { position: absolute; inset: 0; background: #000; }
 .live-h3 { font-size: 13px; font-family: var(--f-mono); font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
@@ -677,7 +677,7 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .ps-bar i { display: block; height: 100%; background: var(--acc); border-radius: inherit; }
 .ps-v { font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* titre de page avec son compteur juste à côté (Diffusion Partenaires) */
+/* titre de page avec son compteur juste à côté (WeLive (ex-Diffusion Partenaires)) */
 .vtitle-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .vtitle-row .online { padding: 4px 11px; border-radius: 99px; background: rgba(255,255,255,.06); border: 1px solid var(--line); }
 .vtitle-row .online.none::before { background: var(--ink-faint, #888); box-shadow: none; }
@@ -693,3 +693,6 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .btn.present { background: color-mix(in srgb, var(--ok, #3ddc84) 14%, transparent); border-color: color-mix(in srgb, var(--ok, #3ddc84) 45%, var(--line)); color: var(--ink); }
 .btn.present:disabled { opacity: 1; cursor: default; }
 .pj-has { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; font-weight: 800; color: var(--ok, #3ddc84); background: color-mix(in srgb, var(--ok, #3ddc84) 14%, transparent); border: 1px solid color-mix(in srgb, var(--ok, #3ddc84) 45%, var(--line)); }
+
+/* WeLive : vidéos recommandées (miniature YouTube, sinon dégradé) */
+.wl-card .th { background-image: linear-gradient(135deg, var(--c1, #2a3446), var(--c2, #10141c)); background-size: cover; background-position: center; }

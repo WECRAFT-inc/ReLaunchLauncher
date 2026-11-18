@@ -6,6 +6,9 @@ import type { ExternalLinkId, ThemeKey, WeCraftApi } from "../shared/api";
 
 const RELINK_CARD_IMAGE = "relink:card-image";
 const RELINK_CARD_LINK = "relink:card-link";
+const WELIVE_VIDEOS = "welive:videos";
+const WELIVE_IMAGE = "welive:image";
+const WELIVE_OPEN = "welive:open";
 const RELINK_PARTNER_IMAGE = "relink:partner-image";
 const RELINK_CHANNEL_IMAGE = "relink:channel-image";
 const RELINK_OPEN_CHANNEL = "relink:open-channel";
@@ -166,6 +169,15 @@ cardImage: (bid: string) =>
 
 cardLink: (id: string) =>
   ipcRenderer.invoke(RELINK_CARD_LINK, id),
+
+videos: (force?: boolean) =>
+  ipcRenderer.invoke(WELIVE_VIDEOS, force === true),
+
+videoImage: (i: number) =>
+  ipcRenderer.invoke(WELIVE_IMAGE, i),
+
+openVideo: (i: number) =>
+  ipcRenderer.invoke(WELIVE_OPEN, i),
 
 partnerImage: (id: string) =>
   ipcRenderer.invoke(RELINK_PARTNER_IMAGE, id),

@@ -435,6 +435,12 @@ export interface WeCraftApi {
 cardImage(bid: string): Promise<string | null>;
     /** Ouvre dans le navigateur le lien externe d'un encart (HTTPS seulement). */
     cardLink(id: string): Promise<boolean>;
+    /** Vidéos WeLive publiées depuis le site. */
+    videos(force?: boolean): Promise<{ items: WeliveVideoView[]; error: string | null }>;
+    /** Miniature YouTube d'une vidéo WeLive (data:), ou null. */
+    videoImage(i: number): Promise<string | null>;
+    /** Ouvre une vidéo WeLive dans le navigateur (YouTube ou Twitch). */
+    openVideo(i: number): Promise<boolean>;
     /** Aperçu (miniature) du direct d'un partenaire, en data:. */
     partnerImage(id: string): Promise<string | null>;
     /** Aperçu (miniature) d'une chaîne Twitch en direct (ami qui diffuse), en data: ; null si hors ligne. */
@@ -678,6 +684,16 @@ export interface RelinkEvent {
   allowOffline: boolean;
   /** Serveur où les comptes hors-ligne sont connectés automatiquement au lancement (« domaine[:port] »), "" sinon. */
   offlineHost: string;
+}
+/** Vidéo WeLive (le lien reste dans le processus principal ; `i` sert à l'ouvrir). */
+export interface WeliveVideoView {
+  i: number;
+  title: string;
+  by: string;
+  cat: string;
+  dur: string;
+  site: "YouTube" | "Twitch";
+  thumb: boolean;
 }
 export interface RelinkPartner {
   id: string;

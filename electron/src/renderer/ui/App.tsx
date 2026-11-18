@@ -67,7 +67,7 @@ const SECTION_NAMES: Record<View, string> = {
   settings: "Réglages",
   favorites: "Favoris",
   discover: "Découvrir",
-  live: "Diffusion Partenaires",
+  live: "WeLive",
   news: "Info & News",
   instance: "Instance",
   pins: "Instances épinglées",
@@ -1353,7 +1353,7 @@ function ViewBody({ v }: { v: View }) {
   if (v === "discover") return <Discover />;
   if (v === "relaunch") return <RelaunchEvents />;
   if (v === "news") return <NewsPage />;
-  if (v === "live" || v === "welive") return <LivePage />; // WeLive = Diffusion Partenaires
+  if (v === "live" || v === "welive") return <LivePage />; // WeLive (ex-« Diffusion Partenaires ») : lives et vidéos
   if (v === "quests") return <QuestsPage />;
   if (v === "relink" && ui.rlTab !== "shop") return <ProfilePage />;
   const s = SOON[v]!;

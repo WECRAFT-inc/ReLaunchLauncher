@@ -51,7 +51,7 @@ export const SOON: Record<string, { title: string; sub: string; text: string }> 
   relaunch: { title: "ReLaunch", sub: "Events et serveurs", text: "Les events et serveurs ReLaunch arriveront avec les comptes ReLink." },
   welive: { title: "WeLive", sub: "Contenus Minecraft francophones", text: "Les séries, lives, serveurs et créateurs recommandés arriveront dans une prochaine version." },
   relink: { title: "Compte ReLink", sub: "Profil, captures d'écran, skins et shop", text: "Les comptes ReLink ne sont pas encore disponibles." },
-  live: { title: "Diffusion Partenaires", sub: "Lives des partenaires", text: "Aucun live pour l'instant." },
+  live: { title: "WeLive", sub: "Lives des partenaires", text: "Aucun live pour l'instant." },
   news: { title: "Info & News", sub: "Actualités et annonces", text: "Aucune actualité pour l'instant." },
   discover: { title: "Découvrir", sub: "Modpacks, mods, shaders et serveurs", text: "Le catalogue (Modrinth) arrivera dans une prochaine version." },
 };

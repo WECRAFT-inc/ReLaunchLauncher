@@ -208,6 +208,36 @@ export function decodeSkin(v: unknown): RelinkSkin | null {
     file: decodeAsset(o["file"] ?? o["asset"]),
   };
 }
+/** Vidéo WeLive du site : titre et lien YouTube / Twitch obligatoires. */
+export interface WeliveVideo {
+  title: string;
+  url: string;
+  by: string;
+  cat: string;
+  dur: string;
+  /** Identifiant YouTube (miniature), ou "". */
+  yt: string;
+}
+const VIDEO_HOSTS = new Set(["www.youtube.com", "youtube.com", "m.youtube.com", "youtu.be", "www.twitch.tv", "twitch.tv"]);
+const YT_THUMB_HOSTS: ReadonlySet<string> = new Set(["i.ytimg.com"]);
+/** Identifiant d'une vidéo YouTube (watch?v=, youtu.be/, shorts/, live/, embed/), ou "". */
+export function youtubeId(u: URL): string {
+  const ok = (s: string | null | undefined) => (s && /^[A-Za-z0-9_-]{11}$/.test(s) ? s : "");
+  if (u.hostname === "youtu.be") return ok(u.pathname.split("/")[1]);
+  if (u.pathname === "/watch") return ok(u.searchParams.get("v"));
+  const m = /^\/(?:shorts|live|embed)\/([^/?#]+)/.exec(u.pathname);
+  return ok(m?.[1]);
+}
+export function decodeVideo(v: unknown): WeliveVideo | null {
+  const o = obj(v);
+  const title = pick(o, ["t", "title"], 160);
+  const href = safeExternalUrl(str(o["url"], 500));
+  if (!title || !href) return null;
+  const u = new URL(href);
+  if (!VIDEO_HOSTS.has(u.hostname) || u.port) return null;
+  return { title, url: u.href, by: pick(o, ["by"], 60), cat: pick(o, ["cat"], 30), dur: (str(o["dur"], 10).match(/^\d{1,3}(?::\d{2}){1,2}$/) ?? [""])[0]!, yt: youtubeId(u) };
+}
+
 export function decodeNotification(v: unknown): RelinkNotification | null {
   const o = obj(v);
   const i = id(o["id"]);
@@ -436,6 +466,46 @@ export class RelinkClient {
       if (!res.ok) return null;
       const type = (res.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
       if (!/^image\/(png|jpe?g|webp)$/.test(type)) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > 1024 * 1024) return null;
+      return `data:${type};base64,${buf.toString("base64")}`;
+    } catch {
+      return null;
+    }
+  }
+
+  // ------------------------------------------------------------ vidéos WeLive (contenu du site, /site/content)
+  private videoCache: { at: number; items: WeliveVideo[] } | null = null;
+
+  /** Vidéos WeLive publiées depuis le site (mode édition) ; relevées au plus toutes les 5 minutes. */
+  async videos(force = false): Promise<{ items: WeliveVideo[]; error: string | null }> {
+    if (!force && this.videoCache && this.now() - this.videoCache.at < 5 * 60_000) return { items: this.videoCache.items, error: null };
+    try {
+      const raw = obj(await fetchJson(`${WORKER_URL}/site/content`, MAX_JSON, {}, this.opts()));
+      const items = list(obj(raw["data"])["videos"], decodeVideo, 60);
+      this.videoCache = { at: this.now(), items };
+      return { items, error: null };
+    } catch (e) {
+      return { items: this.videoCache?.items ?? [], error: explainWorkerError(e) };
+    }
+  }
+
+  /** Lien d'une vidéo WeLive déjà relevée (YouTube ou Twitch seulement). */
+  videoLink(i: number): string | null {
+    return this.videoCache?.items[i]?.url ?? null;
+  }
+
+  /** Miniature YouTube d'une vidéo WeLive (i.ytimg.com seulement), en data:. */
+  async videoImage(i: number): Promise<string | null> {
+    const v = this.videoCache?.items[i];
+    if (!v?.yt) return null;
+    try {
+      const url = checkUrl(`https://i.ytimg.com/vi/${v.yt}/hqdefault.jpg`, YT_THUMB_HOSTS).href;
+      const f = this.d.net?.fetch as unknown as typeof fetch | undefined;
+      const res = await (f ?? fetch)(url, { redirect: "error", signal: AbortSignal.timeout(10000), headers: { "User-Agent": this.d.userAgent, Accept: "image/*" } });
+      if (!res.ok) return null;
+      const type = (res.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
+      if (!/^image\/(jpe?g|webp|png)$/.test(type)) return null;
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length > 1024 * 1024) return null;
       return `data:${type};base64,${buf.toString("base64")}`;
