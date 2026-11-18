@@ -575,6 +575,15 @@ function useAvatar(s: Stream, want: boolean): string | null {
   }, [s.channel, want]);
   return img;
 }
+/** Image d'une carte « Hors ligne » : logo (avatar Twitch) de la chaîne sur un fond flouté, sinon dégradé. */
+function OfflineCover({ s }: { s: Stream }) {
+  const logo = useAvatar(s, true);
+  return (
+    <div className={`cover live-cover${logo ? " has-logo" : ""}`} style={logo ? ({ ...coverOf(s.key), "--logo": `url("${logo}")` } as CSSProperties) : coverOf(s.key)}>
+      {logo ? <img className="sc-logo" src={logo} alt="" /> : null}
+    </div>
+  );
+}
 function Sc({ s }: { s: Stream }) {
   const img = useThumb(s);
   const logo = useAvatar(s, !img);
@@ -824,7 +833,7 @@ export function LivePage() {
           <div className="favgrid">
             {offline.map((x) => (
               <div key={x.key} className="favc" data-a={`offline-${x.key}`}>
-                <div className="cover live-cover" style={coverOf(x.key)}></div>
+                <OfflineCover s={x} />
                 <span className="row">
                   <b>{x.name}</b>
                   {x.featured ? <span className="tag">{t("À la une")}</span> : null}
