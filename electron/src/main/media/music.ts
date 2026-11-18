@@ -25,6 +25,8 @@ $rlIn = New-Object IO.StreamReader([Console]::OpenStandardInput(), $rlUtf8)
 $rlOut = New-Object IO.StreamWriter([Console]::OpenStandardOutput(), $rlUtf8)
 $rlOut.AutoFlush = $true
 function Out-Line($o) { $rlOut.WriteLine(($o | ConvertTo-Json -Compress -Depth 5)) }
+# objets WinRT : PowerShell 5.1 ne voit pas toujours Dispose (System.__ComObject) ; fermeture sans risque
+function Close-Obj($o) { if ($null -eq $o) { return }; try { $o.Dispose() } catch { try { [void]$o.Close() } catch { } } }
 try {
   Add-Type -AssemblyName System.Runtime.WindowsRuntime
   $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
@@ -67,23 +69,23 @@ while ($true) {
       $p = Wait-Op ($s.TryGetMediaPropertiesAsync()) $propType
       if (-not $p -or -not $p.Thumbnail) { Out-Line @{ id = $rid; ok = $false; error = 'none' }; continue }
       $st = Wait-Op ($p.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
-      if ($st.Size -gt 2097152) { $st.Dispose(); throw 'too-big' }
+      if ($st.Size -gt 2097152) { Close-Obj $st; throw 'too-big' }
       $n = [uint32]$st.Size
-      if ($n -eq 0) { $st.Dispose(); Out-Line @{ id = $rid; ok = $false; error = 'empty' }; continue }
+      if ($n -eq 0) { Close-Obj $st; Out-Line @{ id = $rid; ok = $false; error = 'empty' }; continue }
       $bytes = $null
       try {
         $rd = New-Object Windows.Storage.Streams.DataReader($st.GetInputStreamAt(0))
         $got = Wait-Op ($rd.LoadAsync($n)) ([uint32])
         $bytes = New-Object byte[] $got
         $rd.ReadBytes($bytes)
-        $rd.Dispose()
+        Close-Obj $rd
       } catch {
         $net = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($st)
         $ms = New-Object IO.MemoryStream; $net.CopyTo($ms); $net.Dispose()
         $bytes = $ms.ToArray()
       }
       $ctype = [string]$st.ContentType
-      $st.Dispose()
+      Close-Obj $st
       Out-Line @{ id = $rid; ok = $true; type = $ctype; data = [Convert]::ToBase64String($bytes) }
     } elseif (@('play', 'pause', 'toggle', 'next', 'prev') -contains $cmd) {
       $s = Find-Session $arg; if (-not $s) { throw 'session' }
