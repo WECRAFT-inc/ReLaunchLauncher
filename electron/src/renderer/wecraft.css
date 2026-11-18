@@ -764,4 +764,5 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 /* WeLive : chaîne hors ligne → son logo (avatar Twitch), sur un fond flouté du même logo */
 .sc.has-logo, .live-cover.has-logo { position: relative; overflow: hidden; display: grid; place-items: center; }
 .sc.has-logo::before, .live-cover.has-logo::before { content: ""; position: absolute; inset: -20%; background: var(--logo) center / cover; filter: blur(22px) saturate(1.2) brightness(.6); }
-.sc-logo { position: relative; height: 62%; aspect-ratio: 1; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255, 255, 255, .85); box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }
+/* logo centré, à la taille de l'encadré (placé en absolu : la hauteur en % suit l'encadré même sans hauteur fixe) */
+.sc-logo { position: absolute; top: 50%; left: 50%; height: 64%; max-width: 80%; width: auto; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; object-fit: cover; border: 2px solid rgba(255, 255, 255, .85); box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }

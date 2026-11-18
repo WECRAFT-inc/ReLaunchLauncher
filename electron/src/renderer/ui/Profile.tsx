@@ -414,9 +414,9 @@ export function ProfilePage() {
           </div>
         </div>
         <ul className="pf-menu" aria-label={t("Menu du compte")}>
-          {menu.map((m, i) => (
+          {menu.map((m) => (
             <li key={m.l}>
-              <button className={i === 0 ? "on" : ""} data-go={m.go} {...(m.rl ? { "data-rl": m.rl } : {})} {...(m.set ? { "data-set": m.set } : {})} data-a={`pf-${m.go}${m.rl ? `-${m.rl}` : ""}`}>
+              <button data-go={m.go} {...(m.rl ? { "data-rl": m.rl } : {})} {...(m.set ? { "data-set": m.set } : {})} data-a={`pf-${m.go}${m.rl ? `-${m.rl}` : ""}`}>
                 {m.l}
               </button>
             </li>
