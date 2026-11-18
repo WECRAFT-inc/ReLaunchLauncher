@@ -93,7 +93,7 @@ const EN: Record<string, string> = {
   "Configurations prêtes": "Presets",
   "Contenus MC francophones": "French-speaking MC content",
   "Lives des partenaires et vidéos": "Partner streams and videos",
-  "Les partenaires en direct et les vidéos Minecraft recommandées": "Partners live and recommended Minecraft videos",
+  "Les partenaires et les ReLauncheurs en direct": "Partners and ReLaunchers live",
   "Copier ce qui est affiché": "Copy what is shown",
   "Créer un WePack": "Create a WePack",
   "Depuis Prism, CurseForge ou un autre launcher": "From Prism, CurseForge or another launcher",

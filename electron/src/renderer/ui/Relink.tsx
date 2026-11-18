@@ -742,7 +742,7 @@ export function LivePage() {
             <h2>WeLive</h2>
             <span className={`online${liveCount ? "" : " none"}`}>{`${liveCount} ${t("live(s) en cours")}`}</span>
           </div>
-          <div className="sub">{t("Les partenaires en direct et les vidéos Minecraft recommandées")}</div>
+          <div className="sub">{t("Les partenaires et les ReLauncheurs en direct")}</div>
         </div>
       </div>
       <RelinkStatus st={relink} what={t("Les partenaires")} />
