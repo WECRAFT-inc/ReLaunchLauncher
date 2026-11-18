@@ -1,11 +1,12 @@
 // Profil (bouton du compte dans la barre) : vraie tête du joueur, série de jours de jeu (ReLink) et
 // statistiques de jeu (gardées sur ce PC). La série vient du serveur ; les stats sont comptées localement.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { PlayStatsView, Streak } from "../../shared/api";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { t } from "./i18n";
 import { headFaces, RealHead, usePlayerHead, usePlayerSkin } from "./SkinHead";
+import { PlayerModel } from "./PlayerModel";
 import { Head } from "./Bars";
 import { SKINS } from "./model";
 import { useQuests } from "./Quests";
@@ -125,6 +126,18 @@ async function streakImage(s: Streak, name: string, skin: string | null, st: Pla
   return cv.toDataURL("image/png");
 }
 
+/** Copie l'image « mes stats » (série + statistiques de jeu) dans le presse-papiers. */
+async function shareStats(s: Streak, name: string, skin: string | null, toast: (m: string) => void): Promise<void> {
+  try {
+    const st = await window.wecraft.account.playStats().catch(() => null);
+    const png = await streakImage(s, name, skin, st);
+    const ok = await window.wecraft.account.shareImage(png, `🔥 ${s.current} ${s.current > 1 ? t("jours d'affilée") : t("jour d'affilée")} ${t("sur ReLaunch")} (${t("record")} : ${s.longest})`);
+    toast(ok ? t("Image de tes stats copiée : colle-la sur Discord ou ailleurs.") : t("Copie impossible."));
+  } catch {
+    toast(t("Copie impossible."));
+  }
+}
+
 /** Série de jours de jeu : progression du jour, gels, paliers, partage. */
 export function StreakCard({ s, name, onChanged }: { s: Streak; name: string; onChanged?: () => void }) {
   const { toast } = useApp();
@@ -140,12 +153,7 @@ export function StreakCard({ s, name, onChanged }: { s: Streak; name: string; on
   const copy = async () => {
     setBusy(true);
     try {
-      const st = await window.wecraft.account.playStats().catch(() => null);
-      const png = await streakImage(s, name, skin, st);
-      const ok = await window.wecraft.account.shareImage(png, `🔥 ${s.current} ${s.current > 1 ? t("jours d'affilée") : t("jour d'affilée")} ${t("sur ReLaunch")} (${t("record")} : ${s.longest})`);
-      toast(ok ? t("Image de tes stats copiée : colle-la sur Discord ou ailleurs.") : t("Copie impossible."));
-    } catch {
-      toast(t("Copie impossible."));
+      await shareStats(s, name, skin, toast);
     } finally {
       setBusy(false);
     }
@@ -293,6 +301,80 @@ function StatsCard({ st }: { st: PlayStatsView }) {
   );
 }
 
+/** Petite carte du bas : série du jour, modpack préféré, meilleur ami de jeu (défile toute seule). */
+function HeroCard({ s, st, name, loggedIn }: { s: Streak | null; st: PlayStatsView | null; name: string; loggedIn: boolean }) {
+  const { toast } = useApp();
+  const skin = usePlayerSkin();
+  const [i, setI] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const slides: { k: string; title: string; body: string; extra?: ReactNode; action?: ReactNode }[] = [];
+  if (s) {
+    const req = s.requiredSeconds || 900;
+    const today = Math.min(req, s.todaySeconds ?? 0);
+    const pct = s.validatedToday ? 100 : Math.round((today / req) * 100);
+    slides.push({
+      k: "streak",
+      title: `🔥 ${s.current} ${s.current > 1 ? t("jours d'affilée") : t("jour d'affilée")}`,
+      body: s.validatedToday ? t("Journée validée : reviens demain pour continuer.") : `${t("Aujourd'hui")} : ${fmtDur(today)} / ${fmtDur(req)}`,
+      extra: (
+        <span className="st-bar">
+          <i style={{ width: `${pct}%` }}></i>
+        </span>
+      ),
+      action: (
+        <button
+          className="btn sm"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void shareStats(s, name, skin, toast).finally(() => setBusy(false));
+          }}
+        >
+          {busy ? t("Copie…") : t("Partager mes stats")}
+        </button>
+      ),
+    });
+  } else if (!loggedIn)
+    slides.push({
+      k: "login",
+      title: t("Série de jours"),
+      body: t("Connecte-toi à ReLink pour ta série de jours de jeu et tes récompenses."),
+      action: (
+        <button className="btn sm" data-go="settings" data-set="compte">
+          {t("Se connecter")}
+        </button>
+      ),
+    });
+  const top = st?.top[0];
+  if (top) slides.push({ k: "pack", title: top.name, body: `${t("Modpack le plus joué")} · ${fmtDur(top.seconds)} · ${top.launches} ${top.launches > 1 ? t("lancements") : t("lancement")}` });
+  const fr = st?.friends[0];
+  if (fr) slides.push({ k: "friend", title: fr.name, body: `${t("Ami avec qui tu as le plus joué")} · ${fmtDur(fr.seconds)}` });
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const iv = window.setInterval(() => setI((x) => x + 1), 7000);
+    return () => window.clearInterval(iv);
+  }, [slides.length]);
+  if (!slides.length) return null;
+  const cur = slides[i % slides.length]!;
+  return (
+    <div className="pf-card" key={cur.k}>
+      <b>{cur.title}</b>
+      <small>{cur.body}</small>
+      {cur.extra}
+      <span className="pf-card-foot">
+        {cur.action ?? <span></span>}
+        {slides.length > 1 ? (
+          <span className="pf-dots" role="tablist">
+            {slides.map((x, j) => (
+              <button key={x.k} role="tab" aria-selected={j === i % slides.length ? "true" : "false"} aria-label={x.title} onClick={() => setI(j)}></button>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
 export function ProfilePage() {
   const { account, ui } = useApp();
   const faces = usePlayerHead();
@@ -310,37 +392,58 @@ export function ProfilePage() {
     };
   }, []);
   const name = u?.pseudo ?? u?.minecraftName ?? t("Joueur");
+  const skin = usePlayerSkin();
+  const model = account?.minecraftSkin?.model;
+  const streak = q?.ok ? q.streak : null;
+  // les « boutons » du menu sont les stats ; un clic descend au détail
+  const lines: [string, string][] = [];
+  if (st) lines.push([fmtDur(st.totalSeconds), t("de jeu")]);
+  if (streak) lines.push([`🔥 ${streak.current}`, streak.current > 1 ? t("jours d'affilée") : t("jour d'affilée")]);
+  if (st) {
+    lines.push([String(st.daysPlayed), st.daysPlayed > 1 ? t("jours joués") : t("jour joué")]);
+    lines.push([String(st.launches), st.launches > 1 ? t("lancements") : t("lancement")]);
+    lines.push([st.sessions ? fmtDur(st.totalSeconds / st.sessions) : "—", t("par session")]);
+    lines.push([fmtDur(st.longestSeconds), t("de record")]);
+  }
+  const toDetails = () => document.getElementById("pf-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
   return (
     <>
-      <div className="vhead pf-head">
-        <span className="pf-av" aria-hidden="true">
-          {faces ? <RealHead faces={faces} size={64} /> : <Head skin={SKINS[ui.skin] ?? SKINS[0]!} size={64} />}
-        </span>
-        <div>
+      <section className="pf-hero">
+        <div className="pf-id">
           <h2>{name}</h2>
           <div className="sub">
             {u
-              ? [u.minecraftName && u.minecraftVerified ? `${t("Minecraft")} : ${u.minecraftName}` : "", `${u.eclats} ${t("éclats")}`, q?.streak && q.streak.current > 0 ? `🔥 ${q.streak.current}` : ""].filter(Boolean).join(" · ")
-              : t("Connecte-toi à ReLink pour ta série de jours de jeu et tes récompenses.")}
+              ? [u.minecraftName && u.minecraftVerified ? `${t("Minecraft")} : ${u.minecraftName}` : "", `${u.eclats} ${t("éclats")}`].filter(Boolean).join(" · ")
+              : t("Compte ReLink non connecté")}
           </div>
         </div>
-        {u ? null : (
-          <button className="btn sm pri" data-go="settings" data-set="compte">
-            {t("Se connecter")}
-          </button>
-        )}
-      </div>
-      {u ? (
-        <div className="sect">
-          <h3>{t("Série de jours")}</h3>
-          {q?.ok && q.streak ? <StreakCard s={q.streak} name={u.minecraftName ?? u.pseudo} onChanged={reload} /> : <div className="empty">{q && !q.ok ? (q.error ?? t("Série de jours indisponible pour le moment.")) : t("Chargement…")}</div>}
+        <ul className="pf-menu" aria-label={t("Statistiques de jeu")}>
+          {lines.map(([v, l], i) => (
+            <li key={l}>
+              <button className={i === 0 ? "on" : ""} onClick={toDetails}>
+                <b>{v}</b> {l}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="pf-figure">
+          {skin ? <PlayerModel skin={skin} {...(model ? { model } : {})} height={380} /> : faces ? <RealHead faces={faces} size={150} /> : <Head skin={SKINS[ui.skin] ?? SKINS[0]!} size={150} />}
         </div>
-      ) : null}
-      <div className="sect">
-        <h3>
-          <Ic n="chart" /> {t("Statistiques de jeu")}
-        </h3>
-        {st ? <StatsCard st={st} /> : <div className="empty">{t("Chargement…")}</div>}
+        <HeroCard s={streak ?? null} st={st} name={u?.minecraftName ?? u?.pseudo ?? name} loggedIn={!!u} />
+      </section>
+      <div id="pf-details">
+        {u ? (
+          <div className="sect">
+            <h3>{t("Série de jours")}</h3>
+            {q?.ok && q.streak ? <StreakCard s={q.streak} name={u.minecraftName ?? u.pseudo} onChanged={reload} /> : <div className="empty">{q && !q.ok ? (q.error ?? t("Série de jours indisponible pour le moment.")) : t("Chargement…")}</div>}
+          </div>
+        ) : null}
+        <div className="sect">
+          <h3>
+            <Ic n="chart" /> {t("Statistiques de jeu")}
+          </h3>
+          {st ? <StatsCard st={st} /> : <div className="empty">{t("Chargement…")}</div>}
+        </div>
       </div>
     </>
   );
