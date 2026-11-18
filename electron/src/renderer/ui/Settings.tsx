@@ -760,10 +760,11 @@ export function Settings() {
                 ["wecraft", "WeCraft"],
                 ["relaunch", "ReLaunch"],
                 ["welive", "WeLive"],
+                ["last", "Dernière page visitée"],
               ] as const
             ).map((x) => (
               <option key={x[0]} value={x[0]}>
-                {x[1]}
+                {t(x[1])}
               </option>
             ))}
           </select>

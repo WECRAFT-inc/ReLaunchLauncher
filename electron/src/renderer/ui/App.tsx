@@ -108,12 +108,16 @@ const DELETE_ERRORS: Record<Extract<DeleteResult, { ok: false }>["reason"], stri
 };
 const isTheme = (v: unknown): v is ThemeKey => typeof v === "string" && (THEMES as readonly string[]).includes(v);
 
+/** Page d'ouverture : celle choisie dans Réglages (« Ouvrir l'appli sur »), ou la dernière visitée si c'est le choix. */
 function startView(pref: Pref): View {
   let vw = pref.start || "home";
-  try {
-    vw = localStorage.getItem("proto-view2") || vw;
-  } catch {
-    // stockage indisponible
+  if (vw === "last") {
+    vw = "home";
+    try {
+      vw = localStorage.getItem("proto-view2") || vw;
+    } catch {
+      // stockage indisponible
+    }
   }
   if (vw === "instance" || vw === "addcontent") vw = "wecraft"; // la page d'une instance ne se rouvre pas au démarrage
   return (VIEWS as readonly string[]).includes(vw) ? (vw as View) : "home";
