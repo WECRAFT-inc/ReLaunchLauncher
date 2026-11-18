@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { test } from "node:test";
 import { cleanMusicSettings, isMusicAccelerator } from "../src/main/config";
-import { appName, BRIDGE_SCRIPT, decodeSessions, MusicBridge, pickSession, type BridgeChild } from "../src/main/media/music";
+import { appName, BRIDGE_SCRIPT, decodeSessions, MusicBridge, pickSession, type BridgeChild, thumbUrl } from "../src/main/media/music";
 import { FriendsPresence } from "../src/main/relink/friendsPresence";
 
 /** Faux PowerShell : répond aux commandes comme le script du pont. */
@@ -178,4 +178,15 @@ test("présence : la musique n'est envoyée que si elle est fournie (partage act
 test("script du pont : commandes attendues, aucun accès réseau ni fichier", () => {
   for (const c of ["'state'", "'thumb'", "TryTogglePlayPauseAsync", "TrySkipNextAsync", "IAsyncOperation`1"]) assert.ok(BRIDGE_SCRIPT.includes(c), c);
   assert.doesNotMatch(BRIDGE_SCRIPT, /Invoke-WebRequest|Invoke-Expression|\biex\b|Set-Content|Out-File|Start-Process/i);
+});
+
+test("pochette : type vérifié, reconnu d'après les octets si absent, rien d'autre", () => {
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70]).toString("base64");
+  const png = Buffer.from("\x89PNG\r\n\x1a\n0000", "latin1").toString("base64");
+  assert.equal(thumbUrl({ ok: true, type: "image/jpeg", data: jpg }), `data:image/jpeg;base64,${jpg}`);
+  assert.equal(thumbUrl({ ok: true, type: "", data: jpg }), `data:image/jpeg;base64,${jpg}`);
+  assert.equal(thumbUrl({ ok: true, type: "application/octet-stream", data: png }), `data:image/png;base64,${png}`);
+  assert.equal(thumbUrl({ ok: true, type: "text/html", data: Buffer.from("<html>").toString("base64") }), null);
+  assert.equal(thumbUrl({ ok: true, type: "image/png", data: "pas du base64 !" }), null);
+  assert.equal(thumbUrl({ ok: false }), null);
 });

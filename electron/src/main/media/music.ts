@@ -29,6 +29,7 @@ try {
   Add-Type -AssemblyName System.Runtime.WindowsRuntime
   $null = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType = WindowsRuntime]
   $null = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType = WindowsRuntime]
+  $null = [Windows.Storage.Streams.DataReader, Windows.Storage.Streams, ContentType = WindowsRuntime]
   $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation${"`"}1' } | Select-Object -First 1
   if (-not $asTask) { throw 'AsTask introuvable' }
   function Wait-Op($op, [Type]$type) { $t = $asTask.MakeGenericMethod($type).Invoke($null, @($op)); [void]$t.Wait(5000); return $t.Result }
@@ -67,9 +68,23 @@ while ($true) {
       if (-not $p -or -not $p.Thumbnail) { Out-Line @{ id = $rid; ok = $false; error = 'none' }; continue }
       $st = Wait-Op ($p.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
       if ($st.Size -gt 2097152) { $st.Dispose(); throw 'too-big' }
-      $net = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($st)
-      $ms = New-Object IO.MemoryStream; $net.CopyTo($ms); $net.Dispose()
-      Out-Line @{ id = $rid; ok = $true; type = [string]$st.ContentType; data = [Convert]::ToBase64String($ms.ToArray()) }
+      $n = [uint32]$st.Size
+      if ($n -eq 0) { $st.Dispose(); Out-Line @{ id = $rid; ok = $false; error = 'empty' }; continue }
+      $bytes = $null
+      try {
+        $rd = New-Object Windows.Storage.Streams.DataReader($st.GetInputStreamAt(0))
+        $got = Wait-Op ($rd.LoadAsync($n)) ([uint32])
+        $bytes = New-Object byte[] $got
+        $rd.ReadBytes($bytes)
+        $rd.Dispose()
+      } catch {
+        $net = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($st)
+        $ms = New-Object IO.MemoryStream; $net.CopyTo($ms); $net.Dispose()
+        $bytes = $ms.ToArray()
+      }
+      $ctype = [string]$st.ContentType
+      $st.Dispose()
+      Out-Line @{ id = $rid; ok = $true; type = $ctype; data = [Convert]::ToBase64String($bytes) }
     } elseif (@('play', 'pause', 'toggle', 'next', 'prev') -contains $cmd) {
       $s = Find-Session $arg; if (-not $s) { throw 'session' }
       if ($cmd -eq 'play') { $op = $s.TryPlayAsync() } elseif ($cmd -eq 'pause') { $op = $s.TryPauseAsync() } elseif ($cmd -eq 'toggle') { $op = $s.TryTogglePlayPauseAsync() } elseif ($cmd -eq 'next') { $op = $s.TrySkipNextAsync() } else { $op = $s.TrySkipPreviousAsync() }
@@ -182,6 +197,24 @@ export const MUSIC_APPS: readonly { id: string; name: string; scheme: string | n
 
 const ACTIONS: readonly MusicAction[] = ["play", "pause", "toggle", "next", "prev"];
 export const isMusicAction = (v: unknown): v is MusicAction => typeof v === "string" && (ACTIONS as readonly string[]).includes(v);
+
+/** Pochette renvoyée par le pont, vérifiée (type d'image, taille, base64), en data:. */
+export function thumbUrl(r: Record<string, unknown> | null): string | null {
+  if (!r || r["ok"] !== true) return null;
+  let type = typeof r["type"] === "string" ? r["type"].split(";")[0]!.trim().toLowerCase() : "";
+  const data = typeof r["data"] === "string" ? r["data"] : "";
+  if (!data || data.length > 3_000_000 || !/^[A-Za-z0-9+/=]+$/.test(data)) return null;
+  if (!/^image\/(png|jpe?g|webp|bmp)$/.test(type)) {
+    // type absent ou générique (« application/octet-stream ») : reconnu d'après les premiers octets
+    const head = Buffer.from(data.slice(0, 24), "base64");
+    if (head[0] === 0xff && head[1] === 0xd8) type = "image/jpeg";
+    else if (head.subarray(0, 4).toString("latin1") === "\x89PNG") type = "image/png";
+    else if (head.subarray(0, 4).toString("latin1") === "RIFF" && head.subarray(8, 12).toString("latin1") === "WEBP") type = "image/webp";
+    else if (head.subarray(0, 2).toString("latin1") === "BM") type = "image/bmp";
+    else return null;
+  }
+  return `data:${type};base64,${data}`;
+}
 
 export class MusicBridge {
   private child: BridgeChild | null = null;
@@ -360,19 +393,31 @@ export class MusicBridge {
     });
   }
 
+  /** Pochette (data:) : gardée par morceau ; un échec est retenté après quelques secondes (Spotify la fournit parfois en retard). */
+  private thumbFail = new Map<string, number>();
   private async thumbFor(s: MusicSession): Promise<string | null> {
     if (!s.hasThumb) return null;
     const key = `${s.id}\n${s.title}\n${s.artist}\n${s.album}`;
-    if (this.thumbs.has(key)) return this.thumbs.get(key) ?? null;
+    const ok = this.thumbs.get(key);
+    if (ok) return ok;
+    const failed = this.thumbFail.get(key);
+    if (failed && Date.now() - failed < 6000) return null;
     const r = await this.call("thumb", s.id);
-    let url: string | null = null;
-    const type = r && typeof r["type"] === "string" ? r["type"].split(";")[0]!.trim().toLowerCase() : "";
-    const data = r && typeof r["data"] === "string" ? r["data"] : "";
-    if (r?.["ok"] === true && /^image\/(png|jpe?g|webp|bmp)$/.test(type) && data && data.length < 3_000_000 && /^[A-Za-z0-9+/=]+$/.test(data)) url = `data:${type};base64,${data}`;
+    const url = thumbUrl(r);
     if (this.thumbs.size > 16) this.thumbs.clear();
-    this.thumbs.set(key, url);
+    if (this.thumbFail.size > 32) this.thumbFail.clear();
+    if (url) {
+      this.thumbs.set(key, url);
+      this.thumbFail.delete(key);
+    } else {
+      this.thumbFail.set(key, Date.now());
+      const why = r ? String(r["error"] ?? r["type"] ?? "format") : "pas de réponse";
+      if (why !== this.lastThumbErr) this.d.log?.(`Musique : pochette indisponible (${why}).`);
+      this.lastThumbErr = why;
+    }
     return url;
   }
+  private lastThumbErr = "";
 
   /** État courant : sessions ouvertes et morceau de la session pilotée (avec sa pochette). */
   async state(): Promise<MusicState> {
