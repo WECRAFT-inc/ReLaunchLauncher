@@ -278,8 +278,10 @@ export class RelinkAccount {
       const seen = typeof o["lastSeen"] === "string" ? Date.parse(o["lastSeen"]) : NaN;
       const chRaw = str(o["channel"] ?? o["ch"], 40);
       const sk = obj(o["streak"]);
-      const skN = typeof sk["current"] === "number" && Number.isFinite(sk["current"]) ? Math.max(0, Math.min(10000, Math.floor(sk["current"]))) : 0;
-      friends.push({ ...b, ...(/^[A-Za-z0-9_]{1,40}$/.test(chRaw) ? { channel: chRaw } : {}), ...(skN > 0 ? { streak: { current: skN, validatedToday: sk["validatedToday"] === true } } : {}), minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
+      const skX = streakExtra({ ...sk, todaySeconds: 0 }, (v, max = 1e6) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(max, Math.floor(v))) : 0));
+      const skN = skX.status === "broken" ? 0 : typeof sk["current"] === "number" && Number.isFinite(sk["current"]) ? Math.max(0, Math.min(10000, Math.floor(sk["current"]))) : 0;
+      const skToday = sk["validatedToday"] === true || skX.status === "validated";
+      friends.push({ ...b, ...(/^[A-Za-z0-9_]{1,40}$/.test(chRaw) ? { channel: chRaw } : {}), ...(skN > 0 ? { streak: { current: skN, validatedToday: skToday } } : {}), minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
     }
     return { friends, incoming: list(r["incoming"]).map(brief).filter((x): x is FriendBrief => !!x), outgoing: list(r["outgoing"]).map(brief).filter((x): x is FriendBrief => !!x) };
   }
@@ -507,6 +509,7 @@ export class RelinkAccount {
             ...streakExtra(s, num),
           }
         : null;
+      if (streak && streak.status === "broken") streak.current = 0; // série perdue : repartira à 1 au prochain jour validé
       if (r["reward"]) await this.refresh().catch(() => undefined); // récompense versée à l'instant : solde d'Éclats à jour
       return { ok: true, error: null, quests, streak };
     } catch (e) {
@@ -521,21 +524,41 @@ export class RelinkAccount {
   }
 }
 
-/** Champs de la série ajoutés par le module « série » du Worker (absents avec un ancien Worker). */
-function streakExtra(s: Obj, num: (v: unknown, max?: number) => number): Partial<NonNullable<QuestsState["streak"]>> {
-  if (typeof s["status"] !== "string") return {};
-  const st = s["status"];
+/** Jour (AAAA-MM-JJ) à l'heure de Paris, comme le Worker. */
+export function parisDay(ms: number): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+}
+const dayNum = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 86400000;
+
+/**
+ * Champs détaillés de la série. Le Worker peut ne pas donner l'état (« status ») : il est alors déduit ici du
+ * dernier jour validé et des gels (même règle que le Worker). Sans aucun champ détaillé (très ancien Worker) : rien.
+ */
+export function streakExtra(s: Obj, num: (v: unknown, max?: number) => number, now = Date.now()): Partial<NonNullable<QuestsState["streak"]>> {
+  if (typeof s["status"] !== "string" && typeof s["todaySeconds"] !== "number") return {};
+  let st = s["status"];
+  const freezes = num(s["freezes"], 20);
+  let missed = num(s["missedDays"], 10000);
+  if (typeof st !== "string") {
+    const lv = typeof s["lastValidDate"] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s["lastValidDate"]) ? s["lastValidDate"] : null;
+    if (!lv) st = "none";
+    else {
+      const gap = dayNum(parisDay(now)) - dayNum(lv);
+      missed = Math.max(0, gap - 1);
+      st = gap <= 0 ? "validated" : missed === 0 ? "pending" : missed <= freezes ? "frozen" : "broken";
+    }
+  }
   const status = st === "validated" || st === "pending" || st === "frozen" || st === "broken" ? st : "none";
   const nm = obj(s["nextMilestone"]);
   return {
     status,
-    validatedToday: s["validatedToday"] === true,
+    validatedToday: s["validatedToday"] === true || status === "validated",
     todaySeconds: num(s["todaySeconds"], 86400),
     requiredSeconds: num(s["requiredSeconds"], 86400) || 900,
-    freezes: num(s["freezes"], 20),
-    freezeMax: num(s["freezeMax"], 20),
-    freezeEvery: num(s["freezeEvery"], 365),
-    missedDays: num(s["missedDays"], 10000),
+    freezes,
+    freezeMax: num(s["freezeMax"], 20) || 2,
+    freezeEvery: num(s["freezeEvery"], 365) || 7,
+    missedDays: missed,
     nextMilestone: s["nextMilestone"] ? { day: num(nm["day"], 10000), bonus: num(nm["bonus"], 1e6) } : null,
     share: s["share"] !== false,
   };

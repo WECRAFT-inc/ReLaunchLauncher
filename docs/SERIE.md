@@ -1,5 +1,10 @@
 # Série de jours de jeu : module du Worker `relink-auth`
 
+> **Mise à jour (18/11/2026)** : le Worker en ligne a déjà **sa propre version** de la série (routes
+> `/launcher/me/playtick` et `/launcher/me/streak`, tables `streak_freezes`, `streak_activity`…). **Ne colle pas
+> le module ci-dessous** : applique plutôt `tools/worker/SERIE-CORRECTIF.md` (2 remplacements), qui corrige la
+> validation du jour (le temps du jour ne s'additionnait pas) et l'état renvoyé au launcher.
+
 Le launcher affiche déjà la série (page Profil, page Quêtes, liste d'amis), mais c'est le Worker qui la
 compte et verse les Éclats. Sans ce module, la série reste figée (rien n'écrit la table `streaks`).
 

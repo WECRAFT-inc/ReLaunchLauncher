@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { localDay, PlayStats } from "../src/main/stats/playStats";
 import { cleanUuid, SkinHeads, skinUrlFromProfile } from "../src/main/relink/heads";
+import { parisDay, streakExtra } from "../src/main/relink/account";
 
 // chiffrement authentifié, comme safeStorage (AES-GCM) : toute retouche fait échouer le déchiffrement
 const KEY = randomBytes(32);
@@ -128,4 +129,22 @@ test("tête : skin du compte récupéré puis gardé en cache ; pas de skin → 
   const none = new SkinHeads({ fetch: (async () => new Response(null, { status: 204 })) as unknown as typeof fetch });
   assert.equal(await none.forUuid("069a79f444e94726a5befca90e38aaf5"), null);
   assert.equal(await h.forUuid("pas-un-uuid"), null);
+});
+
+test("série : état déduit quand le Worker ne le donne pas (validée, à valider, gel, perdue)", () => {
+  const num = (v: unknown, max = 1e6) => (typeof v === "number" ? Math.min(max, v) : 0);
+  const now = Date.UTC(2026, 10, 18, 11, 0, 0); // 18/11, midi à Paris
+  const day = (d: number) => parisDay(now - d * 86400000);
+  const base = { current: 5, todaySeconds: 300, requiredSeconds: 900, freezes: 1 };
+  assert.equal(streakExtra({ ...base, lastValidDate: day(0) }, num, now).status, "validated");
+  assert.equal(streakExtra({ ...base, lastValidDate: day(1) }, num, now).status, "pending");
+  assert.equal(streakExtra({ ...base, lastValidDate: day(2) }, num, now).status, "frozen");
+  assert.equal(streakExtra({ ...base, lastValidDate: day(3) }, num, now).status, "broken");
+  assert.equal(streakExtra({ ...base, lastValidDate: null }, num, now).status, "none");
+  const x = streakExtra({ ...base, lastValidDate: day(1) }, num, now);
+  assert.equal(x.todaySeconds, 300);
+  assert.equal(x.freezeMax, 2);
+  assert.equal(x.freezeEvery, 7);
+  assert.deepEqual(streakExtra({ current: 5 }, num, now), {}, "très ancien Worker : rien de plus");
+  assert.equal(streakExtra({ status: "frozen" }, num, now).status, "frozen", "état donné par le Worker : gardé");
 });
