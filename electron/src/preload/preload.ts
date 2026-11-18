@@ -77,6 +77,7 @@ const ACC_SKIN_IMG = "account:skin-image";
 const ACC_HEAD = "account:head";
 const ACC_STREAK_SHARE = "account:streak-share";
 const STATS_GET = "stats:get";
+const ACC_PLAYER_SKIN = "account:player-skin";
 const SHARE_COPY = "share:copy";
 const ACC_BUY = "account:buy-skin";
 const SKINMOD_GET = "skins:get-skin-mod";
@@ -240,6 +241,7 @@ joinServer: (id: string) =>
     headSkin: () => ipcRenderer.invoke(ACC_HEAD),
     streakShare: (share: boolean) => ipcRenderer.invoke(ACC_STREAK_SHARE, share === true),
     playStats: () => ipcRenderer.invoke(STATS_GET),
+    playerSkin: (name: string) => ipcRenderer.invoke(ACC_PLAYER_SKIN, String(name)),
     shareImage: (png: string, text: string) => ipcRenderer.invoke(SHARE_COPY, String(png), String(text)),
     buySkin: (relinkId: string) => ipcRenderer.invoke(ACC_BUY, relinkId),
     skinMod: () => ipcRenderer.invoke(SKINMOD_GET),

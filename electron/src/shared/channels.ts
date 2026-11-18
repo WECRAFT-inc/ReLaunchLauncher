@@ -37,6 +37,7 @@ export const CHANNELS = {
   accountHead: "account:head",
   accountStreakShare: "account:streak-share",
   statsGet: "stats:get",
+  accountPlayerSkin: "account:player-skin",
   shareCopy: "share:copy",
   accountBuySkin: "account:buy-skin",
   accountRedeem: "account:redeem-code",

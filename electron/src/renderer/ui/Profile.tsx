@@ -1,7 +1,7 @@
 // Profil (bouton du compte dans la barre) : vraie tête du joueur, série de jours de jeu (ReLink) et
 // statistiques de jeu (gardées sur ce PC). La série vient du serveur ; les stats sont comptées localement.
 import { useEffect, useState, type ReactNode } from "react";
-import type { PlayStatsView, Streak } from "../../shared/api";
+import type { Friend, PlayStatsView, Streak } from "../../shared/api";
 import { useApp } from "./ctx";
 import { Ic } from "./Ic";
 import { t } from "./i18n";
@@ -212,7 +212,7 @@ export function StreakCard({ s, name, onChanged }: { s: Streak; name: string; on
           {rich ? (
             <label className="st-share">
               <input type="checkbox" checked={share} onChange={(e) => toggleShare(e.target.checked)} />
-              {t("Visible par mes amis")}
+              {t("Série et stats visibles par mes amis")}
             </label>
           ) : null}
         </span>
@@ -471,5 +471,87 @@ export function StatsPage() {
         {st ? <StatsCard st={st} /> : <div className="empty">{t("Chargement…")}</div>}
       </div>
     </>
+  );
+}
+
+const FRIEND_STATUS: Record<Friend["status"], string> = { online: "En ligne", away: "Absent", offline: "Hors ligne" };
+
+/** Fiche d'un ami (panneau Amis) : skin en 3D, statut, série, temps joué ensemble et ses stats s'il les partage. */
+export function FriendProfile({ f, onBack }: { f: Friend; onBack: () => void }) {
+  const [skin, setSkin] = useState<{ skin: string; model?: "classic" | "slim" } | null>(null);
+  const [mine, setMine] = useState<PlayStatsView | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (f.minecraftName) void window.wecraft.account.playerSkin(f.minecraftName).then((s) => alive && setSkin(s), () => undefined);
+    void window.wecraft.account.playStats().then((s) => alive && setMine(s), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [f.id, f.minecraftName]);
+  const together = mine?.friends.find((x) => x.id === f.id)?.seconds ?? 0;
+  const g = f.game;
+  const s = f.stats;
+  return (
+    <div className="frp">
+      <button className="btn sm ghost frp-back" onClick={onBack} data-a="friend-back">
+        ← {t("Amis")}
+      </button>
+      <div className="frp-head">
+        <div className="frp-fig">{skin ? <PlayerModel skin={skin.skin} {...(skin.model ? { model: skin.model } : {})} height={190} /> : <span className="frp-ph">{f.pseudo.slice(0, 1).toUpperCase()}</span>}</div>
+        <div>
+          <h3>{f.pseudo}</h3>
+          <small className={`frp-st ${f.status}`}>{t(FRIEND_STATUS[f.status] ?? "Hors ligne")}</small>
+          {f.minecraftName ? <small className="faint">{`${t("Minecraft")} : ${f.minecraftName}`}</small> : null}
+          {g ? <small>{`${t("Joue à")} ${g.name}${g.mc ? ` · ${g.mc}` : ""}`}</small> : null}
+          {f.music && f.status !== "offline" ? <small className="faint">{`♪ ${f.music.title}${f.music.artist ? ` · ${f.music.artist}` : ""}`}</small> : null}
+          {f.streak && f.streak.current > 0 ? <small className="frp-streak">{`🔥 ${f.streak.current} ${f.streak.current > 1 ? t("jours d'affilée") : t("jour d'affilée")}`}</small> : null}
+        </div>
+      </div>
+      <div className="ps-tiles frp-tiles">
+        <span>
+          <b>{fmtDur(together)}</b>
+          <small>{t("Joué ensemble")}</small>
+        </span>
+        {s ? (
+          <>
+            <span>
+              <b>{fmtDur(s.totalSeconds)}</b>
+              <small>{t("Temps de jeu cumulé")}</small>
+            </span>
+            <span>
+              <b>{s.daysPlayed}</b>
+              <small>{t("Jours joués")}</small>
+            </span>
+            <span>
+              <b>{s.launches}</b>
+              <small>{t("Lancements")}</small>
+            </span>
+            <span>
+              <b>{s.sessions ? fmtDur(s.totalSeconds / s.sessions) : "—"}</b>
+              <small>{t("Session moyenne")}</small>
+            </span>
+            <span>
+              <b>{fmtDur(s.longestSeconds)}</b>
+              <small>{t("Plus longue session")}</small>
+            </span>
+          </>
+        ) : null}
+      </div>
+      {s && s.top.length ? (
+        <div className="frp-top">
+          <h4>{t("Ses modpacks les plus joués")}</h4>
+          {s.top.map((x, i) => (
+            <div key={`${x.name}-${i}`} className="ps-row">
+              <span className="ps-rk">{i + 1}</span>
+              <span className="ps-nm">
+                <b>{x.name}</b>
+              </span>
+              <span className="ps-v">{fmtDur(x.seconds)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {!s ? <p className="faint frp-note">{t("Ses statistiques ne sont pas partagées. Elles apparaissent ici quand il coche « Série et stats visibles par mes amis » dans sa page Statistiques.")}</p> : null}
+    </div>
   );
 }

@@ -766,3 +766,20 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .sc.has-logo::before, .live-cover.has-logo::before { content: ""; position: absolute; inset: -20%; background: var(--logo) center / cover; filter: blur(22px) saturate(1.2) brightness(.6); }
 /* logo centré, à la taille de l'encadré (placé en absolu : la hauteur en % suit l'encadré même sans hauteur fixe) */
 .sc-logo { position: absolute; top: 50%; left: 50%; height: 64%; max-width: 80%; width: auto; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; object-fit: cover; border: 2px solid rgba(255, 255, 255, .85); box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+
+/* fiche d'un ami (panneau Amis) */
+.fr-open { cursor: pointer; border-radius: 8px; }
+.fr-open:hover b, .fr-open:focus-visible b { text-decoration: underline; text-underline-offset: 3px; }
+.frp { display: flex; flex-direction: column; gap: 14px; }
+.frp-back { align-self: flex-start; margin-left: -8px; }
+.frp-head { display: flex; align-items: center; gap: 14px; }
+.frp-head > div:last-child { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.frp-head h3 { margin: 0; font-size: 20px; }
+.frp-fig { flex: none; display: grid; place-items: center; width: 130px; min-height: 200px; border-radius: 16px; background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--acc) 22%, transparent), rgba(0, 0, 0, .25)); border: 1px solid var(--line); }
+.frp-ph { font-size: 44px; font-weight: 800; color: var(--ink-soft); }
+.frp-st.online { color: #4ade80; }
+.frp-st.away { color: #fbbf24; }
+.frp-streak { color: #ff8a2a; font-weight: 700; }
+.frp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.frp-top h4 { margin: 0 0 6px; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.frp-note { font-size: 12.5px; }

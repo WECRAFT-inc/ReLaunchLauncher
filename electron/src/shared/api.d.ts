@@ -513,6 +513,8 @@ cardImage(bid: string): Promise<string | null>;
     streakShare(share: boolean): Promise<{ ok: boolean; message?: string }>;
     /** Statistiques de jeu (gardées sur ce PC). */
     playStats(): Promise<PlayStatsView>;
+    /** Skin d'un joueur d'après son pseudo Minecraft (skin ReLink, sinon Mojang), ou null. */
+    playerSkin(minecraftName: string): Promise<{ skin: string; model?: "classic" | "slim" } | null>;
     /** Copie une image PNG (data:) et un texte dans le presse-papiers. */
     shareImage(png: string, text: string): Promise<boolean>;
     /** Achète un skin du launcher avec des Éclats. */
@@ -854,6 +856,8 @@ export interface Friend extends FriendBrief {
   channel?: string;
   /** Série de jours de jeu (si l'ami la partage). */
   streak?: { current: number; validatedToday: boolean };
+  /** Statistiques de jeu (si l'ami les partage). */
+  stats?: FriendStats;
   /** L'ami est en direct sur sa chaîne Twitch (confirmé par Twitch). */
   live?: boolean;
 }
@@ -955,7 +959,18 @@ export interface Streak {
   /** Série visible des amis. */
   share?: boolean;
 }
-/** Statistiques de jeu gardées sur ce PC (rien n'est envoyé). */
+/** Résumé des statistiques de jeu montré aux amis (envoyé seulement si la série est partagée). */
+export interface FriendStats {
+  totalSeconds: number;
+  daysPlayed: number;
+  launches: number;
+  sessions: number;
+  longestSeconds: number;
+  instances: number;
+  top: { name: string; seconds: number }[];
+  updatedAt: string | null;
+}
+/** Statistiques de jeu gardées sur ce PC (un résumé est montré aux amis si la série est partagée). */
 export interface PlayStatsView {
   totalSeconds: number;
   launches: number;

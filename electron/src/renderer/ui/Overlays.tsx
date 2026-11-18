@@ -6,6 +6,7 @@ import { useApp } from "./ctx";
 import { NotifList } from "./Relink";
 import { useEscapeLayer } from "./keys";
 import { Ic } from "./Ic";
+import { FriendProfile } from "./Profile";
 import { MusicPanel } from "./Music";
 import { detail, gById, type Inst } from "./model";
 import { t } from "./i18n";
@@ -187,6 +188,8 @@ function FriendsPanel() {
   const [st, setSt] = useState<FriendsState | null>(null);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  // fiche d'un ami (clic sur son nom)
+  const [openId, setOpenId] = useState<string | null>(null);
   const loggedIn = account?.loggedIn === true;
   const load = () => void window.wecraft.friends.state().then(setSt, () => undefined);
   useEffect(() => {
@@ -222,6 +225,8 @@ function FriendsPanel() {
       </div>
     );
   }
+  const opened = openId ? st.friends.find((f) => f.id === openId) : null;
+  if (opened) return <FriendProfile f={opened} onBack={() => setOpenId(null)} />;
   const online = st.friends.filter((f) => f.status !== "offline").length;
   const row = (f: Friend) => {
     const g = f.game;
@@ -229,7 +234,7 @@ function FriendsPanel() {
     return (
       <div className={`fr-row ${f.status}`} key={f.id}>
         <span className={`fr-st ${f.status}`} role="img" aria-label={t(FRIEND_LABEL[f.status])} title={t(FRIEND_LABEL[f.status])}></span>
-        <span className="fr-who">
+        <span className="fr-who fr-open" role="button" tabIndex={0} title={t("Voir son profil")} onClick={() => setOpenId(f.id)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setOpenId(f.id))}>
           <b>
             {f.pseudo}
             {f.streak && f.streak.current > 0 ? (

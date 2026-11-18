@@ -13,7 +13,7 @@ import { randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AccountState, Quest, QuestsState } from "../../shared/api";
+import type { FriendStats, AccountState, Quest, QuestsState } from "../../shared/api";
 import { checkUrl, HttpError, type NetOptions } from "../net/download";
 import { str, WORKER_HOSTS, WORKER_URL } from "./worker";
 import { isOfflineName } from "../auth/offline";
@@ -72,6 +72,8 @@ export interface RawFriend extends FriendBrief {
   channel?: string;
   /** Série de jours de jeu (si l'ami la partage). */
   streak?: { current: number; validatedToday: boolean };
+  /** Statistiques de jeu (si l'ami les partage). */
+  stats?: FriendStats;
   lastSeen: number | null;
 }
 
@@ -281,7 +283,8 @@ export class RelinkAccount {
       const skX = streakExtra({ ...sk, todaySeconds: 0 }, (v, max = 1e6) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(max, Math.floor(v))) : 0));
       const skN = skX.status === "broken" ? 0 : typeof sk["current"] === "number" && Number.isFinite(sk["current"]) ? Math.max(0, Math.min(10000, Math.floor(sk["current"]))) : 0;
       const skToday = sk["validatedToday"] === true || skX.status === "validated";
-      friends.push({ ...b, ...(/^[A-Za-z0-9_]{1,40}$/.test(chRaw) ? { channel: chRaw } : {}), ...(skN > 0 ? { streak: { current: skN, validatedToday: skToday } } : {}), minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
+      const fst = decodeFriendStats(o["stats"]);
+      friends.push({ ...b, ...(/^[A-Za-z0-9_]{1,40}$/.test(chRaw) ? { channel: chRaw } : {}), ...(skN > 0 ? { streak: { current: skN, validatedToday: skToday } } : {}), ...(fst ? { stats: fst } : {}), minecraftName: typeof o["minecraftName"] === "string" ? str(o["minecraftName"], 16) || null : null, status, game, music, lastSeen: Number.isFinite(seen) ? seen : null });
     }
     return { friends, incoming: list(r["incoming"]).map(brief).filter((x): x is FriendBrief => !!x), outgoing: list(r["outgoing"]).map(brief).filter((x): x is FriendBrief => !!x) };
   }
@@ -302,6 +305,11 @@ export class RelinkAccount {
   /** Signal « en jeu » (une fois par minute) : fait avancer la série de jours de jeu. */
   async playTick(): Promise<void> {
     await this.call("POST", "/launcher/me/playtick", { auth: true, timeout: 8000 });
+  }
+
+  /** Résumé de ses statistiques de jeu, montré aux amis seulement si la série est partagée (module du Worker). */
+  async putStats(s: FriendStats): Promise<void> {
+    await this.call("PUT", "/launcher/me/stats", { auth: true, json: s, timeout: 8000 });
   }
 
   /** Montrer ou non sa série de jours de jeu à ses amis. */
@@ -522,6 +530,20 @@ export class RelinkAccount {
     await this.load();
     return !!this.saved?.me?.launcherSkins.includes(skinId);
   }
+}
+
+/** Statistiques partagées par un ami : nombres bornés, 3 modpacks au plus ; null si absentes ou abîmées. */
+export function decodeFriendStats(v: unknown): FriendStats | null {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const n = (x: unknown, max = 1e10) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(max, Math.floor(x)) : 0);
+  const top = (Array.isArray(o["top"]) ? (o["top"] as unknown[]) : []).slice(0, 10).flatMap((t) => {
+    const r = (typeof t === "object" && t !== null ? t : {}) as Record<string, unknown>;
+    const name = typeof r["name"] === "string" ? r["name"].replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 80) : "";
+    return name ? [{ name, seconds: n(r["seconds"]) }] : [];
+  }).slice(0, 3);
+  const s: FriendStats = { totalSeconds: n(o["totalSeconds"]), daysPlayed: n(o["daysPlayed"], 100000), launches: n(o["launches"], 1e7), sessions: n(o["sessions"], 1e7), longestSeconds: n(o["longestSeconds"], 86400 * 30), instances: n(o["instances"], 10000), top, updatedAt: typeof o["updatedAt"] === "string" ? o["updatedAt"].slice(0, 40) : null };
+  return s.launches || s.totalSeconds ? s : null;
 }
 
 /** Jour (AAAA-MM-JJ) à l'heure de Paris, comme le Worker. */

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { localDay, PlayStats } from "../src/main/stats/playStats";
 import { cleanUuid, SkinHeads, skinUrlFromProfile } from "../src/main/relink/heads";
-import { parisDay, streakExtra } from "../src/main/relink/account";
+import { decodeFriendStats, parisDay, streakExtra } from "../src/main/relink/account";
 
 // chiffrement authentifié, comme safeStorage (AES-GCM) : toute retouche fait échouer le déchiffrement
 const KEY = randomBytes(32);
@@ -147,4 +147,14 @@ test("série : état déduit quand le Worker ne le donne pas (validée, à valid
   assert.equal(x.freezeEvery, 7);
   assert.deepEqual(streakExtra({ current: 5 }, num, now), {}, "très ancien Worker : rien de plus");
   assert.equal(streakExtra({ status: "frozen" }, num, now).status, "frozen", "état donné par le Worker : gardé");
+});
+
+test("stats d'un ami : nombres bornés, 3 modpacks au plus, entrées vides ignorées", () => {
+  const s = decodeFriendStats({ totalSeconds: 3600.9, launches: -4, daysPlayed: "x", top: [{ name: "" }, { name: "ATM10", seconds: 3000 }, 3, { name: "B" }, { name: "C" }, { name: "D" }] });
+  assert.equal(s?.totalSeconds, 3600);
+  assert.equal(s?.launches, 0);
+  assert.equal(s?.daysPlayed, 0);
+  assert.deepEqual(s?.top.map((x) => x.name), ["ATM10", "B", "C"]);
+  assert.equal(decodeFriendStats(null), null);
+  assert.equal(decodeFriendStats({ totalSeconds: 0, launches: 0 }), null, "rien à montrer");
 });

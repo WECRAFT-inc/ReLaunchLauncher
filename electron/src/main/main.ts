@@ -133,7 +133,7 @@ const gameCtx = new Map<string, PresenceGame>();
 /** Instance préparée (dossier de jeu) : pour les statistiques de jeu locales. */
 const statCtx = new Map<string, StatGame>();
 let playStats: PlayStats | null = null;
-const heads = new SkinHeads();
+const heads = new SkinHeads({ workerUrl: WORKER_URL });
 const gameKey = (dir: string): string => (process.platform === "win32" ? path.resolve(dir).toLowerCase() : path.resolve(dir));
 /** « Rejoindre un ami » : instance à lancer et serveur où le jeu se connecte (valable 2 minutes, une seule fois). */
 let pendingJoin: { instanceId: string; address: string | null; until: number } | null = null;
@@ -417,7 +417,24 @@ async function start(): Promise<void> {
   };
   const gameExited = (t: LaunchTarget) => {
     friendsPresence?.gameStopped(t.gameDir);
-    void playStats?.stop(gameKey(t.gameDir));
+    void playStats?.stop(gameKey(t.gameDir)).then(() => shareStats());
+  };
+  // résumé des stats pour les amis : envoyé seulement si « Visible par mes amis » est coché (série partagée)
+  let lastShared = "";
+  const shareStats = async () => {
+    try {
+      if (!playStats || !account || !(await account.state()).loggedIn) return;
+      const q = await account.quests();
+      if (!q.ok || !q.streak?.share) return;
+      const v = await playStats.view();
+      const body = { totalSeconds: v.totalSeconds, daysPlayed: v.daysPlayed, launches: v.launches, sessions: v.sessions, longestSeconds: v.longestSeconds, instances: v.instances, top: v.top.slice(0, 3).map((x) => ({ name: x.name, seconds: x.seconds })) };
+      const key = JSON.stringify(body);
+      if (key === lastShared) return;
+      await account.putStats({ ...body, updatedAt: null });
+      lastShared = key;
+    } catch {
+      // module du Worker absent ou réseau coupé : réessayé plus tard
+    }
   };
   const psExe = path.win32.join(process.env["SystemRoot"] ?? process.env["windir"] ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const officialWatch = new OfficialGameWatch<LaunchTarget>({
@@ -485,12 +502,14 @@ async function start(): Promise<void> {
   // statistiques de jeu (locales) et série de jours de jeu (ReLink) : une fois par minute pendant une partie
   playStats = new PlayStats({ dataDir: wecraftDataDir(env), secrets: safeStorage });
   let statTicks = 0;
+  let shareTicks = 14; // premier envoi une minute après le démarrage
   setInterval(() => {
     void (async () => {
       if (!playStats) return;
       const groups = playStats.groups();
       const playing = (await playStats.view()).playing;
       await playStats.tick();
+      if (++shareTicks % 15 === 0) void shareStats(); // toutes les 15 minutes environ
       if (!playing || !account || !(await account.state()).loggedIn) return;
       await account.playTick().catch(() => undefined);
       // amis dans la même partie (même event ou modpack ReLink) : toutes les 2 minutes
@@ -1061,6 +1080,7 @@ handle(CHANNELS.relinkOpenChannel, async (channel) => {
       return { ok: false, message: e instanceof AccountError ? e.message : "Réglage non enregistré." };
     }
   });
+  handle(CHANNELS.accountPlayerSkin, async (name) => heads.forName(name));
   handle(CHANNELS.statsGet, async () =>
     playStats ? playStats.view() : { totalSeconds: 0, launches: 0, sessions: 0, longestSeconds: 0, daysPlayed: 0, instances: 0, top: [], friends: [], last14: [], since: null, playing: false },
   );

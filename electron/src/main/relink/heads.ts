@@ -7,6 +7,8 @@
 import { checkSkinPng } from "./account";
 
 export interface HeadsDeps {
+  /** Adresse du Worker ReLink (skins envoyés par les joueurs). */
+  workerUrl?: string;
   fetch?: typeof fetch;
   now?: () => number;
   userAgent?: string;
@@ -91,5 +93,52 @@ export class SkinHeads {
     const buf = Buffer.from(await t.arrayBuffer());
     if (checkSkinPng(buf)) return null;
     return `data:image/png;base64,${buf.toString("base64")}`;
+  }
+
+  /**
+   * Skin d'un joueur d'après son pseudo Minecraft (fiche d'un ami) : skin envoyé à ReLink s'il en a un, sinon
+   * son skin Mojang. `model` : « slim » si connu.
+   */
+  async forName(name0: unknown): Promise<{ skin: string; model?: "classic" | "slim" } | null> {
+    if (typeof name0 !== "string" || !/^[A-Za-z0-9_]{3,16}$/.test(name0)) return null;
+    const name = name0.toLowerCase();
+    const c = this.byName.get(name);
+    if (c && this.now() - c.at < (c.v ? TTL_OK : TTL_NONE)) return c.v;
+    let v: { skin: string; model?: "classic" | "slim" } | null = null;
+    try {
+      v = await this.relinkSkin(name);
+      if (!v) {
+        const f = this.d.fetch ?? fetch;
+        const r = await f(`https://api.mojang.com/users/profiles/minecraft/${name}`, { redirect: "error", signal: AbortSignal.timeout(8000), headers: { "User-Agent": this.d.userAgent ?? "ReLaunch", Accept: "application/json" } });
+        if (r.ok) {
+          const id = cleanUuid(((await r.json()) as { id?: unknown })?.id);
+          const skin = id ? await this.forUuid(id) : null;
+          if (skin) v = { skin };
+        }
+      }
+    } catch {
+      v = c?.v ?? null;
+    }
+    if (this.byName.size > 300) this.byName.clear();
+    this.byName.set(name, { at: this.now(), v });
+    return v;
+  }
+  private readonly byName = new Map<string, { at: number; v: { skin: string; model?: "classic" | "slim" } | null }>();
+
+  /** Skin envoyé à ReLink (format CustomSkinAPI du Worker : /launcher/mcskin/csl/<pseudo> puis la texture). */
+  private async relinkSkin(name: string): Promise<{ skin: string; model?: "classic" | "slim" } | null> {
+    if (!this.d.workerUrl) return null;
+    const f = this.d.fetch ?? fetch;
+    const r = await f(`${this.d.workerUrl}/launcher/mcskin/csl/${name}`, { redirect: "error", signal: AbortSignal.timeout(8000), headers: { "User-Agent": this.d.userAgent ?? "ReLaunch", Accept: "application/json" } });
+    if (!r.ok) return null;
+    const skins = ((await r.json()) as { skins?: Record<string, unknown> })?.skins ?? {};
+    const slim = typeof skins["slim"] === "string" && /^[0-9a-f]{64}$/.test(skins["slim"]);
+    const sha = slim ? (skins["slim"] as string) : typeof skins["default"] === "string" && /^[0-9a-f]{64}$/.test(skins["default"]) ? (skins["default"] as string) : null;
+    if (!sha) return null;
+    const t = await f(`${this.d.workerUrl}/launcher/mcskin/textures/${sha}`, { redirect: "error", signal: AbortSignal.timeout(8000), headers: { "User-Agent": this.d.userAgent ?? "ReLaunch" } });
+    if (!t.ok) return null;
+    const buf = Buffer.from(await t.arrayBuffer());
+    if (checkSkinPng(buf)) return null;
+    return { skin: `data:image/png;base64,${buf.toString("base64")}`, model: slim ? "slim" : "classic" };
   }
 }
