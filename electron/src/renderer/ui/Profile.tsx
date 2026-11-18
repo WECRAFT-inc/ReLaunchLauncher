@@ -395,17 +395,13 @@ export function ProfilePage() {
   const skin = usePlayerSkin();
   const model = account?.minecraftSkin?.model;
   const streak = q?.ok ? q.streak : null;
-  // les « boutons » du menu sont les stats ; un clic descend au détail
-  const lines: [string, string][] = [];
-  if (st) lines.push([fmtDur(st.totalSeconds), t("de jeu")]);
-  if (streak) lines.push([`🔥 ${streak.current}`, streak.current > 1 ? t("jours d'affilée") : t("jour d'affilée")]);
-  if (st) {
-    lines.push([String(st.daysPlayed), st.daysPlayed > 1 ? t("jours joués") : t("jour joué")]);
-    lines.push([String(st.launches), st.launches > 1 ? t("lancements") : t("lancement")]);
-    lines.push([st.sessions ? fmtDur(st.totalSeconds / st.sessions) : "—", t("par session")]);
-    lines.push([fmtDur(st.longestSeconds), t("de record")]);
-  }
-  const toDetails = () => document.getElementById("pf-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // menu façon écran d'accueil de jeu ; les stats ont leur propre page
+  const menu: { l: string; go: string; rl?: string; set?: string }[] = [
+    { l: t("Jouer"), go: "wecraft" },
+    { l: t("Statistiques"), go: "relink", rl: "stats" },
+    { l: t("Quêtes"), go: "quests" },
+    { l: t("Mon skin"), go: "settings", set: "compte" },
+  ];
   return (
     <>
       <section className="pf-hero">
@@ -417,11 +413,11 @@ export function ProfilePage() {
               : t("Compte ReLink non connecté")}
           </div>
         </div>
-        <ul className="pf-menu" aria-label={t("Statistiques de jeu")}>
-          {lines.map(([v, l], i) => (
-            <li key={l}>
-              <button className={i === 0 ? "on" : ""} onClick={toDetails}>
-                <b>{v}</b> {l}
+        <ul className="pf-menu" aria-label={t("Menu du compte")}>
+          {menu.map((m, i) => (
+            <li key={m.l}>
+              <button className={i === 0 ? "on" : ""} data-go={m.go} {...(m.rl ? { "data-rl": m.rl } : {})} {...(m.set ? { "data-set": m.set } : {})} data-a={`pf-${m.go}${m.rl ? `-${m.rl}` : ""}`}>
+                {m.l}
               </button>
             </li>
           ))}
@@ -431,19 +427,48 @@ export function ProfilePage() {
         </div>
         <HeroCard s={streak ?? null} st={st} name={u?.minecraftName ?? u?.pseudo ?? name} loggedIn={!!u} />
       </section>
-      <div id="pf-details">
-        {u ? (
-          <div className="sect">
-            <h3>{t("Série de jours")}</h3>
-            {q?.ok && q.streak ? <StreakCard s={q.streak} name={u.minecraftName ?? u.pseudo} onChanged={reload} /> : <div className="empty">{q && !q.ok ? (q.error ?? t("Série de jours indisponible pour le moment.")) : t("Chargement…")}</div>}
-          </div>
-        ) : null}
-        <div className="sect">
-          <h3>
-            <Ic n="chart" /> {t("Statistiques de jeu")}
-          </h3>
-          {st ? <StatsCard st={st} /> : <div className="empty">{t("Chargement…")}</div>}
+    </>
+  );
+}
+
+/** Page des statistiques (bouton « Statistiques » du profil) : série de jours et statistiques de jeu. */
+export function StatsPage() {
+  const { account } = useApp();
+  const [st, setSt] = useState<PlayStatsView | null>(null);
+  const u = account?.loggedIn ? account.user : null;
+  const { q, reload } = useQuests(!!u);
+  useEffect(() => {
+    let alive = true;
+    const load = () => void window.wecraft.account.playStats().then((s) => alive && setSt(s), () => undefined);
+    load();
+    const iv = window.setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(iv);
+    };
+  }, []);
+  return (
+    <>
+      <div className="vhead">
+        <div>
+          <button className="btn sm ghost pf-back" data-go="relink" data-rl="profil" data-a="stats-back">
+            ← {t("Profil")}
+          </button>
+          <h2>{t("Statistiques")}</h2>
+          <div className="sub">{t("Ta série de jours et ton temps de jeu (compté sur ce PC)")}</div>
         </div>
+      </div>
+      {u ? (
+        <div className="sect">
+          <h3>{t("Série de jours")}</h3>
+          {q?.ok && q.streak ? <StreakCard s={q.streak} name={u.minecraftName ?? u.pseudo} onChanged={reload} /> : <div className="empty">{q && !q.ok ? (q.error ?? t("Série de jours indisponible pour le moment.")) : t("Chargement…")}</div>}
+        </div>
+      ) : null}
+      <div className="sect">
+        <h3>
+          <Ic n="chart" /> {t("Statistiques de jeu")}
+        </h3>
+        {st ? <StatsCard st={st} /> : <div className="empty">{t("Chargement…")}</div>}
       </div>
     </>
   );

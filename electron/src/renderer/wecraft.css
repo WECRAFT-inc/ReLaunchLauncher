@@ -761,3 +761,4 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 @media (prefers-reduced-motion: reduce) { .pm-model.idle, .pm-rarm, .pm-larm { animation: none; } }
 /* le hero du profil prend toute la largeur : le joueur est centré sous le bloc flottant */
 .app.pf .view > .pf-hero:first-child, .app.pf.staffon .view > .pf-hero:first-child { margin-right: 0; }
+.pf-back { margin: 0 0 8px -10px; }

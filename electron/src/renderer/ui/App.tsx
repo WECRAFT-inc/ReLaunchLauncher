@@ -54,7 +54,7 @@ import { InstancePage } from "./InstancePage";
 import { LoadingScreen } from "./Loading";
 import { TitleBar } from "./TitleBar";
 import { QuestsPage } from "./Quests";
-import { ProfilePage } from "./Profile";
+import { ProfilePage, StatsPage } from "./Profile";
 import { LivePage, MaintenanceBanner, NewsPage, VersionBanner } from "./Relink";
 import { SkinLayers, useActiveSkin, useSkinMotion, useSkinVars } from "./Skin";
 import type { MpDraft } from "./ctx";
@@ -731,7 +731,7 @@ export function App() {
       }
       const o: Partial<Ui> = {};
       if (go.dataset["rl"]) o.rlTab = go.dataset["rl"];
-      else if (go.dataset["go"] === "relink" && ui.rlTab === "shop") o.rlTab = "profil";
+      else if (go.dataset["go"] === "relink") o.rlTab = "profil"; // bouton du profil : toujours la page d'accueil du compte
       if (go.dataset["set"]) o.setTab = go.dataset["set"];
       if (go.dataset["go"] === "quests") o.qEv = go.dataset["qev"] ?? null;
       show(go.dataset["go"]!, o);
@@ -1359,6 +1359,7 @@ function ViewBody({ v }: { v: View }) {
   if (v === "news") return <NewsPage />;
   if (v === "live" || v === "welive") return <LivePage />; // WeLive (ex-« Diffusion Partenaires ») : lives et vidéos
   if (v === "quests") return <QuestsPage />;
+  if (v === "relink" && ui.rlTab === "stats") return <StatsPage />;
   if (v === "relink" && ui.rlTab !== "shop") return <ProfilePage />;
   const s = SOON[v]!;
   return <Soon title={s.title} sub={s.sub} text={s.text} />;
