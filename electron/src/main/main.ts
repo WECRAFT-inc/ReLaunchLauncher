@@ -755,6 +755,9 @@ handle(CHANNELS.relinkChannelImage, async (channel) => {
   return c?.live ? c.thumb : null;
 });
 
+// Logo (avatar Twitch) d'une chaîne : cartes des partenaires et amis hors ligne.
+handle(CHANNELS.relinkChannelAvatar, async (channel) => (twitchLive && isTwitchLogin(channel) ? twitchLive.avatar(channel) : null));
+
 // Lecteur intégré : vue native posée sur l'emplacement du lecteur (voir player.ts). null = arrêter ou masquer.
 handle(CHANNELS.playerSet, async (req) => {
   const r = (typeof req === "object" && req !== null ? req : {}) as { channel?: unknown; rect?: unknown };

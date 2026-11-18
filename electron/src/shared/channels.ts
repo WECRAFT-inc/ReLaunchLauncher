@@ -115,6 +115,7 @@ export const CHANNELS = {
   relinkCardLink: "relink:card-link",
   relinkPartnerImage: "relink:partner-image",
   relinkChannelImage: "relink:channel-image",
+  relinkChannelAvatar: "relink:channel-avatar",
   relinkOpenChannel: "relink:open-channel",
   playerSet: "player:set",
   relinkJoinServer: "relink:join-server",

@@ -11,6 +11,7 @@ const WELIVE_IMAGE = "welive:image";
 const WELIVE_OPEN = "welive:open";
 const RELINK_PARTNER_IMAGE = "relink:partner-image";
 const RELINK_CHANNEL_IMAGE = "relink:channel-image";
+const RELINK_CHANNEL_AVATAR = "relink:channel-avatar";
 const RELINK_OPEN_CHANNEL = "relink:open-channel";
 const PLAYER_SET = "player:set";
 const RELINK_JOIN_SERVER = "relink:join-server";
@@ -184,6 +185,9 @@ partnerImage: (id: string) =>
 
 channelImage: (channel: string) =>
   ipcRenderer.invoke(RELINK_CHANNEL_IMAGE, channel),
+
+channelAvatar: (channel: string) =>
+  ipcRenderer.invoke(RELINK_CHANNEL_AVATAR, String(channel)),
 
 openChannel: (channel: string) =>
   ipcRenderer.invoke(RELINK_OPEN_CHANNEL, channel),

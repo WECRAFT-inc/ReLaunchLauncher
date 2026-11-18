@@ -41,6 +41,17 @@ export function previewUrl(login: string): string {
   return `https://${TWITCH_PREVIEW_HOST}/previews-ttv/live_user_${login.toLowerCase()}-320x180.jpg`;
 }
 
+/** Adresse d'avatar Twitch acceptée : HTTPS, serveur d'images de Twitch, dossier des photos de profil. */
+export function avatarUrlOk(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" || u.hostname !== TWITCH_PREVIEW_HOST || u.port || u.username || !/^\/jtv_user_pictures\/[A-Za-z0-9_\-./]+\.(png|jpe?g|webp)$/i.test(u.pathname) || u.pathname.includes("..")) return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
 export class TwitchLiveDetector {
   private readonly cache = new Map<string, LiveCheck>();
   private readonly inflight = new Map<string, Promise<LiveCheck | null>>();
@@ -86,6 +97,51 @@ export class TwitchLiveDetector {
       this.d.log?.(`Live Twitch ${login} : relevé impossible (${(e as Error).message}).`);
       return null;
     }
+  }
+
+  // ------------------------------------------------------------ avatar (logo) d'une chaîne
+  private readonly avatars = new Map<string, { at: number; img: string | null }>();
+  private readonly avatarBusy = new Map<string, Promise<string | null>>();
+
+  /**
+   * Avatar Twitch d'une chaîne (pour les cartes hors ligne), en data:. Adresse obtenue sans clé auprès de
+   * decapi.me (service public), image téléchargée seulement sur le serveur d'images de Twitch. Gardé 12 h
+   * (10 min en cas d'échec).
+   */
+  async avatar(channel: string): Promise<string | null> {
+    if (!LOGIN.test(channel)) return null;
+    const key = channel.toLowerCase();
+    const c = this.avatars.get(key);
+    if (c && this.now() - c.at < (c.img ? 12 * 3600_000 : 10 * 60_000)) return c.img;
+    const run = this.avatarBusy.get(key);
+    if (run) return run;
+    const p = this.fetchAvatar(key)
+      .catch((e: Error) => {
+        this.d.log?.(`Avatar Twitch ${key} : indisponible (${e.message}).`);
+        return null;
+      })
+      .then((img) => {
+        this.avatars.set(key, { at: this.now(), img });
+        return img;
+      })
+      .finally(() => this.avatarBusy.delete(key));
+    this.avatarBusy.set(key, p);
+    return p;
+  }
+
+  private async fetchAvatar(login: string): Promise<string | null> {
+    const f = (this.d.fetch ?? ((u, init) => fetch(u, init) as unknown as ReturnType<FetchLike>)) as unknown as (u: string, init: object) => Promise<Response>;
+    const headers = { "User-Agent": this.d.userAgent };
+    const r = await f(`https://decapi.me/twitch/avatar/${login}`, { redirect: "error", signal: AbortSignal.timeout(8000), headers });
+    if (r.status !== 200) throw new Error(`adresse ${r.status}`);
+    const url = avatarUrlOk((await r.text()).trim().slice(0, 400));
+    if (!url) return null; // chaîne inconnue, ou réponse inattendue
+    const img = await f(url, { redirect: "error", signal: AbortSignal.timeout(8000), headers: { ...headers, Accept: "image/*" } });
+    if (img.status !== 200) throw new Error(`image ${img.status}`);
+    const type = (img.headers.get("content-type") || "").split(";")[0]!.trim().toLowerCase();
+    const buf = Buffer.from(await img.arrayBuffer());
+    if (!/^image\/(jpe?g|png|webp)$/.test(type) || !buf.length || buf.length > MAX_THUMB) return null;
+    return `data:${type};base64,${buf.toString("base64")}`;
   }
 
   /** Miniature du dernier relevé « en direct » d'une chaîne, sans réseau. */

@@ -760,3 +760,8 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 /* le hero du profil prend toute la largeur : le joueur est centré sous le bloc flottant */
 .app.pf .view > .pf-hero:first-child, .app.pf.staffon .view > .pf-hero:first-child { margin-right: 0; }
 .pf-back { margin: 0 0 8px -10px; }
+
+/* WeLive : chaîne hors ligne → son logo (avatar Twitch), sur un fond flouté du même logo */
+.sc.has-logo { position: relative; overflow: hidden; display: grid; place-items: center; }
+.sc.has-logo::before { content: ""; position: absolute; inset: -20%; background: var(--logo) center / cover; filter: blur(22px) saturate(1.2) brightness(.6); }
+.sc-logo { position: relative; height: 62%; aspect-ratio: 1; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255, 255, 255, .85); box-shadow: 0 8px 24px rgba(0, 0, 0, .45); }

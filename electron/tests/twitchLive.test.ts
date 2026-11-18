@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RelinkPartner, RelinkState } from "../src/shared/api";
-import { LIVE_TTL_MS, previewUrl, TwitchLiveDetector } from "../src/main/relink/twitchLive";
+import { avatarUrlOk, LIVE_TTL_MS, previewUrl, TwitchLiveDetector } from "../src/main/relink/twitchLive";
 
 const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 
@@ -73,4 +73,12 @@ test("cache : relevé réutilisé pendant le délai, puis renouvelé", async () 
   assert.equal((await d.check("abc"))?.live, true);
   assert.equal(t.urls.length, 2);
   assert.ok(d.thumbOf("ABC"));
+});
+
+test("avatar Twitch : adresse acceptée seulement sur le serveur d'images de Twitch", () => {
+  assert.equal(avatarUrlOk("https://static-cdn.jtvnw.net/jtv_user_pictures/abc-profile_image-300x300.png"), "https://static-cdn.jtvnw.net/jtv_user_pictures/abc-profile_image-300x300.png");
+  assert.equal(avatarUrlOk("https://evil.example/jtv_user_pictures/a.png"), null);
+  assert.equal(avatarUrlOk("http://static-cdn.jtvnw.net/jtv_user_pictures/a.png"), null);
+  assert.equal(avatarUrlOk("User not found: xyz"), null);
+  assert.equal(avatarUrlOk("https://static-cdn.jtvnw.net/previews-ttv/live_user_x.jpg"), null);
 });

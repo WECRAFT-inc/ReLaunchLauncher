@@ -445,6 +445,8 @@ cardImage(bid: string): Promise<string | null>;
     partnerImage(id: string): Promise<string | null>;
     /** Aperçu (miniature) d'une chaîne Twitch en direct (ami qui diffuse), en data: ; null si hors ligne. */
     channelImage(channel: string): Promise<string | null>;
+    /** Logo (avatar Twitch) d'une chaîne, en data:, ou null. */
+    channelAvatar(channel: string): Promise<string | null>;
     /** Ouvre la chaîne Twitch dans le navigateur. */
     openChannel(channel: string): Promise<boolean>;
     /** Lecteur Twitch intégré (vue native). rect : emplacement à l'écran (px de l'interface) ; rect null = masqué ; channel null = arrêté. */

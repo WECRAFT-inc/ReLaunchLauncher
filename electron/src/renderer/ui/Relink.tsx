@@ -559,9 +559,31 @@ function useThumb(s: Stream): string | null {
   }, [s.key, s.live, s.hasThumb, s.partnerId, s.channel]);
   return img;
 }
+/** Logo (avatar Twitch) de la chaîne, quand il n'y a pas d'aperçu de direct. */
+function useAvatar(s: Stream, want: boolean): string | null {
+  const [img, setImg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!want || !LOGIN_RE.test(s.channel)) return setImg(null);
+    let alive = true;
+    void window.wecraft.relink.channelAvatar(s.channel).then(
+      (d) => alive && setImg(d),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [s.channel, want]);
+  return img;
+}
 function Sc({ s }: { s: Stream }) {
   const img = useThumb(s);
-  return <span className="sc live-sc" style={img ? { ...coverOf(s.key), backgroundImage: `url("${img}")` } : coverOf(s.key)}></span>;
+  const logo = useAvatar(s, !img);
+  if (img) return <span className="sc live-sc" style={{ ...coverOf(s.key), backgroundImage: `url("${img}")` }}></span>;
+  return (
+    <span className={`sc live-sc${logo ? " has-logo" : ""}`} style={logo ? { ...coverOf(s.key), "--logo": `url("${logo}")` } as CSSProperties : coverOf(s.key)}>
+      {logo ? <img className="sc-logo" src={logo} alt="" /> : null}
+    </span>
+  );
 }
 
 function LivePlayer({ s, playing, onPlay, onStop }: { s: Stream; playing: boolean; onPlay: () => void; onStop: () => void }) {
