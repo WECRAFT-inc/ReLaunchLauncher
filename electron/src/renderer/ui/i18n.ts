@@ -92,6 +92,7 @@ const EN: Record<string, string> = {
   "Compte ReLink": "ReLink account",
   "Configurations prêtes": "Presets",
   "Contenus MC francophones": "French-speaking MC content",
+  "Diffusion Partenaires : lives des partenaires": "Partner streams: our partners live",
   "Copier ce qui est affiché": "Copy what is shown",
   "Créer un WePack": "Create a WePack",
   "Depuis Prism, CurseForge ou un autre launcher": "From Prism, CurseForge or another launcher",

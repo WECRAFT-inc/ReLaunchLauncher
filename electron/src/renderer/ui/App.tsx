@@ -1353,7 +1353,7 @@ function ViewBody({ v }: { v: View }) {
   if (v === "discover") return <Discover />;
   if (v === "relaunch") return <RelaunchEvents />;
   if (v === "news") return <NewsPage />;
-  if (v === "live") return <LivePage />;
+  if (v === "live" || v === "welive") return <LivePage />; // WeLive = Diffusion Partenaires
   if (v === "quests") return <QuestsPage />;
   if (v === "relink" && ui.rlTab !== "shop") return <ProfilePage />;
   const s = SOON[v]!;
