@@ -380,7 +380,7 @@ export function ProfilePage() {
   const faces = usePlayerHead();
   const [st, setSt] = useState<PlayStatsView | null>(null);
   const u = account?.loggedIn ? account.user : null;
-  const { q, reload } = useQuests(!!u);
+  const { q } = useQuests(!!u);
   useEffect(() => {
     let alive = true;
     const load = () => void window.wecraft.account.playStats().then((s) => alive && setSt(s), () => undefined);

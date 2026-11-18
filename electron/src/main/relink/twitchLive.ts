@@ -130,7 +130,7 @@ export class TwitchLiveDetector {
   }
 
   private async fetchAvatar(login: string): Promise<string | null> {
-    const f = (this.d.fetch ?? ((u, init) => fetch(u, init) as unknown as ReturnType<FetchLike>)) as unknown as (u: string, init: object) => Promise<Response>;
+    const f = (this.d.fetch ?? ((u: string, init: object) => fetch(u, init))) as unknown as (u: string, init: object) => Promise<Response>;
     const headers = { "User-Agent": this.d.userAgent };
     const r = await f(`https://decapi.me/twitch/avatar/${login}`, { redirect: "error", signal: AbortSignal.timeout(8000), headers });
     if (r.status !== 200) throw new Error(`adresse ${r.status}`);
