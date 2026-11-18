@@ -341,6 +341,9 @@ async function start(): Promise<void> {
   updater = new UpdateService({ env: updateEnv, quit: () => app.quit(), beta: () => st.beta() });
   instances = new InstanceService(store, env);
   media = new MediaStore({ dataDir: wecraftDataDir(env), ops: nativeOps });
+  // image de chaque instance chez son launcher d'origine (CurseForge, Modrinth, Prism) quand aucune icône n'est choisie
+  const mediaRef = media;
+  instances.artUrl = (art) => mediaRef.artUrl(art);
   const ua = `Rexidelamort/WeCraft-Launcher/${app.getVersion()} (ReLaunch)`;
   relink = new RelinkClient({ dataDir: wecraftDataDir(env), userAgent: ua });
   twitchLive = new TwitchLiveDetector({ userAgent: ua });

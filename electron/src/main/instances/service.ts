@@ -10,10 +10,16 @@ import { wecraftDataDir } from "../paths";
 import { JsonStore, SettingsNotBackedUp, SettingsUnreadable } from "../storage/jsonStore";
 import { safeToDelete } from "./delete";
 import { readEventManifest } from "../events/eventLock";
-import { applyMeta, detectExternal, instancesDir, LocalScanner, metaKey, sortInstances, type IconMeta, type ListedInstance } from "./detect";
+import { applyMeta, detectExternal, instancesDir, launcherDirs, LocalScanner, metaKey, sortInstances, type IconMeta, type ListedInstance } from "./detect";
+import { findArt, type InstanceArt } from "./art";
 
 /** Les autres launchers sont relus au plus toutes les 60 s (comme la version Python). */
 const EXTERNAL_TTL_MS = 60_000;
+
+function artIcon(art: InstanceArt | null, toUrl: ((a: InstanceArt) => string | null) | null): InstanceView["icon"] {
+  const url = art && toUrl ? toUrl(art) : null;
+  return url ? { kind: "file", url } : null;
+}
 
 export class InstanceService {
   private readonly local: LocalScanner;
@@ -29,6 +35,9 @@ export class InstanceService {
     this.local = new LocalScanner(instancesDir(env));
     this.metaFile = path.join(wecraftDataDir(env), "instances_meta.json");
   }
+
+  /** Adresse app:// d'une image trouvée chez le launcher d'origine (fournie par MediaStore), ou null. */
+  artUrl: ((art: InstanceArt) => string | null) | null = null;
 
   static idOf(folder: string, platform: NodeJS.Platform): string {
     return "i" + createHash("sha256").update(metaKey(folder, platform)).digest("hex").slice(0, 16);
@@ -59,6 +68,9 @@ export class InstanceService {
           : false,
       ),
     );
+    // image du launcher d'origine (CurseForge, Modrinth, Prism, icon.png), si aucune icône n'a été choisie ici
+    const prismDir = launcherDirs(this.env).prism;
+    const arts = await Promise.all(visible.map((i) => (i.icon || !this.artUrl ? Promise.resolve(null) : findArt(i, { prismDir }).catch(() => null))));
     // dernière partie : date de logs/latest.log (écrit par le jeu à chaque lancement)
     const played = await Promise.all(visible.map((i) => stat(path.join(i.path, "logs", "latest.log")).then((s) => Math.round(s.mtimeMs), () => null)));
     return {
@@ -73,7 +85,7 @@ export class InstanceService {
         ram: i.ram,
         fav: i.fav,
         modpack: packs[k]!,
-        icon: !i.icon ? null : "file" in i.icon ? { kind: "file" as const, url: `app://wecraft/user/icons/${i.icon.file}` } : { kind: "gen" as const, c: i.icon.c, sym: i.icon.sym },
+        icon: !i.icon ? artIcon(arts[k] ?? null, this.artUrl) : "file" in i.icon ? { kind: "file" as const, url: `app://wecraft/user/icons/${i.icon.file}` } : { kind: "gen" as const, c: i.icon.c, sym: i.icon.sym },
         background: i.background ? `app://wecraft/user/backgrounds/${i.background}` : null,
         event: events[k] ? { id: events[k]!.id, name: events[k]!.name } : null,
         lastPlayed: played[k] ?? null,

@@ -134,6 +134,8 @@ export interface Instance {
   loaderVersion: string | null;
   ram: number | null;
   source: Source;
+  /** Icône indiquée par le launcher d'origine (Modrinth App : icon_path), vérifiée plus tard (art.ts). */
+  iconHint?: string;
 }
 
 /** Comme Path.exists() : fichier OU dossier. */

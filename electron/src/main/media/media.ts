@@ -6,7 +6,8 @@
 //   user/icons/src/<sha256>.<ext>     image importée, avant recadrage
 //   user/backgrounds/<sha256>.jpg     fond d'instance (copié dans .wecraft : le chemin reste valable)
 //   shot/<jeton>                       capture d'écran d'une instance (jeton en mémoire -> fichier vérifié)
-//   remote/<sha256>                    image Modrinth, téléchargée par le processus principal puis gardée en cache
+//   remote/<sha256>                    image Modrinth / CurseForge, téléchargée par le processus principal puis gardée en cache
+//   native/<sha256>                    image d'une instance chez son launcher d'origine (fichier local noté ici)
 // Une adresse fournie par l'interface n'est JAMAIS téléchargée : seules les adresses vues dans les réponses de
 // l'API Modrinth (et d'hôtes autorisés) sont enregistrées, sous la clé sha256(adresse).
 // Chaque fichier est contrôlé par ses premiers octets (PNG, JPEG, GIF, WebP) : jamais de SVG, jamais de HTML.
@@ -20,7 +21,7 @@ export const MIME_OF: Record<ImageKind, string> = { png: "image/png", jpeg: "ima
 const EXT_OF: Record<ImageKind, string> = { png: "png", jpeg: "jpg", gif: "gif", webp: "webp" };
 
 /** Hôtes dont les images peuvent être affichées (icônes, galeries et images des descriptions Modrinth). */
-export const IMAGE_HOSTS: ReadonlySet<string> = new Set(["cdn.modrinth.com", "cdn-raw.modrinth.com"]);
+export const IMAGE_HOSTS: ReadonlySet<string> = new Set(["cdn.modrinth.com", "cdn-raw.modrinth.com", "media.forgecdn.net"]);
 export const MAX_REMOTE_IMAGE = 8 * 1024 * 1024;
 export const MAX_IMPORT = 15 * 1024 * 1024;
 
@@ -97,6 +98,7 @@ export interface MediaDeps {
 export class MediaStore {
   private readonly remote = new Map<string, string>();
   private readonly shots = new Map<string, string>();
+  private readonly natives = new Map<string, string>();
   private readonly inflight = new Map<string, Promise<{ data: Buffer; kind: ImageKind } | null>>();
 
   constructor(private readonly d: MediaDeps) {}
@@ -160,6 +162,17 @@ export class MediaStore {
       this.inflight.set(key, p);
     }
     return p;
+  }
+
+  // ------------------------------------------------------------ image d'une instance chez son launcher d'origine
+  /** Adresse app:// d'une image trouvée par instances/art.ts (fichier local ou vignette CurseForge). */
+  artUrl(art: { file?: string; url?: string }): string | null {
+    if (art.url) return this.remoteUrl(art.url);
+    if (!art.file || !path.isAbsolute(art.file)) return null;
+    const key = sha(`native:${art.file}`);
+    if (this.natives.size > 5000) this.natives.clear();
+    this.natives.set(key, art.file);
+    return `app://wecraft/native/${key}`;
   }
 
   // ------------------------------------------------------------ captures d'écran d'une instance
@@ -266,10 +279,11 @@ export class MediaStore {
       return img ? { status: 200, data: img.data, type: MIME_OF[img.kind] } : { status: 404 };
     }
     if ((m = /^shot\/([0-9a-f]{32})$/.exec(p))) file = this.shotFile(m[1]);
+    else if ((m = /^native\/([0-9a-f]{64})$/.exec(p))) file = this.natives.get(m[1]!) ?? null;
     else if ((m = /^user\/icons\/([0-9a-f]{64}\.png)$/.exec(p))) file = path.join(this.iconsDir, m[1]!);
     else if ((m = /^user\/icons\/src\/([0-9a-f]{64}\.(?:png|jpg|gif|webp))$/.exec(p))) file = path.join(this.iconsDir, "src", m[1]!);
     else if ((m = /^user\/backgrounds\/([0-9a-f]{64}\.jpg)$/.exec(p))) file = path.join(this.backgroundsDir, m[1]!);
-    else if (p.startsWith("remote/") || p.startsWith("shot/") || p.startsWith("user/")) return { status: 404 };
+    else if (p.startsWith("remote/") || p.startsWith("shot/") || p.startsWith("user/") || p.startsWith("native/")) return { status: 404 };
     else return null;
     if (!file) return { status: 404 };
     try {

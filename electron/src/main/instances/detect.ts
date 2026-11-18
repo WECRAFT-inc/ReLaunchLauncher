@@ -104,6 +104,7 @@ export interface ModrinthProfile {
   version: string | null;
   loader: LoaderName | null;
   loaderVersion: string | null;
+  icon?: string;
 }
 
 /** Base SQLite de l'app Modrinth, ouverte en LECTURE SEULE (read_modrinth_db en Python). */
@@ -123,6 +124,7 @@ export async function readModrinthDb(dbFile: string, profilesDir: string): Promi
         version: get("game_version") == null ? null : String(get("game_version")),
         loader: loaderFromKey(get("mod_loader")),
         loaderVersion: lv === null || lv === undefined || lv === "" || lv === "None" ? null : String(lv),
+        ...(typeof get("icon_path") === "string" && get("icon_path") ? { icon: String(get("icon_path")) } : {}),
       };
     });
   } finally {
@@ -136,8 +138,8 @@ const ANY = ["mods", "saves", "options.txt"];
 export async function detectExternal(e: PathEnv): Promise<Instance[]> {
   const d = launcherDirs(e);
   const found: Instance[] = [];
-  const add = (source: Source, name: string, folder: string, game: string, r?: { version: string | null; loader: LoaderName | null; loaderVersion: string | null }) =>
-    found.push({ name, folder, path: game, version: r?.version ?? null, loader: r?.loader ?? null, loaderVersion: r?.loaderVersion ?? null, ram: null, source });
+  const add = (source: Source, name: string, folder: string, game: string, r?: { version: string | null; loader: LoaderName | null; loaderVersion: string | null; icon?: string }) =>
+    found.push({ name, folder, path: game, version: r?.version ?? null, loader: r?.loader ?? null, loaderVersion: r?.loaderVersion ?? null, ram: null, source, ...(r?.icon ? { iconHint: r.icon } : {}) });
 
   for (const cf of d.curseforge) {
     for (const inst of await subdirs(cf)) {
