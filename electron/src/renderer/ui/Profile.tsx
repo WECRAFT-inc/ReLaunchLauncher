@@ -30,7 +30,7 @@ const STATUS: Record<NonNullable<Streak["status"]>, string> = {
 };
 
 /** Image de partage (PNG) de la série, dessinée ici : rien n'est chargé depuis Internet. */
-async function streakImage(s: Streak, name: string, skin: string | null): Promise<string> {
+async function streakImage(s: Streak, name: string, skin: string | null, st: PlayStatsView | null): Promise<string> {
   const W = 960;
   const H = 480;
   const cv = document.createElement("canvas");
@@ -65,9 +65,10 @@ async function streakImage(s: Streak, name: string, skin: string | null): Promis
   c.font = "600 26px 'Segoe UI', system-ui, sans-serif";
   c.fillStyle = "rgba(255,255,255,.75)";
   c.fillText(s.current > 1 ? t("jours d'affilée") : t("jour d'affilée"), 250, 440);
-  // tête + texte
+  // tête + pseudo + record
   c.textAlign = "left";
-  let x = 470;
+  const x = 470;
+  let nx = x;
   if (skin) {
     const f = await headFaces(skin);
     if (f) {
@@ -78,18 +79,46 @@ async function streakImage(s: Streak, name: string, skin: string | null): Promis
         img.src = f.f;
       });
       c.imageSmoothingEnabled = false;
-      c.drawImage(img, x, 70, 96, 96);
+      c.drawImage(img, x, 46, 76, 76);
+      nx = x + 94;
     }
   }
   c.fillStyle = "#fff";
-  c.font = "800 44px 'Segoe UI', system-ui, sans-serif";
-  c.fillText(name.slice(0, 18), x, skin ? 225 : 140);
-  c.font = "500 26px 'Segoe UI', system-ui, sans-serif";
-  c.fillStyle = "rgba(255,255,255,.8)";
-  const y0 = skin ? 280 : 200;
-  c.fillText(`${t("Record")} : ${s.longest} ${s.longest > 1 ? t("jours") : t("jour")}`, x, y0);
-  if (s.nextMilestone) c.fillText(`${t("Prochain palier")} : ${s.nextMilestone.day} ${t("jours")}`, x, y0 + 42);
-  if (s.freezes !== undefined) c.fillText(`${t("Gels de série")} : ${s.freezes}/${s.freezeMax ?? s.freezes}`, x, y0 + 84);
+  c.font = "800 38px 'Segoe UI', system-ui, sans-serif";
+  c.fillText(name.slice(0, 18), nx, 88);
+  c.font = "500 21px 'Segoe UI', system-ui, sans-serif";
+  c.fillStyle = "rgba(255,255,255,.75)";
+  const sub = [`${t("Record")} : ${s.longest} ${s.longest > 1 ? t("jours") : t("jour")}`];
+  if (s.freezes !== undefined) sub.push(`❄ ${s.freezes}/${s.freezeMax ?? s.freezes}`);
+  c.fillText(sub.join("   ·   "), nx, 118);
+  // statistiques de jeu (comptées sur ce PC)
+  if (st) {
+    const tiles: [string, string][] = [
+      [fmtDur(st.totalSeconds), t("Temps de jeu cumulé")],
+      [String(st.daysPlayed), t("Jours joués")],
+      [st.sessions ? fmtDur(st.totalSeconds / st.sessions) : "—", t("Session moyenne")],
+      [fmtDur(st.longestSeconds), t("Plus longue session")],
+    ];
+    const W2 = 214;
+    const H2 = 84;
+    tiles.forEach(([v, l], i) => {
+      const tx = x + (i % 2) * (W2 + 16);
+      const ty = 158 + Math.floor(i / 2) * (H2 + 14);
+      c.beginPath();
+      c.roundRect(tx, ty, W2, H2, 16);
+      c.fillStyle = "rgba(255,255,255,.07)";
+      c.fill();
+      c.strokeStyle = "rgba(255,255,255,.13)";
+      c.lineWidth = 1.5;
+      c.stroke();
+      c.fillStyle = "#fff";
+      c.font = "800 30px 'Segoe UI', system-ui, sans-serif";
+      c.fillText(v, tx + 18, ty + 42);
+      c.fillStyle = "rgba(255,255,255,.7)";
+      c.font = "500 17px 'Segoe UI', system-ui, sans-serif";
+      c.fillText(l, tx + 18, ty + 68);
+    });
+  }
   c.font = "800 30px 'Segoe UI', system-ui, sans-serif";
   c.fillStyle = "#ff8a2a";
   c.fillText("ReLaunch", x, 440);
@@ -111,9 +140,10 @@ export function StreakCard({ s, name, onChanged }: { s: Streak; name: string; on
   const copy = async () => {
     setBusy(true);
     try {
-      const png = await streakImage(s, name, skin);
+      const st = await window.wecraft.account.playStats().catch(() => null);
+      const png = await streakImage(s, name, skin, st);
       const ok = await window.wecraft.account.shareImage(png, `🔥 ${s.current} ${s.current > 1 ? t("jours d'affilée") : t("jour d'affilée")} ${t("sur ReLaunch")} (${t("record")} : ${s.longest})`);
-      toast(ok ? t("Image de ta série copiée : colle-la sur Discord ou ailleurs.") : t("Copie impossible."));
+      toast(ok ? t("Image de tes stats copiée : colle-la sur Discord ou ailleurs.") : t("Copie impossible."));
     } catch {
       toast(t("Copie impossible."));
     } finally {
@@ -169,7 +199,7 @@ export function StreakCard({ s, name, onChanged }: { s: Streak; name: string; on
         <span className="st-act">
           <button className="btn sm" disabled={busy} onClick={() => void copy()}>
             <Ic n="share" />
-            {busy ? t("Copie…") : t("Partager ma série")}
+            {busy ? t("Copie…") : t("Partager mes stats")}
           </button>
           {rich ? (
             <label className="st-share">
