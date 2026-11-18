@@ -410,7 +410,11 @@ function NavTab() {
                   ) : (
                     <span></span>
                   )}
-                  <button className="toggle" role="switch" aria-checked={tf(x.on)} data-act="navOn" data-i={i} aria-label={`Afficher ${it.l}`}></button>
+                  {x.id === "settings" ? (
+                    <button className="toggle" role="switch" aria-checked="true" disabled aria-label={t("Réglages : toujours affichés")} title={t("Les Réglages restent toujours affichés")}></button>
+                  ) : (
+                    <button className="toggle" role="switch" aria-checked={tf(x.on)} data-act="navOn" data-i={i} aria-label={`Afficher ${it.l}`}></button>
+                  )}
                   {pin ? (
                     <span className="mv"></span>
                   ) : (

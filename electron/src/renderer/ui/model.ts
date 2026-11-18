@@ -230,7 +230,7 @@ export const NAVINFO: Record<string, NavInfo> = {
   quests: { l: "Avantages & Quêtes", d: "Quêtes, série de jours, quêtes d'events", view: "quests" },
   pins: { l: "Instances épinglées", d: "Affichage choisi plus bas" },
   spacer: { l: "Espace flexible", d: "Ce qui suit va au bout de la barre" },
-  settings: { l: "Réglages", d: "Toujours en bas de sa barre", view: "settings", pin: true },
+  settings: { l: "Réglages", d: "Toujours affiché, en bas de sa barre", view: "settings", pin: true },
   sep1: { l: "Séparateur", sep: true },
   sep2: { l: "Séparateur", sep: true },
 };
@@ -369,6 +369,12 @@ export interface Preset {
   pinMode: NavConfig["pinMode"];
   dock?: NavConfig["dock"];
   items: NavItem[];
+}
+/** Réglages : toujours affichés (sinon plus aucun moyen d'y revenir), quelle que soit la configuration enregistrée. */
+export function keepSettings(n: NavConfig): void {
+  const s = n.items.find((x) => x.id === "settings");
+  if (s) s.on = true;
+  else n.items.push({ id: "settings", on: true, bar: NAVDEF.items.find((x) => x.id === "settings")?.bar ?? "v" });
 }
 const onlyOn = (on: Record<string, 1>) => NAVDEF.items.map((x) => ({ id: x.id, on: !!on[x.id], bar: x.bar }));
 export const PRESETS: Record<string, () => Preset> = {

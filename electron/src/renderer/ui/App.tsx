@@ -19,6 +19,7 @@ import {
   loadPref,
   load,
   NAVDEF,
+  keepSettings,
   normPins,
   pinDrop,
   PRESET_NAMES,
@@ -143,6 +144,7 @@ export function App() {
         n.items.splice(at + 1, 0, { ...d });
       });
     normPins(n, () => true);
+    keepSettings(n);
     return n;
   });
   const [ui, setUiState] = useState<Ui>(() => {
@@ -314,6 +316,7 @@ export function App() {
       const n = clone(n0);
       fn(n);
       if (opts?.pins) tidy(n);
+      keepSettings(n);
       store("proto-nav5", n);
       return n;
     });
@@ -897,6 +900,7 @@ export function App() {
         openDataDir();
         break;
       case "navOn":
+        if (nav.items[i]?.id === "settings") break; // toujours affiché
         editNav((n) => (n.items[i]!.on = !n.items[i]!.on));
         break;
       case "navUp":
