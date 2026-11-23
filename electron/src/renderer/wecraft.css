@@ -783,3 +783,7 @@ body.wc-dragging, body.wc-dragging * { cursor: grabbing !important; }
 .frp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .frp-top h4 { margin: 0 0 6px; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
 .frp-note { font-size: 12.5px; }
+
+/* WeLive : carte hors ligne cliquable (page de la chaîne) */
+.favc.off-open { cursor: pointer; transition: transform .15s, border-color .15s; }
+.favc.off-open:hover, .favc.off-open:focus-visible { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acc) 50%, var(--line)); }

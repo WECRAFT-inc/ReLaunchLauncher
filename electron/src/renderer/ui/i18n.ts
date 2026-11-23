@@ -123,6 +123,7 @@ const EN: Record<string, string> = {
   "Les directs Twitch sont détectés automatiquement (relevé toutes les 2 minutes) dès qu'un pseudo de chaîne est renseigné ; le lecteur ne se charge qu'au clic. Pour YouTube, c'est l'état saisi à la main dans le panneau ReLink qui s'affiche, sans lecteur intégré.": "Twitch streams are detected automatically (checked every 2 minutes) once a channel name is set; the player only loads on click. For YouTube, the status entered by hand in the ReLink panel is shown, with no built-in player.",
   "Diffusion Partenaires · 0 lives": "Partner streams · 0 live",
   "live(s) en cours": "live(s) in progress",
+  "Ouvrir sa page": "Open their page",
   "Voir son profil": "View profile",
   "Joué ensemble": "Played together",
   "Ses modpacks les plus joués": "Their most played modpacks",

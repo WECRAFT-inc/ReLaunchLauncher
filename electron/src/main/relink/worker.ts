@@ -143,7 +143,9 @@ export function decodePartner(v: unknown): RelinkPartner | null {
   const n = pick(o, ["n", "name"], 60);
   if (!i || !n) return null;
   const ch = str(o["ch"], 40);
-  return { id: i, name: n, channel: /^[A-Za-z0-9_]{1,40}$/.test(ch) ? ch : "", category: pick(o, ["cat", "category"], 40), featured: bool(o["featured"]), live: bool(o["live"]), viewers: Math.round(num(o["viewers"], 0, 1e8)), thumb: bool(o["thumb"]) };
+  // lien de la fiche (YouTube, site…) s'il est renseigné ; HTTPS seulement, gardé dans le processus principal
+  const link = safeExternalUrl(o["link"] ?? o["url"]);
+  return { id: i, name: n, channel: /^[A-Za-z0-9_]{1,40}$/.test(ch) ? ch : "", category: pick(o, ["cat", "category"], 40), featured: bool(o["featured"]), live: bool(o["live"]), viewers: Math.round(num(o["viewers"], 0, 1e8)), thumb: bool(o["thumb"]), ...(link ? { link } : {}) };
 }
 export function decodeModpack(v: unknown): RelinkModpack | null {
   const o = obj(v);

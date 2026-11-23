@@ -36,7 +36,7 @@ import { SkinHeads } from "./relink/heads";
 import { PlayStats, type StatGame } from "./stats/playStats";
 import { readInstalledPack } from "./modpacks/relaunchPack";
 import { fetchBytes } from "./net/download";
-import { LinkStore } from "./links";
+import { LinkStore, safeExternalUrl } from "./links";
 import { appLogger, logSources, readLogs, redact, type AppLogger } from "./logs/logs";
 import { mkdir } from "node:fs/promises";
 import { knownShaderPacks } from "./launch/shaders";
@@ -792,6 +792,16 @@ handle(CHANNELS.playerSet, async (req) => {
   const rect = q ? { x: n(q["x"]), y: n(q["y"]), width: n(q["width"]), height: n(q["height"]) } : null;
   const ok = rect && [rect.x, rect.y, rect.width, rect.height].every((v) => Number.isFinite(v)) && rect.width > 0 && rect.height > 0;
   await player.show(r.channel, ok ? rect : null);
+  return true;
+});
+
+// Carte d'un partenaire hors ligne : son lien renseigné (HTTPS, relu ici dans les données du Worker), sinon sa chaîne Twitch.
+handle(CHANNELS.relinkOpenPartner, async (id) => {
+  if (!relink || typeof id !== "string") return false;
+  const p = (await relink.cached()).data?.partners.find((x) => x.id === id);
+  const url = p?.link ? safeExternalUrl(p.link) : p && isTwitchLogin(p.channel) ? `https://www.twitch.tv/${p.channel.toLowerCase()}` : null;
+  if (!url) return false;
+  await shell.openExternal(url);
   return true;
 });
 

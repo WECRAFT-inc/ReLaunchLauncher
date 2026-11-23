@@ -575,6 +575,12 @@ function useAvatar(s: Stream, want: boolean): string | null {
   }, [s.channel, want]);
   return img;
 }
+/** Clic sur une carte « Hors ligne » : page du partenaire (lien renseigné, sinon Twitch), chaîne Twitch d'un ami. */
+function openOffline(s: Stream): void {
+  if (s.kind === "partner" && s.partnerId) void window.wecraft.relink.openPartner(s.partnerId);
+  else if (LOGIN_RE.test(s.channel)) void window.wecraft.relink.openChannel(s.channel);
+}
+
 /** Image d'une carte « Hors ligne » : logo (avatar Twitch) de la chaîne sur un fond flouté, sinon dégradé. */
 function OfflineCover({ s }: { s: Stream }) {
   const logo = useAvatar(s, true);
@@ -832,7 +838,16 @@ export function LivePage() {
           <h3>{t("Hors ligne")}</h3>
           <div className="favgrid">
             {offline.map((x) => (
-              <div key={x.key} className="favc" data-a={`offline-${x.key}`}>
+              <div
+                key={x.key}
+                className="favc off-open"
+                data-a={`offline-${x.key}`}
+                role="button"
+                tabIndex={0}
+                title={t("Ouvrir sa page")}
+                onClick={() => openOffline(x)}
+                onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openOffline(x))}
+              >
                 <OfflineCover s={x} />
                 <span className="row">
                   <b>{x.name}</b>

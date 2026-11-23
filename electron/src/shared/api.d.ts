@@ -449,6 +449,8 @@ cardImage(bid: string): Promise<string | null>;
     channelAvatar(channel: string): Promise<string | null>;
     /** Ouvre la chaîne Twitch dans le navigateur. */
     openChannel(channel: string): Promise<boolean>;
+    /** Ouvre la page d'un partenaire : son lien renseigné, sinon sa chaîne Twitch. */
+    openPartner(id: string): Promise<boolean>;
     /** Lecteur Twitch intégré (vue native). rect : emplacement à l'écran (px de l'interface) ; rect null = masqué ; channel null = arrêté. */
     setPlayer(req: { channel: string | null; rect: { x: number; y: number; width: number; height: number } | null }): Promise<boolean>;
     /** Prépare « Rejoindre » un serveur du catalogue : instance locale (event ou modpack du serveur) à lancer + adresse. */
@@ -711,6 +713,8 @@ export interface RelinkPartner {
   thumb?: boolean;
   /** « twitch » : direct détecté par le launcher lui-même (pas par le Worker) ; nombre de spectateurs alors inconnu. */
   liveSource?: "twitch";
+  /** Lien renseigné pour le partenaire (HTTPS), ouvert au clic sur sa carte hors ligne. */
+  link?: string;
 }
 export interface RelinkModpack {
   id: string;
